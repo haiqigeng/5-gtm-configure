@@ -51,7 +51,13 @@ For each platform, product, and CMP involved:
    manifest containing source URL, page title, access date, exact client-side product/template,
    affected requirement or object, discrepancy class, decision, and unresolved contradiction.
 
-Do not copy an event catalogue into the skill and treat it as permanent. Re-open the live catalogue for every implementation because vendors change standard events, parameters, requirements, templates, and consent features.
+Do not copy an event catalogue into the skill and treat it as permanent. Re-open the live catalogue
+for every implementation because vendors change standard events, parameters, requirements,
+templates, and consent features. The skill may retain stable GTM mechanics and decision rules
+(trigger Boolean logic, DLV version implications, template preference, workspace readback), but the
+run must still verify any mechanic whose current UI/API or product behavior is material. Keep
+volatile vendor schemas, Gallery inventories, template field catalogues, and CMP vendor/purpose
+catalogues live rather than static.
 
 ## Research record
 
@@ -67,7 +73,7 @@ Record only the technical facts needed to configure and verify each tag:
 - source provenance and representative non-sensitive input when mapping or transformation risk
   requires it;
 - GTM variable and template field;
-- transformation, explicit event eligibility, and representative resolved output when applicable;
+- transformation and representative resolved output when a real shape conversion is applicable;
 - consent support, per-product classification, denied-state request/storage behavior, selected mode, and CMP mechanism;
 - unresolved contradiction or unavailable evidence.
 
@@ -94,11 +100,13 @@ Use these as search entry points, then follow the current page for the exact req
 | GTM Zones and Environments | https://support.google.com/tagmanager/answer/7647043 and https://support.google.com/tagmanager/answer/6311518 |
 | GTM container export/import | https://support.google.com/tagmanager/answer/6106997 |
 | GTM Community Template Gallery | https://support.google.com/tagmanager/answer/9454109 |
+| GTM template Gallery and template API | https://developers.google.com/tag-platform/tag-manager/templates/gallery and https://developers.google.com/tag-platform/tag-manager/api/reference/rest/v2/accounts.containers.workspaces.templates |
 | GA4 events and ecommerce | https://developers.google.com/analytics/devguides/collection/ga4/reference/events and https://developers.google.com/analytics/devguides/collection/ga4/ecommerce |
 | GA4 configuration fields and page views | https://developers.google.com/analytics/devguides/collection/ga4/reference/config and https://developers.google.com/analytics/devguides/collection/ga4/views |
 | GA4 custom dimensions and metrics | https://support.google.com/analytics/answer/14240153 |
 | GA4 collection limits, reserved names, and PII safety | https://support.google.com/analytics/answer/9267744, https://developers.google.com/analytics/devguides/collection/protocol/ga4/reference, and https://support.google.com/analytics/answer/6366371 |
 | Google tag settings variables | https://support.google.com/tagmanager/answer/13438166 and https://support.google.com/tagmanager/answer/13438771 |
+| Google tag and destination identity | https://support.google.com/tagmanager/answer/12324388, https://support.google.com/tagmanager/answer/12324787, and https://support.google.com/tagmanager/answer/12326985 |
 | Google Consent Mode | https://developers.google.com/tag-platform/security/concepts/consent-mode and https://developers.google.com/tag-platform/security/guides/consent |
 | Google Ads conversion and remarketing | https://support.google.com/google-ads/answer/7521212 and https://support.google.com/tagmanager/answer/6106009 |
 | Google Ads dynamic remarketing schema | https://support.google.com/google-ads/answer/7305793 |
@@ -119,7 +127,9 @@ Use these as search entry points, then follow the current page for the exact req
 | Criteo OneTag | https://help.criteo.com/ |
 | Matomo analytics in GTM | https://matomo.org/faq/new-to-piwik/how-do-i-use-matomo-analytics-within-gtm-google-tag-manager/ |
 | Matomo tracking versus cookie consent | https://developer.matomo.org/guides/tracking-consent |
-| Piwik PRO anonymous consent mode | https://help.piwik.pro/support/privacy/setting-consent-manager/ |
+| Piwik PRO tracking code through GTM | https://help.piwik.pro/support/getting-started/google-tag-manager-install-a-tracking-code/ |
+| Piwik PRO consent | https://help.piwik.pro/support/privacy/setting-consent-manager/ |
+| IAB Europe TCF 2.3 and Google TCF integration | https://iabeurope.eu/transparency-consent-framework/ and https://support.google.com/admanager/answer/9805023 |
 | Didomi GTM events, variables, and integration | https://developers.didomi.io/cmp/web-sdk/third-parties/tags-management/events-and-variables and https://developers.didomi.io/cmp/web-sdk/third-parties/tags-management/tag-managers/google-tag-manager/configure-the-didomi-gtm-integration |
 | OneTrust GTM and Google Consent Mode | https://my.onetrust.com/articles/en_US/Knowledge/UUID-301b21c8-a73a-05e8-175a-36c9036728dc and https://my.onetrust.com/articles/en_US/Knowledge/UUID-d81787f6-685c-2262-36c3-5f1f3369e2a7 |
 | Cookiebot GTM and Google Consent Mode | https://support.cookiebot.com/hc/en-us/articles/360003793854-Google-Tag-Manager-deployment and https://support.cookiebot.com/hc/en-us/articles/360016047000-Cookiebot-and-Google-Consent-Mode |

@@ -63,10 +63,11 @@ class SkillContractTest(unittest.TestCase):
         acceptance = read("references/03-judgement/acceptance-and-handoff.md")
         combined = contract + acceptance
         for status in ("Configured", "Partial", "Blocked", "Deferred"):
-            self.assertIn(f"`{status}`", contract)
             self.assertIn(f"`{status}`", acceptance)
+        self.assertIn("Apply canonical acceptance", contract)
+        self.assertEqual(acceptance.count("## Operational statuses"), 1)
         self.assertNotIn("Specification complete", combined)
-        self.assertIn("No specification status substitutes", combined)
+        self.assertIn("No planning/specification status substitutes", combined)
         self.assertIn("Authoritative saved-workspace readback", acceptance)
 
     def test_analytics_and_media_keep_distinct_business_authorities(self) -> None:
@@ -115,10 +116,10 @@ class SkillContractTest(unittest.TestCase):
         self.assertIn("Keep business and implementation decisions separate", contract)
         self.assertIn("Use one concise record per requirement", contract)
         self.assertIn("Retain critical provenance", contract)
-        self.assertIn("Map fields and event eligibility", contract)
+        self.assertIn("Map fields and runtime data behavior", contract)
         self.assertIn("Map GTM object actions", contract)
         self.assertIn("exact outgoing parameter/property/item-field set equality", contract)
-        self.assertIn("identical rerun", contract)
+        self.assertIn("A repeated run against the final saved state", contract)
 
     def test_scope_is_relevant_configuration_not_general_audit(self) -> None:
         skill = read("SKILL.md")
@@ -159,10 +160,10 @@ class SkillContractTest(unittest.TestCase):
         self.assertIn("Template UI field", media)
         self.assertIn("current official standard event", media)
         self.assertIn("Do not transform merely because the source uses GA4-style names", media)
-        self.assertIn("map every eligible item rather than selecting item zero", media)
+        self.assertIn("map every in-scope item rather than selecting item zero", media)
         self.assertIn("Verify the saved media setup", media)
 
-    def test_ecommerce_transformations_preserve_items_and_fail_closed(self) -> None:
+    def test_ecommerce_transformations_preserve_items_without_payload_guards(self) -> None:
         skill = read("SKILL.md")
         data = read("references/02-execution/data-contract-and-transformations.md")
         media = read("references/02-execution/media-tags.md")
@@ -170,12 +171,16 @@ class SkillContractTest(unittest.TestCase):
         acceptance = read("references/03-judgement/acceptance-and-handoff.md")
         self.assertIn("Preserve every required ecommerce item", skill)
         self.assertIn("Do not assume that an analytics `item_id`", data)
-        self.assertIn("Fail closed on invalid required media data", media)
+        self.assertIn("Handle runtime missing data without speculative gates", media)
         self.assertIn("content_ids", meta)
         self.assertIn("contents", meta)
         self.assertIn("Do not assume analytics `item_id` is the Meta catalog ID", meta)
-        self.assertIn("invalid required items fail closed", acceptance)
-        self.assertIn("Empty/undefined output", acceptance)
+        self.assertIn(
+            "runtime missing data as a site/dataLayer and recette dependency",
+            compact(acceptance),
+        )
+        self.assertIn("Do not create `CJS - Meta - ... valid`", meta)
+        self.assertIn("Do not create names such as `CJS - Ecommerce - AddToCart Eligible`", data)
 
     def test_compound_consent_predicates_use_native_or_denial_graph(self) -> None:
         skill = read("SKILL.md")
@@ -265,14 +270,13 @@ class SkillContractTest(unittest.TestCase):
         self.assertIn("mark the affected requirement `Blocked`", adapters)
 
     def test_handoff_separates_workspace_state_and_never_publishes(self) -> None:
-        contract = read("references/02-execution/configuration-contract.md")
         acceptance = read("references/03-judgement/acceptance-and-handoff.md")
         adapters = read("references/02-execution/tool-adapters.md")
         for text in (acceptance, adapters):
             self.assertIn("pre-existing workspace changes", text)
             self.assertIn("current-run", text)
             self.assertIn("final workspace totals", text)
-        self.assertIn("no runtime claim, publication, Submit, or GTM version action", contract)
+        self.assertIn("no runtime recette, publication, Submit, or GTM", acceptance)
 
     def test_external_administration_is_not_silently_claimed(self) -> None:
         analytics = read("references/02-execution/analytics-tags.md")
@@ -298,6 +302,7 @@ class SkillContractTest(unittest.TestCase):
             "media-tiktok.md",
             "media-snapchat.md",
             "media-x.md",
+            "media-affiliate.md",
         ):
             self.assertIn(platform, skill)
             self.assertTrue((ROOT / "references" / "02-execution" / platform).exists())
@@ -362,10 +367,69 @@ class SkillContractTest(unittest.TestCase):
         data = read("references/02-execution/data-contract-and-transformations.md")
         utility = read("references/01-orientation/utility-contract.md")
         self.assertIn("Do not enable automatic or manual collection by default", user_data)
-        self.assertIn("Do not create a browser/server event ID", data)
+        self.assertIn("Never generate a browser/server event ID", data)
         self.assertIn("execute GTM Preview", utility)
         self.assertIn("never publish", utility.lower())
         self.assertIn("future extensions", utility)
+
+    def test_native_ga4_and_google_identity_mechanics_are_operational(self) -> None:
+        analytics = read("references/02-execution/analytics-tags.md")
+        for term in (
+            "Resolve Google tag and destination identity",
+            "`GT-...`",
+            "`G-...`",
+            "`AW-...`",
+            "Use native GA4 ecommerce mechanics",
+            "Send Ecommerce data",
+            "Reconcile Enhanced Measurement and manual events",
+            "send `null`",
+            "`traffic_type`",
+            "`debug_mode`",
+        ):
+            self.assertIn(term, analytics)
+
+    def test_template_first_and_browser_server_field_boundary_are_enforced(self) -> None:
+        skill = read("SKILL.md")
+        templates = read("references/02-execution/template-governance.md")
+        media = read("references/02-execution/media-tags.md")
+        self.assertIn("supported template whenever one exists", skill)
+        self.assertIn("Custom HTML is not a permission bypass", templates)
+        self.assertIn("server/CAPI-only fields as excluded", media)
+        self.assertIn("supported template field", media)
+
+    def test_google_consent_tcf_and_first_party_data_routes_are_complete(self) -> None:
+        google = read("references/02-execution/google-consent-mode.md")
+        tcf = read("references/02-execution/tcf-consent.md")
+        user_data = read("references/02-execution/first-party-data.md")
+        for signal in (
+            "analytics_storage",
+            "ad_storage",
+            "ad_user_data",
+            "ad_personalization",
+        ):
+            self.assertIn(signal, google)
+        self.assertIn("unset value can be treated as granted", google)
+        for option in (
+            "`region`",
+            "`wait_for_update`",
+            "`ads_data_redaction`",
+            "`url_passthrough`",
+        ):
+            self.assertIn(option, google)
+        self.assertIn("TCF 2.3", tcf)
+        self.assertIn("Additional Consent", tcf)
+        self.assertIn("User-Provided Data variable", user_data)
+        self.assertIn("not pre-hash it", compact(user_data))
+
+    def test_delta_and_recette_ready_handoff_are_explicit(self) -> None:
+        skill = read("SKILL.md")
+        contract = read("references/02-execution/configuration-contract.md")
+        acceptance = read("references/03-judgement/acceptance-and-handoff.md")
+        for action in ("rename", "pause", "unpause"):
+            self.assertIn(action, contract)
+        self.assertIn("Classify the request as greenfield or a delta", skill)
+        self.assertIn("Recette cues", acceptance)
+        self.assertIn("Payload map", acceptance)
 
 
 if __name__ == "__main__":

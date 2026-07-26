@@ -7,7 +7,7 @@
 - [Use projection before free-form code](#use-projection-before-free-form-code)
 - [Ecommerce projection pattern](#ecommerce-projection-pattern)
 - [Scalar validation pattern](#scalar-validation-pattern)
-- [Eligibility pattern](#eligibility-pattern)
+- [Runtime missing-output behavior](#runtime-missing-output-behavior)
 - [Required static vectors](#required-static-vectors)
 - [Forbidden behavior](#forbidden-behavior)
 
@@ -27,7 +27,7 @@ Before writing Custom JavaScript, record:
 - required and optional fields;
 - source-to-destination key and type mapping;
 - missing, null, zero, `false`, empty, one-item, multi-item, and invalid-item behavior;
-- separate tag-eligibility rule;
+- runtime missing-output and recette dependency;
 - expected output vectors.
 
 The transformation must be a pure, synchronous, side-effect-free function. It must not mutate the
@@ -68,9 +68,9 @@ item collections, and Google Ads/Floodlight dynamic remarketing only after reope
 official browser schema. Never treat the vendor names here as a cached field catalogue.
 
 Create separate outputs when one destination requires both an object array and an identifier array.
-Preserve original item order and every eligible item. If any destination-required item identifier is
-invalid, return an invalid result for the whole affected event unless the current official schema
-and explicit media brief authorize partial-item delivery.
+Preserve original item order and every mapped item. Do not silently filter malformed items. Return
+the documented transformation result and record malformed runtime source data for recette unless
+the explicit brief or current browser contract defines another rule.
 
 ## Scalar validation pattern
 
@@ -81,14 +81,18 @@ For currency, value, quantity, date, or identifier fields:
 3. do not trim, truncate, round, lowercase, uppercase, hash, or coerce unless required by current
    official documentation and authorized by the source contract;
 4. keep validation separate from an invented fallback;
-5. return a clearly invalid result and pair it with tag eligibility.
+5. return a clearly missing/invalid result without inventing a fallback.
 
-## Eligibility pattern
+## Runtime missing-output behavior
 
-A transformation returning `undefined`, `{}`, or `[]` does not prevent a tag from firing. Prefer
-native trigger conditions for required scalar fields. When multi-item validity cannot be expressed
-natively, create one narrow Boolean validity variable from the same explicit contract and add it as
-an AND condition or exception. The validity function must not duplicate consent logic.
+A transformation returning `undefined`, `{}`, or `[]` does not prevent a tag from firing. Do not
+turn that fact into a routine Boolean eligibility helper. When the source mapping is approved,
+configure the business-event trigger and treat runtime missing or malformed data as a site/dataLayer
+dependency for recette.
+
+Only when the explicit brief or current official browser contract requires a firing rule, use a
+direct native condition. A narrow CJS condition is allowed only when native filters cannot express
+that required rule. It must not duplicate transformation parsing or consent logic.
 
 ## Required static vectors
 
@@ -96,12 +100,12 @@ Record and statically evaluate at least:
 
 | Case | Expected decision |
 | --- | --- |
-| Missing source | Invalid; tag ineligible. |
-| Empty array | Invalid unless the official event permits no items. |
+| Missing source | Missing output; no invented fallback; record the runtime dependency. |
+| Empty array | Documented empty output and recette dependency. |
 | One valid item | Exact one-item destination shape. |
 | Several valid items | Exact order and complete item preservation. |
 | Valid zero value/quantity | Preserved when permitted. |
-| Missing required identifier in any item | Entire affected event ineligible by default. |
+| Missing required identifier in any item | No silent item filtering; documented missing/invalid output. |
 | Optional source absent | Destination key omitted, not guessed. |
 | Unexpected source type | Invalid; no silent coercion. |
 

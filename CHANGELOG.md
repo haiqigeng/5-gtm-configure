@@ -1,5 +1,70 @@
 # Changelog
 
+## 5.0.0
+
+### Why This Release Matters
+
+- Prioritizes practical analyst utility: the skill now configures the documented browser event and
+  fields directly instead of adding speculative payload-eligibility machinery.
+- Makes supported templates, current browser schemas, complete Google/GA4 mechanics, and safe delta
+  operations enforceable parts of the saved-configuration contract.
+
+### What Changed
+
+- Require native or supported templates first for media products. Missing template
+  installation/update authority now blocks the affected family instead of silently falling back to
+  Custom HTML.
+- Separate design-time mapping completeness from runtime data quality. Remove routine
+  `CJS - ... Eligible` and validity-trigger patterns; preserve direct business-event firing and
+  record runtime missing data for site/dataLayer ownership and recette.
+- Add browser-specific media field matrices that exclude server/CAPI-only parameters, preserve an
+  explicitly supplied documented browser `event_id`, and never generate event IDs or server
+  deduplication architecture.
+- Expand GA4 configuration with Google tag/destination identity (`GT-`, `G-`, `AW-`), native
+  ecommerce sources, Enhanced Measurement collision handling, `user_id` lifecycle, user
+  properties/content groups, `traffic_type`, and explicit `debug_mode` behavior.
+- Complete the basic Google Consent Mode route with strict pre-grant blocking, one verified
+  defaults/updates owner, all applicable consent signals, and clear separation of built-in checks,
+  Additional Consent Checks, triggers, and template APIs. Keep regional defaults,
+  `wait_for_update`, redaction, URL passthrough, linker, and cross-domain options explicit-only.
+- Add operational affiliate-network configuration and a conditional TCF 2.3/Additional Consent
+  route without making legal-purpose, vendor, or CMP-certification decisions.
+- Add native client-side first-party-data mechanics, including the User-Provided Data variable,
+  raw/pre-hashed mode, hashing ownership, consent, and external account activation.
+- Treat existing-container requests as greenfield or delta changes. Validate update, rename,
+  pause/unpause, trigger/destination fanout, consumer impact, pre-change state, destructive
+  authority, and idempotent no-op reruns.
+- Expand web-trigger mechanics and DLV v1/v2 guidance, activate the generic non-GA4 analytics route,
+  and correct the Piwik PRO GTM documentation entry point.
+- Normalize returned trigger, block, folder, and tag-sequencing IDs to semantic references in the
+  deterministic object-graph comparator.
+- Consolidate status/completion definitions in the acceptance reference and add a compact
+  recette-ready handoff manifest.
+
+### What Users Should Do
+
+- Supply the approved analytics contract or explicit media brief and destination identity; let the
+  skill discover compatible existing objects and supported templates before filling only genuine
+  blockers.
+- Review the saved graph and recette-ready handoff, then use the separate Preview recette and
+  publication workflows for runtime acceptance and release.
+
+### Validation
+
+- Add focused configuration, forward, utility, and semantic-graph cases for empty Meta/Microsoft
+  ecommerce payloads, existing-object reuse, native GA4 purchase, complete basic Google consent,
+  delta updates, Enhanced Measurement overlap, browser `event_id`, affiliate baskets, unlisted
+  vendors, and returned-ID readback.
+- Run release structure checks, the full unit suite, lint/format checks, compilation, deterministic
+  package builds, and whitespace validation for `v5.0.0`.
+
+### Known Limits
+
+- The skill remains client-side GTM configuration only: it does not design tracking plans, develop
+  site/dataLayer code, run runtime recette, publish, or create GTM versions.
+- Server-side GTM, Conversions API, and browser/server deduplication remain deferred. Multi-container
+  rollout orchestration is not introduced in this release.
+
 ## 4.0.1
 
 ### Why This Release Matters

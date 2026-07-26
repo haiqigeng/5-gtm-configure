@@ -19,7 +19,16 @@ EVIDENCE_GRADES = {
     "container-confirmed",
     "contract-sample",
 }
-ACTIONS = {"create", "update", "reuse", "untouched", "remove"}
+ACTIONS = {
+    "create",
+    "update",
+    "rename",
+    "pause",
+    "unpause",
+    "reuse",
+    "untouched",
+    "remove",
+}
 TOP_LEVEL_KEYS = {
     "schema_version",
     "route",
@@ -198,11 +207,13 @@ def _validate_object_action(raw: Any, *, index: int) -> None:
                 f"{path}.evidence[{evidence_index}] has unsupported value {value!r}"
             )
 
-    if action == "update" and "pre_change" not in item:
-        raise ContractValidationError(f"{path}.pre_change is required for an update")
+    if action in {"update", "rename", "pause", "unpause"} and "pre_change" not in item:
+        raise ContractValidationError(f"{path}.pre_change is required for {action}")
+    if action == "rename":
+        _require_text(item.get("new_name"), f"{path}.new_name")
     if action == "remove" and item.get("destructive_authorization") is not True:
         raise ContractValidationError(f"{path}.destructive_authorization must be true for remove")
-    if action in {"create", "update", "remove"} and (
+    if action in {"create", "update", "rename", "pause", "unpause", "remove"} and (
         object_type.lower() in HIGH_IMPACT_TYPES or _is_high_impact(object_type)
     ):
         if item.get("explicit_authority") is not True:

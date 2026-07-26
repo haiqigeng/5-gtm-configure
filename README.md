@@ -6,11 +6,10 @@ consent-controlled client-side Google Tag Manager workspaces.
 
 ## Current Release
 
-**v4.0.1** is a repository and documentation maintenance release for the v4 client-side GTM
-configuration surface. It does not change runtime skill behavior. The latest synthetic-test
-observations about payload-eligibility helpers, template selection, and browser-versus-server
-parameter mapping are recorded as future evaluation items and are intentionally not implemented
-in this release.
+**v5.0.0** is the utility-first client-side configuration release. It makes native/supported
+templates and direct event/field mappings the normal implementation path, removes speculative
+payload-eligibility engineering, deepens GA4 and Google Consent Mode mechanics, supports safe
+greenfield and delta changes, and adds operational affiliate and conditional TCF 2.3 routes.
 
 ## Who It Serves
 
@@ -49,28 +48,35 @@ Use these meanings:
 
 ## Current Client-Side Use Cases
 
-- Configure Google tag and GA4 events from an approved tracking plan or exact direct analytics
-  decision.
+- Configure Google tag identities/destinations and GA4 events, native ecommerce, user lifecycle
+  fields, and Enhanced Measurement collision decisions from an approved tracking plan or exact
+  direct analytics decision.
 - Configure a documented non-GA4 browser analytics destination, including Matomo, Piwik PRO, Adobe,
   or another supported destination, from an approved analytics contract.
 - Configure Google Ads, Floodlight, Microsoft Advertising, Meta, TikTok, Snap, LinkedIn, Pinterest,
-  X, Reddit, Criteo, and another officially documented browser media product from a human brief.
+  X, Reddit, Criteo, affiliate networks, and another officially documented browser media product
+  from a human brief.
 - Create or update tags, normal and blocking triggers, DLVs, constants, settings variables, LUTs,
   RLTs, narrow transformations, folders, templates, built-in variables, Google tag configuration,
   destinations, and advanced tag settings.
 - Inspect applicable Zones, environments, and container settings, and change them only with explicit
   high-impact authority.
-- Implement basic CMP gating by default and explicitly requested Google, Microsoft, or
-  vendor-native advanced/cookieless/anonymous consent behavior.
-- Implement current OneTrust, Cookiebot, Didomi, or another documented CMP state/lifecycle pattern
-  without borrowing signal semantics from a different CMP.
+- Implement strict/basic CMP gating by default, including Google consent default/update ownership,
+  and explicitly requested Google, Microsoft, or vendor-native advanced/cookieless/anonymous
+  behavior.
+- Implement current OneTrust, Cookiebot, Didomi, conditional TCF 2.3/Additional Consent, or another
+  documented CMP state/lifecycle pattern without borrowing signal semantics from a different CMP
+  or making legal-purpose decisions.
 - Configure explicitly requested first-party user-data features with controlled sources and consent.
-- Handle ecommerce arrays, catalog/feed identifiers, source-to-destination shape conversion, and
-  fail-closed event eligibility.
+- Handle ecommerce arrays, catalog/feed identifiers, and source-to-destination shape conversion
+  without speculative eligibility helpers; runtime missing data remains a site/dataLayer and
+  recette dependency.
 - Reconcile multi-destination, brand, region, hostname, and environment routing with a safe no-match
   path that never defaults unknown traffic to production.
 - Reuse compatible objects and reconcile relevant duplicate/conflict risks without auditing or
   cleaning unrelated container content.
+- Apply explicit delta changes—including update, rename, trigger/destination fanout, pause, and
+  unpause—after tracing every affected consumer and preserving pre-change state.
 
 ## Inputs
 
@@ -96,13 +102,14 @@ A successful run returns:
 - a dedicated workspace containing the complete saved configuration;
 - created, updated, reused, and intentionally untouched in-scope GTM objects;
 - exact analytics approved-to-saved conformance or media brief/official-schema mapping;
-- saved source variables, template fields, event eligibility, normal triggers, consent route, firing
-  settings, naming, and folders;
+- saved source variables, native/supported-template fields, direct payload mappings, normal
+  triggers, consent route, firing settings, naming, and folders;
 - installed-template version and relevant permissions/defaults;
 - an official-source manifest plus approved-input and implementation-decision provenance;
 - authoritative object readback, resolved references, fingerprints, workspace conflict state, and
   deterministic object-graph diff and idempotent rerun result;
-- concise documentation discrepancies, partial state, blockers, and external dependencies;
+- a compact recette-ready manifest with expected execution, payload mappings, consent states, saved
+  object IDs/references, partial state, blockers, and external dependencies;
 - confirmation that runtime recette and publication did not occur.
 
 Use `Configured`, `Partial`, `Blocked`, or `Deferred`. If mutation access or a critical decision is
@@ -131,7 +138,9 @@ lives in conditional configuration requirements and implementation traps.
   truncating, coercing, removing, or enriching it.
 - Use an explicit media brief for media business intent and current official browser documentation
   for each platform's schema.
-- Inspect the installed template version before designing its fields or transformations.
+- Inspect the installed template version before designing its fields or transformations. Use a
+  native or supported template first; unavailable install/update authority blocks instead of
+  silently authorizing Custom HTML.
 - Select best-practice architecture before container reuse. Existing prevalence is not authority.
 - Inspect only relevant objects for destinations, consumers, conflicts, duplicates, CMP signals,
   folders, and reuse.
@@ -143,14 +152,19 @@ lives in conditional configuration requirements and implementation traps.
   Enhanced Measurement, Event Builder, SPA, plugin, partner, and hard-coded paths.
 - Preserve every required ecommerce item. Do not assume analytics IDs match media catalogs, silently
   drop invalid items, coerce unapproved types, or invent content/value/currency fields.
-- Treat a transform returning empty/undefined as data, not as a firing gate. Add the smallest explicit
-  eligibility condition when required data could otherwise produce a partial event.
+- Treat a transform returning empty/undefined as runtime data quality, not as a firing gate. Map the
+  approved fields directly and add a payload condition only when the explicit brief or current
+  browser documentation requires it.
 - Default to strict/basic CMP blocks that cover every consumer event and block unknown,
   uninitialized, and denied states. Independent grants require OR-denial across reusable blocks.
 - Use advanced consent or first-party data only after explicit request and current product/template
   proof.
 - Create/reuse a dedicated workspace, preserve pre-existing changes, mutate dependencies first,
   re-read every save, and make the identical rerun a no-op.
+- Distinguish `GT-`, `G-`, and `AW-` identities, Google tags from connected destinations, and
+  inherited settings/consumers before changing Google routing.
+- Prefer native GA4 ecommerce and explicitly govern Enhanced Measurement overlap, `user_id`
+  lifecycle, user properties/content groups, `traffic_type`, and `debug_mode`.
 - Batch unresolved critical inputs after safe discovery, validate the versioned configuration
   contract before mutation, and compare intended versus saved object graphs deterministically.
 - Never publish or create a GTM version.
@@ -186,7 +200,9 @@ network/CMP recette, make legal decisions, complete external platform administra
 create GTM versions.
 
 Server-side GTM, Conversions API, browser/server deduplication, and event-ID architecture remain
-future extensions. Consent-capability entries for unsupported analytics products do not add new
+future extensions. An explicitly supplied browser `event_id` can be mapped only when current
+browser documentation and the installed template support it; this does not authorize generation or
+server design. Consent-capability entries for unsupported analytics products do not add new
 analytics tag-configuration routes.
 
 ## Repository Map
@@ -222,10 +238,10 @@ Run:
 python -m pip install -e ".[dev]"
 python -m ruff format --no-cache --check scripts tests
 python -m ruff check --no-cache scripts tests
-python scripts/check_release.py --tag v4.0.1 --release-notes CHANGELOG.md
+python scripts/check_release.py --tag v5.0.0 --release-notes CHANGELOG.md
 python -m unittest discover -s tests -v
 python -m compileall -q scripts
-python scripts/build_skill_package.py --output dist/configure-gtm-v4.0.1.zip
+python scripts/build_skill_package.py --output dist/configure-gtm-v5.0.0.zip
 git diff --check
 ~~~
 

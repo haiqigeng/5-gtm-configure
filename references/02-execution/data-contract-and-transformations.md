@@ -8,9 +8,9 @@
 - [Prefer the least-complex mapping](#prefer-the-least-complex-mapping)
 - [Preserve arrays and object schemas](#preserve-arrays-and-object-schemas)
 - [Write narrow Custom JavaScript](#write-narrow-custom-javascript)
-- [Make invalid events ineligible](#make-invalid-events-ineligible)
+- [Separate configuration completeness from runtime data quality](#separate-configuration-completeness-from-runtime-data-quality)
 - [Statically verify transformations](#statically-verify-transformations)
-- [Defer event-ID architecture](#defer-event-id-architecture)
+- [Handle browser event IDs narrowly](#handle-browser-event-ids-narrowly)
 
 ## Establish the source event contract
 
@@ -90,19 +90,17 @@ For ecommerce and content arrays:
 
 - verify whether the destination expects one object, an array of IDs, or an array of objects;
 - return an array for one item when the destination requires an array;
-- map all eligible items;
+- map all in-scope items;
 - retain documented event-level versus item-level fields;
 - preserve exact number/string types and allowed enums;
 - calculate totals only from the documented source and rule;
 - define behavior for empty arrays and missing required item fields;
 - test zero-item, one-item, and multi-item payloads.
 
-Do not silently select item zero. Do not silently drop an item with a missing required identifier and still report the event as valid; expose the data-quality failure or block the tag according to the approved rule.
-
-Default to failing the complete affected media event when any item lacks a destination-required
-identifier. Permit partial-item delivery only when current official documentation allows it and the
-explicit media requirement defines that policy. Do not apply this media eligibility rule to enrich
-or alter an approved analytics payload.
+Do not silently select item zero or filter an item because a field is missing. Preserve the
+configured projection contract and record malformed runtime items as a site/dataLayer dependency for
+recette. Add an item-level firing rule only when the explicit brief or current official browser
+documentation requires it.
 
 ## Write narrow Custom JavaScript
 
@@ -119,28 +117,24 @@ Name it `CJS - <Vendor> - <output>`, for example `CJS - Meta - contents`.
 
 Avoid a broad `try/catch` that hides contract defects. Catch only a specifically anticipated error and preserve a visible validation failure.
 
-## Make invalid events ineligible
+## Separate configuration completeness from runtime data quality
 
 A transformation output does not control tag firing by itself. Returning `undefined`, `{}`, or `[]`
-can still leave the tag eligible and send value, currency, event name, or another partial payload.
+can still let the approved event tag execute. Treat that as a mapping fact, not as a reason to create
+a generic eligibility layer.
 
-When a required event-level field or item contract can be invalid:
+- Block configuration when a required design-time field has no approved source, no supported
+  template field, or no valid transformation.
+- Configure the direct mapping when the approved source exists, even if the value can be missing at
+  runtime.
+- Record missing, empty, wrong-type, and malformed-array cases as site/dataLayer dependencies for
+  the recette workflow.
+- Add a payload-related firing condition only when the explicit requirement or current official
+  browser contract requires it. Prefer a native trigger condition; use one narrow CJS condition only
+  when native filters cannot express the required rule.
+- Never combine consent logic with payload validation.
 
-1. Prefer a direct native trigger condition on the documented source when it expresses validity
-   exactly.
-2. Otherwise reuse the transformation's narrow validity result or create one narrow Boolean
-   eligibility variable; do not build a generic validation framework.
-3. Make the normal trigger require validity or attach an exception that activates for every invalid
-   and unknown path on the same GTM event.
-4. Confirm the eligibility guard covers empty arrays, invalid item IDs, wrong types, and any paired
-   value/currency requirement established by current documentation.
-5. Block the configuration when the required rule cannot be represented safely from the approved
-   source.
-
-Name a necessary validity variable for its vendor and purpose, for example
-`CJS - Meta - purchase valid`. Keep the transformation and validity logic together only when one
-narrow variable can expose the exact terminal result required by the installed template; do not
-duplicate parsing across several helpers.
+Do not create names such as `CJS - Ecommerce - AddToCart Eligible` as routine infrastructure.
 
 ## Statically verify transformations
 
@@ -156,13 +150,17 @@ created. This is configuration verification, not a test mode or runtime recette.
 | Zero value/quantity | Zero is not mistaken for missing. |
 | Invalid type | Transformation fails safely and visibly. |
 
-Also verify that the related eligibility condition prevents the event tag from becoming eligible
-when a required output is invalid. Do not claim that these static vectors prove browser execution.
+Do not claim that these static vectors prove browser execution or add an automatic firing guard
+because a vector is invalid.
 
-## Defer event-ID architecture
+## Handle browser event IDs narrowly
 
-Do not create a browser/server event ID, transaction-based deduplication map, or `gtm.start`/`gtm.uniqueEventId` Custom JavaScript variable in the current client-side-only scope. Add that architecture when server-side/deduplication support is intentionally introduced.
+Never generate a browser/server event ID, transaction-based deduplication map, or
+`gtm.start`/`gtm.uniqueEventId` Custom JavaScript variable in the current client-side-only scope. An
+explicit media brief may authorize mapping a supplied browser `event_id` when current official
+browser documentation and the installed template support that exact field. Keep all server-side
+delivery, ID generation, and deduplication architecture deferred.
 Load `transformation-patterns.md` when the same source-to-destination projection pattern recurs,
 especially ecommerce item arrays, destination identifier arrays, scalar validation, or explicit
-eligibility vectors. The pattern reference standardizes the function contract but current official
+mapping vectors. The pattern reference standardizes the function contract but current official
 destination documentation still establishes every output field.

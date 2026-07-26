@@ -1,5 +1,16 @@
 # Microsoft Advertising browser tags
 
+## Contents
+
+- [Treat Bing Ads as Microsoft Advertising](#treat-bing-ads-as-microsoft-advertising)
+- [Complete the media brief](#complete-the-media-brief)
+- [Research current UET semantics](#research-current-uet-semantics)
+- [Design the UET object graph](#design-the-uet-object-graph)
+- [Map fields exactly](#map-fields-exactly)
+- [Apply consent](#apply-consent)
+- [Verify the saved Microsoft setup](#verify-the-saved-microsoft-setup)
+- [Official entry points](#official-entry-points)
+
 ## Treat Bing Ads as Microsoft Advertising
 
 Interpret references to Bing Ads or Bing UET as Microsoft Advertising unless the analyst identifies another product. Use current Microsoft terminology in new objects while preserving recognizable existing names when reuse is safer.
@@ -32,6 +43,10 @@ Open the current official UET custom-event, parameter-table, GTM-template, conse
 
 Do not map GA4 event names or parameters directly to UET without a documented Microsoft field map.
 
+Use Microsoft's current supported UET GTM template and its saved fields. If it is not installed,
+follow the authorized supported-template install path; do not replace it with Custom HTML. Block
+when template install/update authority is unavailable.
+
 ## Design the UET object graph
 
 Use a verified constant such as `CST - Microsoft Ads uet_tag_id` when the UET ID is reused.
@@ -50,11 +65,19 @@ Inspect automatic SPA tracking before adding history-based or manually generated
 
 ## Map fields exactly
 
-Build a field-level map from the media request and dataLayer to the current UET parameters. Keep template labels, UET JavaScript parameter names, and Microsoft conversion-goal conditions distinct.
+Build a field-level map from the media request and dataLayer to the current UET parameters. Keep
+template labels, UET JavaScript parameter names, and Microsoft conversion-goal conditions distinct.
+For each field record required/conditional/approved-optional status, type/cardinality, source, GTM
+resolution, installed-template field, consent, and whether it belongs to the browser UET request or
+only to a server/offline API. Do not place server-only fields into the browser tag.
 
 Use the current UET parameter table to determine accepted types and conditional requirements. Do not invent an event category/action hierarchy merely to resemble Universal Analytics.
 
 For revenue conversions, verify the exact revenue/value and currency fields expected by both the UET event and the platform-side goal. Use an actual order ID only where the current browser schema supports and requires it.
+
+Require every design-time required source before mutation, then map runtime values directly. Do not
+add an `Eligible` Custom JavaScript variable, suppress an empty runtime payload speculatively, or
+invent fallback values. Runtime missing data remains a site/dataLayer and recette dependency.
 
 ## Apply consent
 
@@ -62,7 +85,7 @@ Default to basic UET Consent Mode/strict gating:
 
 - block the UET base and event tags until the required vendor consent is granted;
 - use `Block - <CMP> - Microsoft Ads denied`;
-- prove from the static trigger graph that unknown and denied states are expected to keep UET tags ineligible.
+- prove from the static trigger graph that unknown and denied states are expected to keep UET tags blocked.
 
 Use advanced UET Consent Mode only when explicitly requested and approved. Verify the current official `ad_storage` behavior and official GTM template options, set the documented denied default before events, send updates from the CMP, and remove/avoid a blocking trigger that would defeat approved anonymized denied-state collection.
 

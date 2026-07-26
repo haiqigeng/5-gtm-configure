@@ -56,6 +56,10 @@ Open current official Google Ads and GTM documentation for the selected product.
 - enhanced-conversion fields, normalization, hashing responsibility, and policies;
 - built-in consent checks and selected consent-mode behavior.
 
+Use GTM's native Google tag, Google Ads Conversion Tracking, Google Ads Remarketing, and Conversion
+Linker types when applicable. Do not substitute Custom HTML or a generic template for a native
+Google implementation.
+
 Do not assume that GA4 ecommerce `items` can be passed unchanged to Google Ads dynamic remarketing. Transform only to the current Google Ads business-vertical schema.
 
 ## Design conversion tracking
@@ -76,8 +80,10 @@ Map:
 Do not create a browser/server event ID in the current client-side scope.
 
 When current documentation makes a conversion field or value/currency pair required for the
-selected use, make the tag ineligible when that contract is invalid. Do not rely on an unresolved
-variable to suppress execution, and do not invent a zero, empty currency, or random transaction ID.
+selected use, require its source mapping before configuration and then map the runtime value
+directly. Do not create a payload-eligibility CJS, rely on an unresolved variable as an implicit
+gate, or invent a zero, empty currency, or random transaction ID. Runtime missing data remains a
+site/dataLayer and recette dependency.
 
 ## Design remarketing
 
@@ -88,7 +94,7 @@ For dynamic remarketing:
 1. Confirm the correct business vertical.
 2. Open the current event-and-parameter reference for that vertical.
 3. Map every required item attribute to the actual feed identifier.
-4. Preserve every eligible item in the required array.
+4. Preserve every approved item in the required array.
 5. Validate event value and item types.
 6. Prevent a GA4 destination payload from being reused without an explicit Google Ads mapping.
 
@@ -113,6 +119,11 @@ Follow the first-party-data reference. Prefer deliberate dataLayer/JavaScript va
 
 Default to basic Google Consent Mode and attach `Block - <CMP> - Google Ads denied` to all in-scope Google Ads/Google tag/linker execution units that must not load before consent. Before attaching it to a Google tag or helper shared with GA4, Floodlight, or another destination, verify that every destination or consumer has a compatible basic route; otherwise follow the shared-execution-unit decision in the Google consent reference.
 
+Establish one owner for Google consent defaults/updates and map the approved CMP policy to
+`ad_storage`, `ad_user_data`, and `ad_personalization`, plus `analytics_storage` where the execution
+unit also serves Analytics. Built-in checks do not replace the strict pre-grant block in the basic
+route.
+
 Use advanced Google Consent Mode only when explicitly requested. In that route, follow the Google consent reference, use documented defaults and updates, and avoid blocking triggers/additional checks that suppress the intended denied-state behavior.
 
 ## Prevent automatic-event duplication
@@ -122,7 +133,7 @@ Do not make the Google Ads config/base tag send a business page view by default.
 ## Verify the saved Google Ads setup
 
 Re-read the saved Google tag/conversion/remarketing/linker objects and confirm destination IDs,
-labels, event fields, feed mapping, value/currency eligibility, installed-template fields, normal and
+labels, event fields, feed mapping, value/currency mapping, installed-template fields, normal and
 consent triggers, shared consumers, firing settings, references, and an idempotent rerun. Keep the
 external conversion action, imported-event choice, feed, enhanced-conversion account settings, and
 publication explicitly separate.

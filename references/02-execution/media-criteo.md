@@ -32,9 +32,9 @@ dataLayer.
 ## Product and transaction data
 
 For listing, product, basket, and transaction payloads, establish exact current product-ID,
-quantity, price/value, currency, transaction, and item-array rules. Preserve every eligible item,
-valid zero values, and official types. Fail the complete affected event on missing required product
-or transaction data by default.
+quantity, price/value, currency, transaction, and item-array rules. Preserve every approved item,
+valid zero values, and official types. Require every design-time source before mutation, then map
+runtime values directly without a separate eligibility helper.
 
 Use the deterministic transformation playbook when the source array is incompatible. Never assume
 GA4 `item_id` equals the Criteo feed key, silently filter an invalid product, or invent a fallback

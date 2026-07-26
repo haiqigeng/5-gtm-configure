@@ -1,6 +1,6 @@
 {
-  "version": 1,
-  "description": "Anonymized raw-artifact cases for independent fresh-run evaluation of configure-gtm v4; expected controls are held separately from prompts.",
+  "version": 2,
+  "description": "Anonymized raw-artifact cases for independent fresh-run evaluation of configure-gtm v5; expected controls are held separately from prompts.",
   "cases": [
     {
       "id": "ga4-extra-field-and-pii",
@@ -49,6 +49,36 @@
       "prompt": "Configure Google Ads cross-domain conversion measurement for the approved domains.",
       "artifact": {"domains": ["shop.example.test", "checkout.example-pay.test"], "ga4_admin_authorized": false},
       "expected_controls": ["Conversion Linker decision explicit", "GA4 Admin work external", "approved domain list only"]
+    },
+    {
+      "id": "empty-media-payload-template-first",
+      "prompt": "Configure the approved Meta and Microsoft purchase browser tags from the supplied event contract.",
+      "artifact": {"source_event": "purchase", "runtime_sample": {"ecommerce": {}}, "supported_templates": ["Meta", "Microsoft"]},
+      "expected_controls": ["supported templates used", "direct event firing retained", "no payload-eligibility CJS"]
+    },
+    {
+      "id": "delta-shared-tag-change",
+      "prompt": "Configure the approved rename and pause delta for the existing shared browser tag graph.",
+      "artifact": {"consumers": ["trigger-17", "block-22", "folder-4"], "remove_authorized": false},
+      "expected_controls": ["consumer graph traced", "pre-change state recorded", "no duplicate or removal"]
+    },
+    {
+      "id": "basic-google-consent-four-signals",
+      "prompt": "Configure the approved basic Google Consent Mode route using the installed CMP template.",
+      "artifact": {"signals": ["analytics_storage", "ad_storage", "ad_user_data", "ad_personalization"], "states": ["default", "grant", "revoke"]},
+      "expected_controls": ["one defaults/updates owner", "strict pre-grant block", "built-in and additional checks distinguished"]
+    },
+    {
+      "id": "affiliate-basket",
+      "prompt": "Configure the approved affiliate sale browser tag from the supplied three-row basket.",
+      "artifact": {"items": [{"sku": "A"}, {"sku": "B"}, {"sku": "C"}], "order_reference": "ORDER-1", "template": "supported-installed"},
+      "expected_controls": ["official network schema reopened", "all basket rows preserved", "browser duplicate key not expanded into server design"]
+    },
+    {
+      "id": "browser-event-id-carveout",
+      "prompt": "Configure the approved browser Pixel field mapping and leave the future server route untouched.",
+      "artifact": {"event_id": "supplied-by-site", "browser_field_supported": true, "server_access": false},
+      "expected_controls": ["supplied browser event_id mapped", "event ID not generated", "server deduplication deferred"]
     }
   ]
 }

@@ -12,6 +12,10 @@ Use this preference order when it satisfies current official vendor requirements
 
 Do not assume that a Community Template Gallery entry is endorsed by Google. Verify publisher and repository independently.
 
+This order is enforceable. Inspect the native and installed template surface before creating the
+tag. If a compatible template exists, use it. Do not choose Custom HTML because it is familiar,
+because the adapter exposes it more easily, or because a runtime value might be empty.
+
 ## Inspect before adding or updating
 
 Record:
@@ -36,6 +40,10 @@ Treat template lifecycle actions separately:
 - `author/change code`: explicit custom-template development authority and security review; do not
   infer this from an ordinary tag-configuration request.
 
+When an installation or update is required but not authorized or not supported by the active
+adapter, mark the affected tag family `Blocked` and identify the exact template action needed.
+Custom HTML is not a permission bypass.
+
 When an adapter cannot read template code or permissions authoritatively, do not claim that a
 custom/community template is safe merely because tags already use it.
 
@@ -52,9 +60,14 @@ If official vendor documentation and the installed template disagree:
 
 Do not force an official parameter into an unrelated custom-field slot.
 
-## Avoid Custom HTML for consent and native products
+## Avoid Custom HTML for consent and supported products
 
 Do not use Custom HTML to set GTM consent state when a verified CMP/consent template can use the GTM consent APIs. Do not reimplement Google Analytics, Google Ads, Floodlight, or another natively supported tag in Custom HTML without a documented requirement and approval.
+
+Apply the same rule to Meta, Microsoft Advertising, and every other product for which a compatible
+native, vendor, reviewed Gallery, or approved organization-owned template is installed or can be
+authorized. A product need not have a Google-native template for the supported-template rule to
+apply.
 
 When Custom HTML/Image is unavoidable, document script/pixel source, execution timing, selected consent mechanism and denied-state behavior, CSP impact, failure behavior, and the reason no supported template fits.
 

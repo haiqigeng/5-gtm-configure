@@ -32,8 +32,9 @@ or item structures into Pinterest without current official support.
 ## Ecommerce, matching, and privacy fields
 
 For product audiences or ecommerce, prove the catalog product-ID convention and current single or
-multi-item schema. Preserve every eligible item and fail closed on any required identifier by
-default. Use the deterministic transformation playbook when a direct source array is incompatible.
+multi-item schema. Preserve every approved item. Require the source for each design-time required
+identifier before mutation, then map runtime values directly. Use the deterministic transformation
+playbook when a direct source array is incompatible; do not add a payload-eligibility helper.
 
 Enhanced matching, event IDs, custom parameters, or limited-data-processing fields require an
 explicit brief, current accepted format, source approval, and consent. Do not invent geography,

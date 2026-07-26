@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "description": "Static intended-to-saved GTM object-graph characterization cases; not browser/runtime tests.",
   "cases": [
     {
@@ -140,6 +140,133 @@
             "variableId": "4",
             "fingerprint": "a",
             "fields": {"path": "ecommerce.items", "version": 2}
+          }
+        ]
+      }
+    },
+    {
+      "id": "returned-ids-normalize-to-semantic-references",
+      "expected_pass": true,
+      "expected": {
+        "objects": [
+          {
+            "object_type": "folder",
+            "name": "Media - Commerce"
+          },
+          {
+            "object_type": "trigger",
+            "name": "CE - purchase",
+            "fields": {"event_name": "purchase"}
+          },
+          {
+            "object_type": "trigger",
+            "name": "Block - CMP - Vendor denied",
+            "fields": {"event_name": ".*", "predicate": "vendor != granted"}
+          },
+          {
+            "object_type": "tag",
+            "name": "Vendor - Base",
+            "parentFolderId": "folder::Media - Commerce",
+            "fields": {"destination": "pixel-1"}
+          },
+          {
+            "object_type": "tag",
+            "name": "Vendor - Event - Purchase",
+            "parentFolderId": "folder::Media - Commerce",
+            "firingTriggerId": ["trigger::CE - purchase"],
+            "blockingTriggerId": ["trigger::Block - CMP - Vendor denied"],
+            "setupTag": [
+              {"tagName": "tag::Vendor - Base", "stopOnSetupFailure": true}
+            ],
+            "fields": {"event": "Purchase"}
+          }
+        ]
+      },
+      "saved": {
+        "objects": [
+          {
+            "object_type": "tag",
+            "name": "Vendor - Event - Purchase",
+            "tagId": "51",
+            "parentFolderId": "40",
+            "firingTriggerId": ["17"],
+            "blockingTriggerId": ["22"],
+            "setupTag": [
+              {"tagName": "50", "stopOnSetupFailure": true}
+            ],
+            "fields": {"event": "Purchase"}
+          },
+          {
+            "object_type": "trigger",
+            "name": "Block - CMP - Vendor denied",
+            "triggerId": "22",
+            "fields": {"predicate": "vendor != granted", "event_name": ".*"}
+          },
+          {
+            "object_type": "folder",
+            "name": "Media - Commerce",
+            "folderId": "40"
+          },
+          {
+            "object_type": "tag",
+            "name": "Vendor - Base",
+            "tagId": "50",
+            "parentFolderId": "40",
+            "fields": {"destination": "pixel-1"}
+          },
+          {
+            "object_type": "trigger",
+            "name": "CE - purchase",
+            "triggerId": "17",
+            "fields": {"event_name": "purchase"}
+          }
+        ]
+      }
+    },
+    {
+      "id": "wrong-returned-trigger-id-is-visible-semantically",
+      "expected_pass": false,
+      "expected_difference_contains": "trigger::CE - purchase",
+      "expected": {
+        "objects": [
+          {
+            "object_type": "trigger",
+            "name": "CE - purchase",
+            "fields": {"event_name": "purchase"}
+          },
+          {
+            "object_type": "trigger",
+            "name": "CE - add_to_cart",
+            "fields": {"event_name": "add_to_cart"}
+          },
+          {
+            "object_type": "tag",
+            "name": "Vendor - Event - Purchase",
+            "firingTriggerId": ["trigger::CE - purchase"],
+            "fields": {"event": "Purchase"}
+          }
+        ]
+      },
+      "saved": {
+        "objects": [
+          {
+            "object_type": "trigger",
+            "name": "CE - purchase",
+            "triggerId": "17",
+            "fields": {"event_name": "purchase"}
+          },
+          {
+            "object_type": "trigger",
+            "name": "CE - add_to_cart",
+            "triggerId": "18",
+            "fields": {"event_name": "add_to_cart"}
+          },
+          {
+            "object_type": "tag",
+            "name": "Vendor - Event - Purchase",
+            "tagId": "51",
+            "firingTriggerId": ["18"],
+            "fields": {"event": "Purchase"}
           }
         ]
       }

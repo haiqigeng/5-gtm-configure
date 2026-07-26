@@ -6,7 +6,7 @@
 - [Inspect current documentation and the installed template](#inspect-current-documentation-and-the-installed-template)
 - [Configure initialization and events separately](#configure-initialization-and-events-separately)
 - [Map ecommerce without assumptions or item loss](#map-ecommerce-without-assumptions-or-item-loss)
-- [Make invalid ecommerce events ineligible](#make-invalid-ecommerce-events-ineligible)
+- [Keep payload mapping separate from firing](#keep-payload-mapping-separate-from-firing)
 - [Select standard or custom events deliberately](#select-standard-or-custom-events-deliberately)
 - [Configure advanced matching only explicitly](#configure-advanced-matching-only-explicitly)
 - [Apply consent](#apply-consent)
@@ -32,7 +32,9 @@ gives it the same exact name and meaning.
 ## Inspect current documentation and the installed template
 
 Before designing tags or variables, open the current official Meta Pixel browser event reference and
-inspect the exact installed GTM template version/repository. Record only the applicable:
+inspect native tag types and the exact installed GTM template version/repository. Use the compatible
+supported installed template when available. If installation/update authority is missing, block the
+tag family; do not substitute Custom HTML. Record only the applicable:
 
 - standard/custom event spelling, casing, meaning, and limitations;
 - required, recommended, optional, and conditional parameters;
@@ -78,17 +80,17 @@ Do not flatten or stringify arrays, select the first item, or silently drop an i
 direct DLV when it already has the exact terminal shape. Use `CJS - Meta - content_ids` or
 `CJS - Meta - contents` only when a real shape conversion is required.
 
-## Make invalid ecommerce events ineligible
+## Keep payload mapping separate from firing
 
-Use current Meta requirements and the explicit media objective to define event eligibility. If any
-destination-required event value or item identifier is missing or incompatible, default to making
-the complete Meta event ineligible unless an officially supported partial-item rule was explicitly
-approved.
+Fire from the approved business event and map every authorized Meta browser field supported by the
+installed template. Do not create `CJS - Meta - ... valid`, `CJS - Ecommerce - ... Eligible`, or a
+second validity trigger merely because `contents`, `content_ids`, value, or currency can be absent at
+runtime. Record that as a site/dataLayer dependency for recette.
 
-A transformer returning `{}`, `[]`, or `undefined` is not a firing gate. Prefer a native trigger
-condition on the approved source. If the rule requires array-level validation that GTM filters cannot
-express safely, use one narrow variable such as `CJS - Meta - purchase valid` and make the normal
-trigger require it. Do not create a generic validation framework.
+Block configuration only when a required field has no approved source, compatible transformation,
+or supported template field. Add a native firing condition only when the explicit Meta brief or
+current official Meta browser documentation requires it; use CJS only when that required rule cannot
+be represented natively.
 
 ## Select standard or custom events deliberately
 
@@ -124,7 +126,7 @@ measurement. Never infer Google Consent Mode behavior.
 
 Re-read the saved tags, variables, triggers, blocks, folders, and installed-template fields. Confirm
 one initialization path, exact event name, destination ID, parameter types, item preservation,
-eligibility guard, consent route, firing option, references, and an idempotent rerun. Record catalog,
+browser-only field scope, consent route, firing option, references, and an idempotent rerun. Record catalog,
 Custom Conversion, optimization, and publication dependencies separately and make no runtime claim.
 
 ## Official entry point

@@ -1,5 +1,5 @@
 {
-  "version": 4,
+  "version": 5,
   "description": "Operational configuration contract fixtures for deterministic policy checks, not model-output or runtime tests.",
   "allowed_statuses": ["Configured", "Partial", "Blocked", "Deferred"],
   "scenarios": [
@@ -35,30 +35,30 @@
         {"action": "reuse", "object_type": "tag", "name": "Meta - Base - Pixel", "justification": "Existing initialization is semantically compatible."},
         {"action": "create", "object_type": "variable", "name": "CJS - Meta contents", "justification": "Required narrow array reshape preserves both approved items."},
         {"action": "create", "object_type": "variable", "name": "CJS - Meta content_ids", "justification": "Required narrow identifier array uses the approved catalog SKU."},
-        {"action": "create", "object_type": "trigger", "name": "CE - purchase - Meta valid", "justification": "Normal event plus required ecommerce eligibility."},
+        {"action": "create", "object_type": "trigger", "name": "CE - purchase", "justification": "Exact approved business event without a speculative payload gate."},
         {"action": "create", "object_type": "tag", "name": "Meta - Event - Purchase", "justification": "Explicit media brief and current official browser schema."}
       ],
       "external_dependencies": ["Meta catalog and optimization setup remain platform-side dependencies."],
-      "expected_invariants": ["media brief is primary", "all eligible items preserved", "catalog identifiers are explicit", "basic CMP block attached"],
-      "forbidden_invariants": ["GA4 schema copied to Meta", "item silently dropped", "new duplicate base tag"]
+      "expected_invariants": ["media brief is primary", "all approved items preserved", "catalog identifiers are explicit", "basic CMP block attached", "no payload-eligibility helper"],
+      "forbidden_invariants": ["GA4 schema copied to Meta", "item silently dropped", "new duplicate base tag", "CJS eligibility guard"]
     },
     {
-      "id": "meta-invalid-item-fail-closed",
+      "id": "meta-runtime-missing-data-no-eligibility-guard",
       "route": "media",
-      "request": "Use configure-gtm to configure Meta AddToCart in an authorized dedicated workspace where the approved catalog contract requires every item to have a non-empty merchant SKU. The installed template does not suppress firing when a transform returns an empty value. Runtime recette and publication are outside this request.",
+      "request": "Use configure-gtm to configure Meta AddToCart in an authorized dedicated workspace. The required browser mappings and supported template fields exist at design time, while a supplied runtime sample has an empty merchant SKU. Runtime recette and publication are outside this request.",
       "evidence_grades": ["approved-input", "official-current", "container-confirmed", "contract-sample"],
       "expected_status": "Configured",
       "live_state_claim": true,
       "saved_object_readback": true,
       "idempotent_second_execution": true,
       "expected_actions": [
-        {"action": "create", "object_type": "variable", "name": "CJS - Meta items valid", "justification": "Narrow deterministic guard checks every required merchant SKU."},
-        {"action": "create", "object_type": "trigger", "name": "CE - add_to_cart - Meta valid", "justification": "The event is eligible only when all required items are valid."},
+        {"action": "create", "object_type": "variable", "name": "DLV - ecommerce.items", "justification": "Direct approved source mapping."},
+        {"action": "create", "object_type": "trigger", "name": "CE - add_to_cart", "justification": "Exact approved business event without a speculative payload gate."},
         {"action": "create", "object_type": "tag", "name": "Meta - Event - AddToCart", "justification": "Explicit media brief and current official browser schema."}
       ],
-      "external_dependencies": ["The site must continue to provide merchant SKU values in the approved item path."],
-      "expected_invariants": ["invalid required item prevents tag eligibility", "zero valid numeric values are preserved", "empty transform is not treated as a firing gate"],
-      "forbidden_invariants": ["invalid item filtered out while tag fires", "analytics item_id assumed to be catalog ID", "generic validation framework"]
+      "external_dependencies": ["The site/dataLayer owner must provide the approved merchant SKU at runtime and recette must verify it."],
+      "expected_invariants": ["direct browser field mapping", "runtime missing data recorded as a dependency", "zero valid numeric values are preserved", "business event still owns firing"],
+      "forbidden_invariants": ["CJS eligibility guard", "validity trigger", "invalid item silently filtered", "analytics item_id assumed to be catalog ID"]
     },
     {
       "id": "compound-cmp-predicate",
@@ -348,7 +348,7 @@
         {"action": "create", "object_type": "tag", "name": "Vendor - Event - Conversion", "justification": "One readable consumer uses the approved destination lookup."}
       ],
       "external_dependencies": ["Destination identities remain owned by the media team."],
-      "expected_invariants": ["one shallow folder", "one deterministic LUT", "safe no-match makes tag ineligible"],
+      "expected_invariants": ["one shallow folder", "one deterministic LUT", "safe no-match prevents production leakage"],
       "forbidden_invariants": ["three duplicated tags", "deep folder tree", "unrelated objects reorganized"]
     },
     {

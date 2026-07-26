@@ -8,12 +8,11 @@
 - [Use one concise record per requirement](#use-one-concise-record-per-requirement)
 - [Compact example](#compact-example)
 - [Retain critical provenance](#retain-critical-provenance)
-- [Map fields and event eligibility](#map-fields-and-event-eligibility)
+- [Map fields and runtime data behavior](#map-fields-and-runtime-data-behavior)
 - [Map GTM object actions](#map-gtm-object-actions)
 - [Prove analytics conformance](#prove-analytics-conformance)
 - [Record consent and external dependencies](#record-consent-and-external-dependencies)
-- [Apply operational statuses](#apply-operational-statuses)
-- [Completion invariants](#completion-invariants)
+- [Apply canonical acceptance](#apply-canonical-acceptance)
 
 ## Purpose and priority
 
@@ -90,7 +89,7 @@ Capture only what mutation and verification need:
   use;
 - installed tag/template identity, version, fields, defaults, and relevant permissions;
 - GTM field resolution, normal trigger, consent mechanism, firing option, and folder;
-- object actions and dependencies;
+- object actions and dependencies, including explicit delta actions;
 - discrepancy, blocker, external dependency, and final operational status.
 
 Do not force a large worksheet-style record for a direct one-field mapping. Add detail in proportion
@@ -166,7 +165,7 @@ critical fact instead. Preserve official URLs, titles, and access dates for sche
 template, and consent decisions; do not produce a citation ledger for routine self-evident object
 names.
 
-## Map fields and event eligibility
+## Map fields and runtime data behavior
 
 For every outgoing field, preserve these distinct layers:
 
@@ -176,27 +175,34 @@ For every outgoing field, preserve these distinct layers:
 | GTM resolution | Direct value, DLV, constant, settings variable, LUT/RLT, or narrow transformation with missing-data behavior. |
 | Template | Exact installed-template field and stored type. |
 | Destination | Official parameter, requirement status, type, format, enum, scope, and cardinality. |
+| Delivery surface | Browser Pixel/tag field or server/CAPI-only field; never copy the latter into a browser tag without current browser support. |
 
 Use `mapped`, `intentionally omitted`, `external`, or `blocked` for exceptional field states. Preserve
 valid zero and `false`. Never turn an absent required value into an empty string, placeholder,
 guessed ID, invented literal, or silent item omission.
 
-Define tag eligibility separately from transformation output. If a required event-level value or
-required item contract is invalid and the tag could still execute, add the smallest explicit native
-trigger condition/exception. Use a narrow validity variable only when native source conditions
-cannot express the documented rule cleanly. Returning `undefined`, `{}`, or `[]` from another
-variable does not prove that the tag is ineligible.
+Separate design-time completeness from runtime data quality. A required field with no approved
+source, no compatible transformation, or no supported template field blocks configuration. When an
+approved source mapping exists but can resolve missing or empty at runtime, configure the tag from
+the approved business event and record the source obligation for recette. Do not add a Custom
+JavaScript eligibility variable, a duplicate validity parser, or a firing exception merely to
+suppress a potentially incomplete payload.
 
-For arrays, define the empty, one-item, multi-item, and invalid-item result. Preserve every required
-item. Default to failing the complete affected media event when a required item identifier is absent
-unless current official documentation and the explicit media requirement authorize partial-item
-delivery.
+Add a payload-related firing condition only when the explicit brief or current official browser
+contract requires one. Prefer a direct native source condition; use one narrow CJS condition only
+when the rule cannot be represented natively. Consent blocks are separate policy objects and are
+not payload validation.
+
+For arrays, define the empty, one-item, multi-item, and invalid-item transformation result. Preserve
+every mapped item and do not filter item zero or silently invent a catalog identifier. Runtime
+missing or malformed values remain a site/dataLayer dependency unless the documented browser
+contract explicitly requires a firing rule.
 
 ## Map GTM object actions
 
 Create the complete in-scope object graph before mutation. For each object record:
 
-- `create`, `update`, `reuse`, or `untouched`;
+- `create`, `update`, `rename`, `pause`, `unpause`, `reuse`, or `untouched`;
 - object type, intended name/folder, stable existing ID/path, and fingerprint when applicable;
 - requirement or documented constraint that justifies it;
 - exact intended fields, references, consent route, and dependencies;
@@ -204,8 +210,10 @@ Create the complete in-scope object graph before mutation. For each object recor
 - exact pre-change representation for an update;
 - expected saved-object comparison.
 
-Use `remove` only after explicit destructive authorization and confirmed ownership. A repeated run
-against the final saved state must resolve every completed object to `reuse` or `untouched`.
+Use `rename`, `pause`, or `unpause` only for an approved delta and record the exact pre-change state,
+related consumers, and behavioral effect. Use `remove` only after explicit destructive authorization
+and confirmed ownership. A repeated run against the final saved state must resolve every completed
+object to `reuse` or `untouched`.
 
 Select the target architecture before reuse. A matching name or current value is insufficient.
 Require compatible output, source, type/shape, timing, consent, consumers, template/version,
@@ -247,39 +255,12 @@ Record but do not silently perform external work, including site/dataLayer chang
 custom definitions or key events, Google tag/data-stream settings, advertising conversion actions,
 catalog/feed work, platform account settings, publication, and server-side/deduplication work.
 
-## Apply operational statuses
+## Apply canonical acceptance
 
-Use one status per requirement or tag family:
+Use the status definitions and completion invariants only from
+`../03-judgement/acceptance-and-handoff.md`. This map records the selected status and its evidence;
+it does not restate or redefine `Configured`, `Partial`, `Blocked`, or `Deferred`.
 
-| Status | Meaning |
-| --- | --- |
-| `Configured` | Authoritative current-workspace readback proves that the saved object graph matches the approved requirement and all applicable completion invariants. The graph may have already matched without a write. |
-| `Partial` | This run saved some in-scope objects but could not complete their dependent graph; the exact saved state and recovery boundary are known. |
-| `Blocked` | A critical business, source, destination, template, consent, conflict, access, or mutation fact prevents safe configuration. No specification status substitutes for the missing write path. |
-| `Deferred` | The requirement belongs to the intentionally future server-side GTM, CAPI, browser/server deduplication, or event-ID capability. |
+Before handoff, render the compact recette-ready manifest defined there:
 
-Do not use `Configured` as a synonym for runtime-tested or published. Runtime recette and publication
-remain separate.
-
-## Completion invariants
-
-Before `Configured`, prove from current workspace readback that:
-
-1. every included requirement has an accurate status and no unresolved in-scope ambiguity;
-2. every critical mutation fact has approved, official, container, or supplied-source provenance;
-3. analytics collection semantics match exactly, or media fields match the explicit brief and
-   current official destination schema;
-4. every required source type/shape/timing and eligibility rule is compatible with the destination;
-5. every tag has the intended normal trigger, consent route, firing option, and initialization path;
-6. every GTM reference resolves and every reused consumer remains compatible;
-7. known in-scope automatic/manual, destination, environment, and conflict duplicates are resolved;
-8. first-party data remains limited to explicitly approved fields, sources, destinations, and
-   consent states;
-9. intended and saved fields match after every mutation, and an identical rerun is a no-op;
-10. pre-existing workspace changes and current-run writes are distinguished;
-11. blockers, external dependencies, and partial or deferred work are explicit;
-12. no runtime claim, publication, Submit, or GTM version action occurred.
-13. the v4 authority boundary, source locators, and official-source manifest are complete;
-14. every applicable client-side object family was configured, compatibly reused, intentionally
-    untouched, or accurately blocked under its authority boundary;
-15. normalized intended-versus-saved object comparison has no unexplained configuration difference.
+`requirement → source event → tag → trigger → variables → destination fields → consent route → status → external dependencies`.

@@ -15,7 +15,7 @@ class ForwardTestCaseCorpusTest(unittest.TestCase):
         cls.cases = cls.payload["cases"]
 
     def test_corpus_is_raw_artifact_oriented_and_complete(self) -> None:
-        self.assertEqual(self.payload["version"], 1)
+        self.assertEqual(self.payload["version"], 2)
         expected_ids = {
             "ga4-extra-field-and-pii",
             "multi-environment-routing",
@@ -25,6 +25,11 @@ class ForwardTestCaseCorpusTest(unittest.TestCase):
             "high-impact-zone",
             "matomo-generic-analytics",
             "cross-domain-ownership",
+            "empty-media-payload-template-first",
+            "delta-shared-tag-change",
+            "basic-google-consent-four-signals",
+            "affiliate-basket",
+            "browser-event-id-carveout",
         }
         self.assertEqual({case["id"] for case in self.cases}, expected_ids)
         for case in self.cases:

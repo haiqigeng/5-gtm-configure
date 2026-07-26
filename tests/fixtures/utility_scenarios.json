@@ -1,0 +1,118 @@
+{
+  "version": 1,
+  "description": "Utility-first saved-configuration characterization cases; not model-output, browser, or runtime recette tests.",
+  "cases": [
+    {
+      "id": "empty-media-ecommerce-supported-templates",
+      "artifact": {
+        "briefs": ["Meta AddToCart", "Meta Purchase", "Microsoft AddToCart", "Microsoft Purchase"],
+        "source_events": ["add_to_cart", "purchase"],
+        "runtime_samples": [{"ecommerce": {}}, {"ecommerce": {"items": []}}],
+        "templates": {"Meta": "supported-installed", "Microsoft": "supported-installed"}
+      },
+      "expected_objects": ["CE - add_to_cart", "CE - purchase", "Meta event tags", "Microsoft UET event tags"],
+      "expected_controls": ["business events own firing", "runtime missing data recorded for recette", "supported templates used"],
+      "forbidden_objects": ["CJS - Ecommerce - AddToCart Eligible", "CJS - Ecommerce - Purchase Eligible", "Custom HTML media tag", "validity trigger"]
+    },
+    {
+      "id": "existing-ecommerce-object-reuse",
+      "artifact": {
+        "existing": ["CE - add_to_cart", "CE - purchase", "DLV - ecommerce.items"],
+        "semantics": "exact-compatible",
+        "consumers": ["GA4", "Meta"]
+      },
+      "expected_actions": ["reuse exact trigger", "reuse exact DLV", "trace consumers"],
+      "expected_controls": ["no duplicate trigger", "no DLV version change", "idempotent no-op rerun"],
+      "forbidden_objects": ["second ecommerce DLV", "eligibility helper"]
+    },
+    {
+      "id": "native-ga4-purchase-no-transform",
+      "artifact": {
+        "event": "purchase",
+        "source": "GA4-shaped ecommerce object on purchase push",
+        "native_setting": "Send Ecommerce data / Data Layer"
+      },
+      "expected_objects": ["GA4 - Event - purchase", "CE - purchase"],
+      "expected_controls": ["native ecommerce enabled", "every approved item preserved", "ecommerce clearing remains site contract"],
+      "forbidden_objects": ["CJS - GA4 - items", "CJS - Ecommerce - Purchase Eligible"]
+    },
+    {
+      "id": "basic-google-consent-complete-signals",
+      "artifact": {
+        "mode": "basic",
+        "cmp_template": "supported-installed",
+        "signals": ["analytics_storage", "ad_storage", "ad_user_data", "ad_personalization"],
+        "lifecycle": ["default", "grant update", "revocation update"]
+      },
+      "expected_controls": ["one defaults/updates owner", "strict pre-grant block", "built-in checks distinguished", "unset template API is not denial proof"],
+      "forbidden_objects": ["Custom HTML gtag consent", "advanced denied-state ping route"]
+    },
+    {
+      "id": "delta-tag-update-with-consumers",
+      "artifact": {
+        "request": "rename and update one shared media event tag, then pause a superseded in-scope tag",
+        "existing_consumers": ["CE - purchase", "Block - CMP - Vendor denied", "Folder - Commerce"],
+        "remove_authorized": false
+      },
+      "expected_actions": ["update", "rename", "pause", "consumer readback"],
+      "expected_controls": ["pre-change state recorded", "unrelated objects untouched", "no-op rerun"],
+      "forbidden_actions": ["remove", "create duplicate by new name", "blind overwrite"]
+    },
+    {
+      "id": "enhanced-measurement-collision",
+      "artifact": {
+        "approved_event": "file_download",
+        "enhanced_measurement_state": "confirmed enabled",
+        "automatic_semantics": "exact match"
+      },
+      "expected_actions": ["reuse automatic owner"],
+      "expected_controls": ["manual tag not added", "stream setting recorded", "tracking-plan semantics preserved"],
+      "forbidden_objects": ["duplicate GA4 - Event - file_download"]
+    },
+    {
+      "id": "explicit-browser-event-id-server-deferred",
+      "artifact": {
+        "brief_field": "event_id",
+        "source": "event.event_id",
+        "browser_documentation": "supported",
+        "installed_template_field": "supported",
+        "server_request": "not authorized"
+      },
+      "expected_actions": ["map supplied browser event_id", "defer server matching"],
+      "expected_controls": ["event ID not generated", "browser field evidence retained", "CAPI remains outside scope"],
+      "forbidden_objects": ["random event ID variable", "server container object"]
+    },
+    {
+      "id": "affiliate-basket-and-network-dedup",
+      "artifact": {
+        "network": "unlisted affiliate network",
+        "advertiser_id": "approved",
+        "basket_items": 3,
+        "network_order_reference": "transaction_id",
+        "supported_template": "installed"
+      },
+      "expected_controls": ["official network basket schema reopened", "all three items preserved", "order reference mapped only as documented", "one browser conversion owner"],
+      "forbidden_objects": ["GA4 items copied unchanged", "random dedup ID", "server postback"]
+    },
+    {
+      "id": "unlisted-vendor-generic-browser-route",
+      "artifact": {
+        "vendor": "unlisted",
+        "current_official_browser_docs": true,
+        "supported_template": "available",
+        "server_fields_present_in_other_docs": true
+      },
+      "expected_controls": ["generic media route used", "browser-only field matrix", "supported template selected", "product-specific consent established"],
+      "forbidden_objects": ["remembered schema", "CAPI-only browser field", "silent Custom HTML"]
+    },
+    {
+      "id": "semantic-readback-returned-ids",
+      "artifact": {
+        "returned_ids": ["tagId", "triggerId", "folderId"],
+        "references": ["firingTriggerId", "blockingTriggerId", "parentFolderId", "setupTag", "teardownTag"]
+      },
+      "expected_controls": ["IDs translated to semantic names", "reference order normalized where set-like", "wrong consumer reference remains visible"],
+      "forbidden_controls": ["root metadata compared as business fields", "raw returned ID treated as intended semantic equality"]
+    }
+  ]
+}

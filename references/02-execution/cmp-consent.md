@@ -6,6 +6,7 @@
 - [Distinguish observation from gating](#distinguish-observation-from-gating)
 - [Research the installed CMP](#research-the-installed-cmp)
 - [Route identified CMP platforms](#route-identified-cmp-platforms)
+- [Route TCF conditionally](#route-tcf-conditionally)
 - [Build a safe vendor block](#build-a-safe-vendor-block)
 - [Select advanced/native consent only explicitly](#select-advancednative-consent-only-explicitly)
 - [Handle page-view timing](#handle-page-view-timing)
@@ -60,6 +61,13 @@ When the CMP is OneTrust, Cookiebot, Didomi, or another identifiable platform, l
 `cmp-platform-patterns.md` after this general contract. Use its discovery route but keep the exact
 installed template, site deployment, vendor/category/purpose IDs, and current official lifecycle as
 the authority. Never copy one client's category IDs or another CMP's event names.
+
+## Route TCF conditionally
+
+Load `tcf-consent.md` only when the approved site/CMP architecture actually uses IAB Europe TCF.
+Use the current TCF 2.3 route and the CMP's documented TC/Additional Consent plumbing. Do not select
+purposes, legal bases, vendors, publisher restrictions, or CMP certification on the client's
+behalf, and do not add TCF machinery to a non-TCF consent implementation.
 
 ## Build a safe vendor block
 

@@ -29,6 +29,21 @@ ROOT_METADATA_KEYS = {
     "_meta",
 }
 SET_LIKE_KEYS = {"firingTriggerId", "blockingTriggerId", "monitoringMetadata"}
+ID_FIELDS = {
+    "tagId": "tag",
+    "triggerId": "trigger",
+    "variableId": "variable",
+    "folderId": "folder",
+    "templateId": "template",
+    "zoneId": "zone",
+    "environmentId": "environment",
+}
+REFERENCE_FIELDS = {
+    "firingTriggerId": "triggerId",
+    "blockingTriggerId": "triggerId",
+    "parentFolderId": "folderId",
+}
+SEQUENCING_KEYS = {"setupTag", "teardownTag"}
 
 
 class GraphError(ValueError):
@@ -59,8 +74,55 @@ def _identity(item: dict[str, Any], path: str) -> tuple[str, str]:
     return object_type.strip(), name.strip()
 
 
+def _reference_maps(objects: list[dict[str, Any]]) -> dict[str, dict[str, str]]:
+    maps = {field: {} for field in ID_FIELDS}
+    for index, item in enumerate(objects):
+        _, name = _identity(item, f"$.objects[{index}]")
+        for field, semantic_type in ID_FIELDS.items():
+            raw_id = item.get(field)
+            if raw_id is None:
+                continue
+            if not isinstance(raw_id, str) or not raw_id.strip():
+                raise GraphError(f"$.objects[{index}].{field} must be a non-empty string")
+            semantic = f"{semantic_type}::{name}"
+            previous = maps[field].get(raw_id)
+            if previous is not None and previous != semantic:
+                raise GraphError(f"duplicate {field} {raw_id!r} for {previous!r} and {semantic!r}")
+            maps[field][raw_id] = semantic
+    return maps
+
+
+def _semantic_reference(value: Any, mapping: dict[str, str]) -> Any:
+    if isinstance(value, str):
+        return mapping.get(value, value)
+    if isinstance(value, list):
+        return [_semantic_reference(item, mapping) for item in value]
+    return value
+
+
+def _translate_references(
+    value: Any,
+    *,
+    maps: dict[str, dict[str, str]],
+    parent_key: str | None = None,
+) -> Any:
+    if isinstance(value, dict):
+        translated: dict[str, Any] = {}
+        for key, item in value.items():
+            if key in REFERENCE_FIELDS:
+                translated[key] = _semantic_reference(item, maps[REFERENCE_FIELDS[key]])
+            elif key == "tagName" and parent_key in SEQUENCING_KEYS:
+                translated[key] = _semantic_reference(item, maps["tagId"])
+            else:
+                translated[key] = _translate_references(item, maps=maps, parent_key=key)
+        return translated
+    if isinstance(value, list):
+        return [_translate_references(item, maps=maps, parent_key=parent_key) for item in value]
+    return value
+
+
 def normalize_graph(value: Any) -> dict[str, dict[str, Any]]:
-    """Return objects keyed by semantic identity with server metadata removed at object root."""
+    """Return semantic objects with server IDs translated in cross-object references."""
     if isinstance(value, dict):
         objects = value.get("objects")
     else:
@@ -68,11 +130,18 @@ def normalize_graph(value: Any) -> dict[str, dict[str, Any]]:
     if not isinstance(objects, list):
         raise GraphError("graph must be an array or an object containing an objects array")
 
-    normalized: dict[str, dict[str, Any]] = {}
+    raw_objects: list[dict[str, Any]] = []
     for index, raw in enumerate(objects):
         path = f"$.objects[{index}]"
         if not isinstance(raw, dict):
             raise GraphError(f"{path} must be an object")
+        _identity(raw, path)
+        raw_objects.append(raw)
+
+    maps = _reference_maps(raw_objects)
+    normalized: dict[str, dict[str, Any]] = {}
+    for index, raw in enumerate(raw_objects):
+        path = f"$.objects[{index}]"
         object_type, name = _identity(raw, path)
         key = f"{object_type}::{name}"
         if key in normalized:
@@ -80,7 +149,7 @@ def normalize_graph(value: Any) -> dict[str, dict[str, Any]]:
         cleaned = {field: value for field, value in raw.items() if field not in ROOT_METADATA_KEYS}
         cleaned["object_type"] = object_type
         cleaned["name"] = name
-        normalized[key] = _canonical(cleaned)
+        normalized[key] = _canonical(_translate_references(cleaned, maps=maps))
     return {key: normalized[key] for key in sorted(normalized)}
 
 

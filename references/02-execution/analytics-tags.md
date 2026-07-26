@@ -4,10 +4,14 @@
 
 - [Use the analytics requirement as the business contract](#use-the-analytics-requirement-as-the-business-contract)
 - [Configure the Google tag deliberately](#configure-the-google-tag-deliberately)
+- [Resolve Google tag and destination identity](#resolve-google-tag-and-destination-identity)
 - [Apply the GA4 safety gate](#apply-the-ga4-safety-gate)
 - [Keep page view separate by default](#keep-page-view-separate-by-default)
 - [Configure events from the official schema](#configure-events-from-the-official-schema)
+- [Use native GA4 ecommerce mechanics](#use-native-ga4-ecommerce-mechanics)
+- [Reconcile Enhanced Measurement and manual events](#reconcile-enhanced-measurement-and-manual-events)
 - [Govern user properties and identifiers](#govern-user-properties-and-identifiers)
+- [Configure lifecycle and diagnostic fields explicitly](#configure-lifecycle-and-diagnostic-fields-explicitly)
 - [Record external Google and GA4 administration](#record-external-google-and-ga4-administration)
 - [Apply consent](#apply-consent)
 - [Verify the saved analytics setup](#verify-the-saved-analytics-setup)
@@ -85,6 +89,26 @@ Use this semantic decision matrix; do not apply a fixed numerical threshold:
 For multiple streams, properties, regions, or environments, load the multi-destination routing
 playbook. Never place a production measurement ID as a lookup default.
 
+## Resolve Google tag and destination identity
+
+Do not use `Google tag`, `GA4 configuration`, `measurement ID`, and `destination` as synonyms.
+Read the current saved fields and Google administration surfaces before mutation:
+
+- `GT-...` identifies a Google tag;
+- `G-...` identifies a GA4 web data stream and is the measurement ID used by GA4 Event tags;
+- `AW-...` identifies a Google Ads destination and may also identify the Google tag used by that
+  product;
+- a destination receives data from a Google tag but is not itself another executable GTM tag;
+- one Google tag can have connected destinations and inherited settings that affect more than the
+  label visible on the GTM object.
+
+For every Google execution unit, record the saved tag ID, every connected destination, the ID used
+by each event tag, inherited configuration/event settings, and all consumers. Do not point a GA4
+Event tag at a `GT-...` value merely because the Google tag UI displays it; use the exact current
+GA4 measurement-ID contract. Do not create a second Google tag when connecting or reusing a
+destination is the documented compatible architecture, and do not connect or remove a destination
+without explicit authority because that changes routing outside one event tag.
+
 ## Apply the GA4 safety gate
 
 Load `ga4-collection-safety.md` for every Google tag or GA4 event. Before mutation, validate current
@@ -130,13 +154,70 @@ When a source key is misspelled, verify that the approved source contract uses t
 
 Treat `value` and `currency`, transaction identifiers, and `items` according to the exact event reference. Never infer an item parameter from a similarly named event parameter.
 
+## Use native GA4 ecommerce mechanics
+
+For an approved GA4 ecommerce event, inspect the current GA4 Event tag's native ecommerce controls
+before creating variables or transformations. Prefer the native `Send Ecommerce data` route when
+the saved tag surface supports it:
+
+| Source contract | Configuration |
+| --- | --- |
+| Event push contains the current GA4-shaped `ecommerce` object | Select the native Data Layer source and map only approved event-level fields that are not supplied through that object. |
+| Approved object exists at another exact source path or needs an approved reusable projection | Select the native Custom Object source and reference that object variable. |
+| Source is not GA4-shaped | Use direct field mappings or the narrowest real shape transformation; do not add a Boolean payload-eligibility helper. |
+
+Preserve zero, false, one item, and every approved item. An empty or absent runtime object is a
+site/dataLayer or recette dependency, not permission for this skill to invent `CJS - Ecommerce -
+Eligible`, filter items, or suppress the tag. A design-time missing required mapping still blocks
+configuration.
+
+When persistent ecommerce state could leak into a later event, record that risk and the required
+site/dataLayer clearing contract (commonly an `ecommerce: null` push before the next ecommerce
+object). This skill does not insert a browser-side clearing script to compensate for application
+state. Configure only the approved ecommerce events; an official funnel catalogue is not
+authorization to add the rest of the funnel.
+
+## Reconcile Enhanced Measurement and manual events
+
+Inspect the target stream's confirmed Enhanced Measurement settings and the current Google tag
+before adding a manual GA4 event. At minimum reconcile page views/history, scrolls, outbound clicks,
+site search, video engagement, file downloads, and form interactions when the approved requirement
+overlaps them.
+
+| Situation | Configuration decision |
+| --- | --- |
+| Confirmed automatic event exactly satisfies the approved contract | Reuse that owner; do not add a duplicate manual tag. |
+| Approved manual event must own collection | Configure the manual event and record the exact external Enhanced Measurement setting that must be disabled or narrowed. |
+| Property-side state is unknown and collision is material | Block the affected mutation or record an explicit external dependency; do not assume either state. |
+| Automatic event differs in timing or semantics | Preserve the approved contract and document why the two events are distinct or why one owner must change. |
+
 ## Govern user properties and identifiers
 
 Add a user property only when it is explicitly approved, stable, has a valid analysis use, and current GA4 documentation permits it. Never add one merely because the source dataLayer exposes it. Keep it in an Event Settings variable only when it genuinely applies across the intended events.
 
-Treat `user_id` as a separately approved identifier contract, not a routine event parameter or user property. Establish its source, authentication lifecycle, reset behavior, consent, and current official requirements before configuration.
+Treat `user_id` as a separately approved Google tag configuration contract, not a routine event
+parameter, user property, or custom dimension. Omit it while the user is not signed in, set the
+stable approved non-PII identifier when authentication state is established, and send `null` when
+the approved logout/reset event must clear a previously set value. Establish source, lifecycle,
+consent, persistence, and every consuming Google tag before configuration.
+
+Configure approved user properties separately from `user_id`. Record their stable analysis purpose,
+source, scope, limits, and reset behavior. Treat content groups as explicit approved configuration
+fields with their own source and timing; do not infer them from URL structure or exposed data.
 
 Do not send personally identifiable information to GA4. Do not repurpose media advanced-matching fields as GA4 parameters or user properties.
+
+## Configure lifecycle and diagnostic fields explicitly
+
+- Use `traffic_type` only as the collection-side value that supports an approved internal/developer
+  traffic design. The GA4 Admin data filter that acts on it remains an external dependency and is
+  never implied by the GTM field alone.
+- Set `debug_mode` only for an approved diagnostic route. To disable it, omit the parameter from
+  production collection; do not assume a literal `false` disables DebugView classification.
+- Keep environment lookup behavior explicit and never route an unknown/no-match environment to a
+  production measurement ID.
+- Record default, authenticated, logout/reset, and environment transitions whenever a persistent
+  configuration field can outlive the event that set it.
 
 ## Record external Google and GA4 administration
 

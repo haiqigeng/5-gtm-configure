@@ -18,12 +18,12 @@ class ConfigurationScenarioFixtureTest(unittest.TestCase):
         return next(item for item in self.scenarios if item["id"] == scenario_id)
 
     def test_scenario_corpus_has_expected_operational_coverage(self) -> None:
-        self.assertEqual(self.payload["version"], 4)
+        self.assertEqual(self.payload["version"], 5)
         self.assertIn("not model-output or runtime tests", self.payload["description"])
         expected_ids = {
             "ga4-tracking-plan-configured",
             "media-brief-meta-ecommerce",
-            "meta-invalid-item-fail-closed",
+            "meta-runtime-missing-data-no-eligibility-guard",
             "compound-cmp-predicate",
             "explicit-google-advanced-consent",
             "shared-google-incompatible-routes",
@@ -56,7 +56,16 @@ class ConfigurationScenarioFixtureTest(unittest.TestCase):
             "contract-sample",
             "assumption",
         }
-        allowed_actions = {"create", "update", "reuse", "untouched", "remove"}
+        allowed_actions = {
+            "create",
+            "update",
+            "rename",
+            "pause",
+            "unpause",
+            "reuse",
+            "untouched",
+            "remove",
+        }
         allowed_statuses = set(self.payload["allowed_statuses"])
         self.assertEqual(allowed_statuses, {"Configured", "Partial", "Blocked", "Deferred"})
 
@@ -122,20 +131,22 @@ class ConfigurationScenarioFixtureTest(unittest.TestCase):
         self.assertIn("lead_type remains absent", scenario["expected_invariants"])
         self.assertIn("lead_type added", scenario["forbidden_invariants"])
 
-    def test_meta_ecommerce_preserves_catalog_items_and_fails_closed(self) -> None:
+    def test_meta_ecommerce_preserves_catalog_items_without_payload_guards(self) -> None:
         ecommerce = self.scenario("media-brief-meta-ecommerce")
         names = {action["name"] for action in ecommerce["expected_actions"]}
         self.assertIn("CJS - Meta contents", names)
         self.assertIn("CJS - Meta content_ids", names)
-        self.assertIn("all eligible items preserved", ecommerce["expected_invariants"])
+        self.assertIn("all approved items preserved", ecommerce["expected_invariants"])
+        self.assertIn("CE - purchase", names)
+        self.assertFalse(any("valid" in name.lower() for name in names))
 
-        invalid = self.scenario("meta-invalid-item-fail-closed")
+        invalid = self.scenario("meta-runtime-missing-data-no-eligibility-guard")
         self.assertIn(
-            "invalid required item prevents tag eligibility",
+            "runtime missing data recorded as a dependency",
             invalid["expected_invariants"],
         )
         self.assertIn(
-            "invalid item filtered out while tag fires",
+            "CJS eligibility guard",
             invalid["forbidden_invariants"],
         )
 

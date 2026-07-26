@@ -1,4 +1,4 @@
 interface:
   display_name: "Configure Google Tag Manager"
   short_description: "Complete client-side GTM configuration"
-  default_prompt: "Use $configure-gtm to operationally implement my approved analytics tracking plan or explicit media brief across every applicable client-side GTM web-container object in a dedicated workspace as a clean, best-practice, consent-controlled saved setup; preserve analytics requirements exactly, use current official documentation, apply basic CMP blocking by default, verify every saved object, and never publish."
+  default_prompt: "Use $configure-gtm to operationally implement my approved analytics tracking plan or explicit media brief across every applicable client-side GTM web-container object in a dedicated workspace as a clean, best-practice, consent-controlled saved setup; preserve analytics requirements exactly, prefer native and supported templates with direct field mappings, safely handle greenfield or delta changes, apply basic CMP blocking by default, verify every saved object, and never publish."

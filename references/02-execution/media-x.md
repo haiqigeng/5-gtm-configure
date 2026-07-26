@@ -34,8 +34,9 @@ separate and block when the platform-side event has not been created or supplied
 ## Ecommerce and matching
 
 Use the current official value, currency, content collection, and conversion/deduplication fields.
-Require the exact catalog convention, preserve all eligible items, and fail closed on missing
-required identifiers. Load the transformation playbook for array projection.
+Require the exact catalog convention, preserve all approved items, and require design-time sources
+for required identifiers. Map runtime values directly and load the transformation playbook only for
+a real array projection; do not add a payload-eligibility helper.
 
 User parameters or matching require explicit approval, accepted fields, normalization/hash
 ownership, consent, and destination isolation. Event or conversion IDs are not generated merely

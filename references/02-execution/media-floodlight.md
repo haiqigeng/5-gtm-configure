@@ -52,11 +52,12 @@ sales activities, establish revenue/value, currency where applicable, quantity, 
 identity, and duplicate-counting expectations from the explicit brief and current official schema.
 
 Map custom Floodlight variables only when the activity owns them. Never pass PII in custom
-variables. Preserve valid zero, block missing required sales values, and never invent an order ID or
-cache-busting value when the current Google tag/template handles it.
+variables. Preserve valid zero, require design-time sources for required sales values, map runtime
+values directly, and never invent an order ID or cache-busting value when the current Google
+tag/template handles it.
 
 For dynamic remarketing or product data, require the exact feed/catalog identifier convention and
-project every eligible item through the transformation playbook. GA4 item IDs are not automatically
+project every approved item through the transformation playbook. GA4 item IDs are not automatically
 Floodlight feed IDs.
 
 ## Consent, linker, and shared Google tags

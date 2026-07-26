@@ -30,7 +30,8 @@ blocking triggers, user-defined and built-in variables, folders, templates, Goog
 configuration/destinations, workspace controls, and explicitly authorized Zones, environments, or
 container settings. Preserve approved analytics semantics exactly, configure media destinations
 from their own current official schemas, apply basic CMP blocking by default, support explicitly
-requested advanced consent modes, verify every saved object, and never publish.
+requested advanced consent modes, support both greenfield and approved delta changes, verify every
+saved object, and never publish.
 
 The operational result is the saved GTM object graph. Analysis, a plan, or a complete specification
 does not count as successful configuration.
@@ -44,7 +45,7 @@ Use these definitions consistently:
 | Clean | Only in-scope objects and documented dependencies; no avoidable duplicate, known conflict, redundant helper, or speculative future object. This does not authorize general cleanup. |
 | Well organized | Clear default or approved naming, shallow folders when useful, readable references, and appropriate reuse without hiding ownership or source. |
 | Correct | Faithful business semantics, current official technical validity, compatible source timing/type/shape, correct template fields, correct trigger and consent logic, and authoritative saved-state readback. It is not a runtime-certification claim. |
-| Best-practice and optimal | The smallest maintainable GTM architecture that satisfies the approved requirement and current documentation. It never means optimizing the tracking plan. |
+| Best-practice and optimal | The smallest maintainable GTM architecture that satisfies the approved requirement and current documentation. Direct mappings and supported templates win over speculative helpers or Custom HTML. It never means optimizing the tracking plan. |
 | Consent controlled | Strict/basic CMP blocking by default; an advanced/native route only when explicitly requested and proven for the exact browser product. |
 
 ## Requirement authority
@@ -85,6 +86,11 @@ when it cannot be discovered and prevents safe configuration. Do not demand a se
 source-contract document when the tracking plan, media brief, supplied payload, and container
 together establish the required values.
 
+Distinguish an absent design-time mapping from a value that can be empty at runtime. A required
+field with no approved source or template field blocks that requirement. An approved source path
+that may resolve empty does not authorize a speculative payload-eligibility variable; configure the
+mapping and record the runtime dataLayer obligation for the recette workflow.
+
 ## Operational output
 
 For a successful run, produce:
@@ -104,6 +110,8 @@ For a successful run, produce:
 - a concise current official-source manifest and approved-input versus implementation-decision
   provenance for every material write;
 - concise discrepancies, blockers, partial state, and external dependencies;
+- a compact recette-ready manifest from requirement through source event, tag, trigger, variables,
+  destination fields, consent route, status, and external dependencies;
 - confirmation that no runtime recette, publication, Submit, or GTM version occurred.
 
 Do not turn unavailable write access into a successful specification deliverable. Mark the affected
@@ -147,6 +155,8 @@ they can affect the requested configuration. It mutates high-impact container go
 only with explicit object-specific authority. Account permissions, server-container clients, and
 server Transformation resources remain outside the client-side object surface.
 
-Server-side GTM, Conversions API, browser/server deduplication, and event-ID architecture remain
-future extensions. The vendor consent-capability reference may classify other analytics products,
-but it does not authorize tag configuration outside the supported Google tag/GA4 analytics route.
+Server-side GTM, Conversions API, and browser/server deduplication remain future extensions. The
+skill may map an explicitly approved browser-supplied `event_id` only when current browser
+documentation and the installed template support it; it never generates an ID or designs the
+server-side deduplication architecture. The vendor consent-capability reference may classify other
+analytics products, but it does not authorize tag configuration outside the active analytics route.

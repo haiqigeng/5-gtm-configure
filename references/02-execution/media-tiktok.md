@@ -25,6 +25,10 @@ Open the current official TikTok standard-events page, parameter reference, cust
 - catalog/ROAS/Video Shopping requirements;
 - current cookie, consent, and Advanced Matching behavior.
 
+Use the current supported TikTok Pixel template when available. If it is absent, follow the
+authorized supported-template install path; do not substitute Custom HTML or remembered pixel code.
+Block when installation/update authority is unavailable.
+
 Do not rely on a static list in this skill. TikTok revises its events and parameters.
 
 ## Design the Pixel object graph
@@ -39,7 +43,7 @@ Treat `content_id`, `content_ids`, `contents`, `content_type`, value, currency, 
 
 When the current schema requires arrays:
 
-- preserve every eligible product ID;
+- preserve every approved product ID;
 - return the documented array/object structure even for one item;
 - map the catalog's actual SKU or item-group convention;
 - preserve exact types and allowed enums;
@@ -47,9 +51,14 @@ When the current schema requires arrays:
 
 Do not assume Meta's field shapes are valid for TikTok merely because some parameter names are similar.
 
-## Avoid Event Builder and manual duplicates
+## Avoid automatic and manual duplicates
 
-Inspect TikTok Events Manager, Event Builder rules, Enhanced Data Postback/automatic features, partner installations, and existing GTM tags. Choose one browser collection source for the action. If an automatic rule and a proposed manual event overlap, do not add the manual event until the media owner selects the intended source and any removal or disablement of the overlap is separately authorized. Browser/server deduplication remains deferred.
+Inspect the current TikTok Events Manager automatic/website event features, partner installations,
+and existing GTM tags using the terminology and controls visible now. Choose one browser collection
+source for the action. If an automatic rule and a proposed manual event overlap, do not add the
+manual event until the media owner selects the intended source and any removal or disablement of the
+overlap is separately authorized. Do not preserve dated feature labels as a static capability
+catalogue. Browser/server deduplication remains deferred.
 
 ## Configure Advanced Matching only explicitly
 
@@ -57,7 +66,7 @@ Do not enable automatic or manual Advanced Matching by default. Require explicit
 
 ## Apply consent
 
-Use strict/basic CMP gating by default for the Pixel base and all event tags. Attach the complete approved TikTok block set and prove from the static trigger graph that Pixel tags are expected to remain ineligible for unknown or denied consent.
+Use strict/basic CMP gating by default for the Pixel base and all event tags. Attach the complete approved TikTok block set and prove from the static trigger graph that Pixel tags are expected to remain blocked for unknown or denied consent.
 
 TikTok documents a Pixel cookie-consent mode and cookie enable/disable controls. Classify that first as `native cookie-control`, not automatically as advanced denied-state measurement. Cookie suppression does not prove which events, fields, identifiers, or requests continue, nor that TikTok applies an advertiser-specific model.
 
@@ -66,8 +75,8 @@ Use a TikTok-native limited-data route only when explicitly requested and curren
 ## Verify the saved TikTok setup
 
 Re-read the Pixel base/event tags, template version and fields, destination constant, ecommerce
-mapping and eligibility, normal and blocking triggers, advanced-matching settings, automatic/Event
-Builder overlap, firing options, folders, and references. Confirm one initialization path, every
+mapping, normal and blocking triggers, advanced-matching settings, current automatic-event overlap,
+firing options, folders, and references. Confirm one initialization path, every
 required item, and an idempotent rerun. Keep platform-side Event Builder, catalog, optimization, and
 publication work separate.
 

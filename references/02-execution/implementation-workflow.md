@@ -71,6 +71,10 @@ contract; the installed version establishes whether that contract can be configu
 container. Block an unresolved mismatch instead of forcing a field or designing for a newer template
 that is not installed.
 
+Use the compatible native or supported installed template whenever one exists. If a compatible
+template is available but installation/update authority or adapter support is missing, stop that tag
+family as `Blocked`. Do not convert the requirement to Custom HTML merely to keep writing.
+
 For analytics, compare documentation with the approved collection contract. Preserve a technically
 valid advisory by default and stop only an invalid, reserved, required-field, type/shape,
 unsupported, or unsafe requirement. For media, official vendor documentation establishes the
@@ -96,6 +100,17 @@ before evaluating local reuse. Reuse only a semantically compatible object. Do n
 legacy pattern, inventory unrelated objects, move unrelated objects, or add a clean parallel tag
 around a known conflict.
 
+Classify the requested graph as:
+
+- `greenfield` when no related implementation exists; or
+- `delta` when an approved change modifies an existing related graph.
+
+For a delta, compare the approved before/after requirement with every related producer, consumer,
+trigger, variable, shared setting, destination, consent route, sequencing reference, and paused
+state. Model rename, parameter fanout, trigger change, destination repoint, pause, and unpause as
+explicit actions. Removal still requires destructive authority. The target rerun must be a no-op;
+never rebuild the full container or alter unrelated objects.
+
 When outside-container code or platform settings cannot be established from supplied static
 evidence, record the exact external dependency. Do not claim that no duplicate exists.
 
@@ -107,6 +122,7 @@ business action and destination, establish:
 - approved event/action and exact success moment;
 - source event, required paths, type/shape, timing, lifetime, and missing-data behavior;
 - destination product, identity, official event/conversion, and complete configured field set;
+- for media, whether each field is a browser Pixel field or a server/CAPI-only field;
 - GTM resolution for each field: direct value, DLV, constant, settings variable, LUT/RLT, or
   necessary transformation;
 - installed-template field and version;
@@ -118,9 +134,11 @@ business action and destination, establish:
   manifest entry for every material schema, consent, template, or capability decision.
 
 Do not demand a separate source-contract document when approved inputs establish these facts. When
-a required value is absent or incompatible, record the precise dataLayer obligation and block the
-affected object. Do not develop the site, scrape the DOM, infer a click/URL success, coerce an
-unapproved type, or invent a fallback.
+no approved source mapping or supported template field exists for a required design-time field,
+record the precise obligation and block the affected object. When an approved source path exists but
+can resolve missing at runtime, configure it directly and record the runtime dependency; do not add
+a payload-eligibility helper. Do not develop the site, scrape the DOM, infer a click/URL success,
+coerce an unapproved type, or invent a fallback.
 
 ## 6. Design and preflight the object graph
 
@@ -138,9 +156,10 @@ constraint. Do not create speculative future helpers.
 7. Reconcile automatic/manual page views and business events before adding another event source.
 
 For ecommerce, preserve every required item and exact destination type/shape. Establish catalog/feed
-identifier mapping explicitly. Do not silently drop invalid items. A transformation that returns
-`undefined`, `{}`, or `[]` does not itself stop a tag; add the smallest explicit native eligibility
-condition or narrow validity guard when the tag could otherwise send an invalid required payload.
+identifier mapping explicitly. Do not silently drop items. A transformation that returns
+`undefined`, `{}`, or `[]` does not itself stop a tag and normally must not be turned into a generic
+firing gate. Configure the approved event and mapping. Add a native firing condition only when the
+explicit requirement or current vendor browser contract requires it; CJS is exceptional.
 
 Follow the default naming convention unless the analyst supplied another clear convention. An
 existing coherent convention may be retained for presentation, never for architecture.
@@ -158,7 +177,7 @@ Before the first write, pass this consolidated pre-mutation gate:
 - compare the approved analytics contract with the intended event and field set and require zero
   unauthorized additions, removals, substitutions, or timing changes;
 - prove every tag has a normal trigger, consent route, supported template fields, compatible
-  automatic behavior, and explicit eligibility for invalid required data;
+  automatic behavior, and no speculative payload-eligibility helper;
 - prove zero/one/many transformation vectors, routing no-match behavior, and environment isolation;
 - prove that no existing in-scope object will be silently overwritten and every shared consumer
   remains compatible;
@@ -177,8 +196,7 @@ and conflict behavior before mutation.
 Apply only the requested configuration in this order:
 
 1. approved templates and folders;
-2. required built-in variables, constants, DLVs, settings variables, LUTs/RLTs, transformations,
-   and validity variables;
+2. required built-in variables, constants, DLVs, settings variables, LUTs/RLTs, and transformations;
 3. normal and blocking triggers;
 4. authorized Google tag configuration/settings and base/configuration tags;
 5. event, conversion, and remarketing tags;
@@ -194,7 +212,8 @@ read back by stable parent, identity, and semantics to avoid a duplicate.
 
 ## 8. Read back, correct, and hand off
 
-Before `Configured`:
+Before assigning a status, apply the canonical status definitions and completion invariants in
+`acceptance-and-handoff.md`, then:
 
 - re-read every created, updated, and reused object from the target workspace;
 - compare the normalized intended and saved object graph with `scripts/diff_object_graph.py` when
@@ -210,10 +229,7 @@ Before `Configured`:
 - preserve the official-source manifest, approved-input/implementation provenance, consent truth
   table, and exact current-operation journal needed for review or recovery.
 
-Correct safe current-operation differences before finishing. Use `Partial` for an exact saved partial
-state and stop its dependent writes. Use `Blocked` when a critical input or mutation path prevents
-configuration. Use `Deferred` only for the explicitly future server-side/deduplication capability.
-
-Return a concise handoff containing the workspace, configured objects, conformance result,
-discrepancies, blockers/partial state, and external dependencies. State that runtime recette was not
-performed and that no publication or version action occurred.
+Correct safe current-operation differences before finishing. Return the compact recette-ready
+manifest defined in the handoff reference plus discrepancies, blockers/partial state, and external
+dependencies. State that runtime recette was not performed and that no publication or version action
+occurred.

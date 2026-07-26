@@ -5,6 +5,7 @@
 - [Treat Consent Mode as broader than GA4](#treat-consent-mode-as-broader-than-ga4)
 - [Choose the mode explicitly](#choose-the-mode-explicitly)
 - [Verify consent types](#verify-consent-types)
+- [Distinguish consent mechanisms](#distinguish-consent-mechanisms)
 - [Implement the default basic route](#implement-the-default-basic-route)
 - [Implement advanced mode only when approved](#implement-advanced-mode-only-when-approved)
 - [Keep tag behavior and page views separate](#keep-tag-behavior-and-page-views-separate)
@@ -47,16 +48,47 @@ Map the client-approved policy to the current Google consent types required by e
 
 Check any additional consent type or privacy setting against current official documentation. Do not assume that GA4 always needs only `analytics_storage`; advertising features can introduce additional requirements.
 
+## Distinguish consent mechanisms
+
+Record each mechanism separately; none is a synonym for another:
+
+| Mechanism | What it controls |
+| --- | --- |
+| Consent default/update state | The values supplied to Google's consent-aware tags. Defaults must precede affected tags; updates must follow the current user choice, including revocation. |
+| Built-in consent checks | Template-owned behavior that changes storage or requests according to consent state. Built-in checks do not prove a strict basic-mode firing block. |
+| Additional Consent Checks | GTM firing requirements configured on a tag. Verify exact types and whether they conflict with the intended advanced denied-state behavior. |
+| Firing/blocking triggers | The strict pre-grant execution gate used by this skill's default basic route. |
+| Custom-template consent APIs | `setDefaultConsentState`, `updateConsentState`, and `isConsentGranted` used by a permissioned CMP/template implementation. An unset value can be treated as granted by `isConsentGranted`; do not use that API alone as proof that unknown state fails closed. |
+
+Prefer the CMP's supported consent template and GTM consent APIs. Do not implement defaults or
+updates with Custom HTML `gtag('consent', ...)` because GTM can queue commands out of order and
+template APIs are the supported in-container mechanism.
+
 ## Implement the default basic route
 
 For basic behavior:
 
-1. Verify how the CMP supplies the consent state.
-2. Reuse a strict block when the CMP identity, native condition, event scope, denied-state policy, ownership, and expected change path are semantically compatible. Separate GA4, Google Ads, Floodlight, or linker blocks only when one of those dimensions or the selected consent route differs; do not duplicate an otherwise compatible block merely because the product label differs.
-3. Make unknown, uninitialized, and denied state block.
-4. Attach the applicable block to each Google config, event, conversion, remarketing, and linker execution unit only after verifying that every destination or consumer of that unit has a compatible basic policy.
-5. Fire tags only after the required grant.
-6. Prove from the complete GTM object graph that no in-scope Google execution unit is eligible before the required grant; describe this as a configured expectation, not observed network behavior.
+1. Verify how the CMP supplies the state and who owns the Google consent defaults and updates:
+   site code, the CMP's GTM template, another saved tag, or an explicitly authorized new CMP tag.
+   Do not create a second owner.
+2. Map the approved policy explicitly to `analytics_storage`, `ad_storage`, `ad_user_data`, and
+   `ad_personalization` as applicable. Preserve independently denied/granted values; do not derive
+   every Google signal from one category unless the approved CMP mapping says they are identical.
+3. Ensure the documented defaults precede affected Google tags and choice/revocation updates occur
+   on the interaction page. If ownership lies outside the authorized GTM mutation, record it as a
+   confirmed external dependency rather than claiming it was configured.
+4. Reuse a strict block when the CMP identity, native condition, event scope, denied-state policy,
+   ownership, and expected change path are semantically compatible. Separate GA4, Google Ads,
+   Floodlight, or linker blocks only when one of those dimensions or the selected consent route
+   differs.
+5. Make unknown, uninitialized, and denied state block. Do not rely on an unset
+   `isConsentGranted` result as the denial predicate.
+6. Attach the applicable block to each Google config, event, conversion, remarketing, and linker
+   execution unit only after verifying that every destination or consumer of that unit has a
+   compatible basic policy.
+7. Fire tags only after the required grant and prove from the complete GTM object graph that no
+   in-scope Google execution unit can execute before it. Describe this as a configured
+   expectation, not observed network behavior.
 
 Use names such as `Block - Didomi - GA4 denied` and `Block - Didomi - Google Ads denied`.
 
@@ -73,7 +105,15 @@ For advanced behavior:
 5. Use the GTM consent template APIs rather than a Custom HTML `gtag('consent', ...)` workaround when implementing consent inside GTM.
 6. Let Google tags use their documented built-in consent behavior.
 7. Do not add additional consent requirements or exception triggers that block the denied-state pings the approved advanced design intends to send.
-8. Configure region defaults, `wait_for_update`, ads data redaction, URL passthrough, or service-specific settings only when explicitly required and documented.
+8. Configure optional mechanics only when explicitly required and documented:
+   - `region` only for an approved geographic default and with the broader/default precedence
+     understood;
+   - `wait_for_update` only when a CMP update is expected within the chosen bounded delay;
+   - `ads_data_redaction` only for the approved advertising-data behavior and current Google
+     product support;
+   - `url_passthrough` only when the site can preserve eligible click information in same-domain
+     navigation and URL handling has been assessed;
+   - linker and cross-domain options only from the approved domain/decorator architecture.
 
 Do not silently convert an existing basic implementation to advanced mode merely because Google recommends or supports modeling.
 

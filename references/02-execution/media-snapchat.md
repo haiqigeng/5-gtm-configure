@@ -28,6 +28,12 @@ Record:
 
 Do not use Conversions API parameter documentation as the sole authority for a browser Pixel field. Use it only when the official browser documentation explicitly shares that contract.
 
+Use the current supported Snap Pixel template when available and inspect its actual repository,
+version, permissions, and saved fields. If current Snap browser documentation or the installed
+template cannot establish a field, omit or block that field; do not borrow it from CAPI or
+remembered Pixel examples. Do not substitute Custom HTML when a supported template installation
+path exists but authority is missing.
+
 ## Design the Pixel object graph
 
 Use a verified `CST - Snapchat pixel_id` when appropriate. Ensure one compatible Pixel initialization path exists, reusing a compatible GTM tag, site code, partner integration, or template behavior. Create a new GTM initialization/base tag only when initialization is in scope and no compatible path exists. Configure requested event tags separately with the vendor-neutral Custom Event trigger.
@@ -36,7 +42,9 @@ Do not make the base tag send a page-view event by default. Add a separate page-
 
 ## Map event parameters exactly
 
-Build the complete source-to-template-to-vendor map. Preserve product arrays and all eligible items when the current Snap schema requires them. Verify value/currency and transaction/order semantics independently.
+Build the complete source-to-template-to-vendor map. Preserve product arrays and all approved items
+when the current Snap schema requires them. Verify value/currency and transaction/order semantics
+independently. Map runtime values directly and do not add a payload-eligibility CJS.
 
 Do not copy Meta, TikTok, or GA4 product shapes into Snap. Transform only from the actual dataLayer to the current Snap browser schema.
 
@@ -46,14 +54,14 @@ Do not enable automatic or manual customer matching by default. Require explicit
 
 ## Apply consent
 
-Use strict/basic CMP gating by default for the Snap base and all event tags. Attach the complete approved Snapchat block set and prove from the static trigger graph that unknown and denied states are expected to keep Snap tags ineligible.
+Use strict/basic CMP gating by default for the Snap base and all event tags. Attach the complete approved Snapchat block set and prove from the static trigger graph that unknown and denied states are expected to keep Snap tags blocked.
 
 Use a native consent capability only when explicitly requested and its complete denied-state request, storage, and data-use behavior is established by current official Snap browser documentation. A template consent field alone does not establish advanced behavior. Follow the vendor consent-mode capability reference and do not infer Google Consent Mode behavior.
 
 ## Verify the saved Snap setup
 
 Re-read the Pixel initialization/event tags, template version and fields, destination constant,
-product mapping and eligibility, matching settings, normal and blocking triggers, firing options,
+product mapping, matching settings, normal and blocking triggers, firing options,
 folders, and references. Confirm one initialization path, all required items, no known duplicate,
 and an idempotent rerun. Keep catalog, optimization, matching account settings, and publication
 outside the GTM completion claim.

@@ -19,7 +19,7 @@ class ObjectGraphDiffTest(unittest.TestCase):
         cls.payload = json.loads(FIXTURE.read_text(encoding="utf-8"))
 
     def test_all_golden_cases_match_expected_result(self) -> None:
-        self.assertEqual(self.payload["version"], 1)
+        self.assertEqual(self.payload["version"], 2)
         for case in self.payload["cases"]:
             with self.subTest(case=case["id"]):
                 result = compare_graphs(case["expected"], case["saved"])
@@ -64,6 +64,27 @@ class ObjectGraphDiffTest(unittest.TestCase):
         report = compare_graphs(expected, saved)
         self.assertFalse(report["pass"])
         self.assertIn("type", str(report["object_differences"]))
+
+    def test_returned_ids_become_semantic_cross_object_references(self) -> None:
+        graph = {
+            "objects": [
+                {"object_type": "folder", "name": "Commerce", "folderId": "4"},
+                {"object_type": "trigger", "name": "CE - purchase", "triggerId": "7"},
+                {"object_type": "tag", "name": "Base", "tagId": "8"},
+                {
+                    "object_type": "tag",
+                    "name": "Purchase",
+                    "tagId": "9",
+                    "parentFolderId": "4",
+                    "firingTriggerId": ["7"],
+                    "setupTag": [{"tagName": "8", "stopOnSetupFailure": True}],
+                },
+            ]
+        }
+        normalized = normalize_graph(graph)["tag::Purchase"]
+        self.assertEqual(normalized["parentFolderId"], "folder::Commerce")
+        self.assertEqual(normalized["firingTriggerId"], ["trigger::CE - purchase"])
+        self.assertEqual(normalized["setupTag"][0]["tagName"], "tag::Base")
 
 
 if __name__ == "__main__":

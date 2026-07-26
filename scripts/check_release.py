@@ -11,7 +11,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SEMVER = re.compile(r"^v(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)$")
-CURRENT_RELEASE = "4.0.1"
+CURRENT_RELEASE = "5.0.0"
 REFERENCE_LAYERS = {
     "01-orientation": {
         "official-source-policy.md",
@@ -31,6 +31,7 @@ REFERENCE_LAYERS = {
         "google-consent-mode.md",
         "implementation-workflow.md",
         "media-criteo.md",
+        "media-affiliate.md",
         "media-floodlight.md",
         "media-google-ads.md",
         "media-linkedin.md",
@@ -45,6 +46,7 @@ REFERENCE_LAYERS = {
         "multi-destination-routing.md",
         "naming-and-reuse.md",
         "template-governance.md",
+        "tcf-consent.md",
         "tool-adapters.md",
         "tracking-plan-fidelity-and-conformance.md",
         "transformation-patterns.md",
@@ -65,6 +67,7 @@ REQUIRED_FILES = (
     "references/02-execution/analytics-vendors.md",
     "references/02-execution/client-side-object-surface.md",
     "references/02-execution/media-tags.md",
+    "references/02-execution/media-affiliate.md",
     "references/02-execution/media-criteo.md",
     "references/02-execution/media-floodlight.md",
     "references/02-execution/media-google-ads.md",
@@ -78,6 +81,7 @@ REQUIRED_FILES = (
     "references/02-execution/media-x.md",
     "references/02-execution/cmp-consent.md",
     "references/02-execution/cmp-platform-patterns.md",
+    "references/02-execution/tcf-consent.md",
     "references/02-execution/vendor-consent-modes.md",
     "references/02-execution/google-consent-mode.md",
     "references/02-execution/conversion-linker-cross-domain.md",
@@ -113,9 +117,11 @@ REQUIRED_FILES = (
     "tests/test_skill_contract.py",
     "tests/test_configuration_scenarios.py",
     "tests/test_contract_conformance.py",
+    "tests/test_utility_scenarios.py",
     "tests/fixtures/configuration_scenarios.json",
     "tests/fixtures/forward_test_cases.json",
     "tests/fixtures/golden_object_graphs.json",
+    "tests/fixtures/utility_scenarios.json",
 )
 STALE_FILES = (
     "references/execution-contract.md",
@@ -252,11 +258,16 @@ def check_content() -> list[str]:
     analytics_vendors = read("references/02-execution/analytics-vendors.md")
     object_surface = read("references/02-execution/client-side-object-surface.md")
     media = read("references/02-execution/media-tags.md")
+    media_affiliate = read("references/02-execution/media-affiliate.md")
     media_criteo = read("references/02-execution/media-criteo.md")
     media_floodlight = read("references/02-execution/media-floodlight.md")
     media_linkedin = read("references/02-execution/media-linkedin.md")
+    media_meta = read("references/02-execution/media-meta.md")
+    media_microsoft = read("references/02-execution/media-microsoft-ads.md")
     media_pinterest = read("references/02-execution/media-pinterest.md")
     media_reddit = read("references/02-execution/media-reddit.md")
+    media_snap = read("references/02-execution/media-snapchat.md")
+    media_tiktok = read("references/02-execution/media-tiktok.md")
     media_x = read("references/02-execution/media-x.md")
     consent = read("references/02-execution/cmp-consent.md")
     cmp_platforms = read("references/02-execution/cmp-platform-patterns.md")
@@ -268,9 +279,11 @@ def check_content() -> list[str]:
     transformations = read("references/02-execution/transformation-patterns.md")
     triggers = read("references/02-execution/triggers-and-variables.md")
     data_contract = read("references/02-execution/data-contract-and-transformations.md")
+    first_party_data = read("references/02-execution/first-party-data.md")
     naming = read("references/02-execution/naming-and-reuse.md")
     adapters = read("references/02-execution/tool-adapters.md")
     judgement = read("references/03-judgement/acceptance-and-handoff.md")
+    tcf = read("references/02-execution/tcf-consent.md")
     readme = read("README.md")
     changelog = read("CHANGELOG.md")
     contributing = read("CONTRIBUTING.md")
@@ -292,7 +305,9 @@ def check_content() -> list[str]:
         "Inspect only the objects related to the requested implementation",
         "LUTs/RLTs for real deterministic",
         "shallow folder",
-        "smallest explicit eligibility condition",
+        "Do not create payload-eligibility CJS variables",
+        "supported template whenever one exists",
+        "greenfield or a delta",
         "configuration-contract.md",
         "never as proof of best practice",
         "never publish",
@@ -332,19 +347,16 @@ def check_content() -> list[str]:
         "`official-current`",
         "`container-confirmed`",
         "`contract-sample`",
-        "## Map fields and event eligibility",
+        "## Map fields and runtime data behavior",
         "## Map GTM object actions",
         "## Prove analytics conformance",
         "## Record consent and external dependencies",
-        "## Apply operational statuses",
-        "`Configured`",
-        "`Partial`",
-        "`Blocked`",
-        "`Deferred`",
-        "## Completion invariants",
-        "Authoritative current-workspace readback",
-        "identical rerun",
-        "smallest explicit native",
+        "## Apply canonical acceptance",
+        "rename",
+        "pause",
+        "unpause",
+        "A repeated run against the final saved state",
+        "Do not add a Custom",
     )
     errors.extend(
         f"configuration contract missing requirement: {term}"
@@ -359,6 +371,8 @@ def check_content() -> list[str]:
         "Microsoft Clarity Consent Mode",
         "TikTok Pixel standard events",
         "Snap Pixel and GTM",
+        "Piwik PRO tracking code through GTM",
+        "TCF 2.3",
     )
     errors.extend(
         f"official source policy missing contract: {term}"
@@ -374,7 +388,7 @@ def check_content() -> list[str]:
         "Design and preflight the object graph",
         "Mutate in dependency order",
         "Read back, correct, and hand off",
-        "smallest explicit native eligibility",
+        "payload-eligibility helper",
     )
     errors.extend(
         f"workflow missing contract: {term}" for term in workflow_terms if term not in workflow
@@ -424,6 +438,34 @@ def check_content() -> list[str]:
         "X": (media_x, ("X Pixel", "pixel identity", "strict/basic CMP")),
         "Reddit": (media_reddit, ("Reddit Pixel", "pixel identity", "strict/basic CMP")),
         "Criteo": (media_criteo, ("Criteo OneTag", "page-type", "strict/basic CMP")),
+        "Meta": (
+            media_meta,
+            ("supported installed template", "Keep payload mapping separate from firing"),
+        ),
+        "Microsoft Advertising": (
+            media_microsoft,
+            ("supported UET GTM template", "browser UET request"),
+        ),
+        "TikTok": (
+            media_tiktok,
+            ("supported TikTok Pixel template", "Avoid automatic and manual duplicates"),
+        ),
+        "Snap": (
+            media_snap,
+            ("supported Snap Pixel template", "Conversions API parameter documentation"),
+        ),
+        "affiliate": (
+            media_affiliate,
+            ("Affiliate browser tags", "Map conversion and basket fields", "one browser owner"),
+        ),
+        "TCF": (
+            tcf,
+            ("TCF 2.3", "Additional Consent", "Configure plumbing, not policy"),
+        ),
+        "first-party data": (
+            first_party_data,
+            ("User-Provided Data variable", "not pre-hash it", "account-side activation"),
+        ),
     }
     for label, (text, terms) in capability_contracts.items():
         errors.extend(
@@ -436,6 +478,9 @@ def check_content() -> list[str]:
         ("object graph comparator", "normalize_graph", graph_diff),
         ("object graph comparator", "compare_graphs", graph_diff),
         ("object graph comparator", "extra_objects", graph_diff),
+        ("object graph comparator", "REFERENCE_FIELDS", graph_diff),
+        ("object graph comparator", "parentFolderId", graph_diff),
+        ("object graph comparator", "setupTag", graph_diff),
     )
     for label, term, text in deterministic_contracts:
         if term not in text:
@@ -447,6 +492,15 @@ def check_content() -> list[str]:
         "Block - <CMP> - GA4 denied",
         "never substitute it automatically",
         "exact approved parameter set",
+        "Resolve Google tag and destination identity",
+        "`GT-...`",
+        "`G-...`",
+        "`AW-...`",
+        "Use native GA4 ecommerce mechanics",
+        "Send Ecommerce data",
+        "Reconcile Enhanced Measurement and manual events",
+        "`traffic_type`",
+        "`debug_mode`",
     )
     errors.extend(
         f"analytics reference missing contract: {term}"
@@ -459,6 +513,9 @@ def check_content() -> list[str]:
         "template UI field",
         "current official standard event",
         "multi-item payloads",
+        "Use the supported template first",
+        "server/CAPI-only fields as excluded",
+        "Handle runtime missing data without speculative gates",
     )
     errors.extend(
         f"media reference missing contract: {term}" for term in media_terms if term not in media
@@ -485,6 +542,14 @@ def check_content() -> list[str]:
         "Google Ads Conversion Tracking and Remarketing",
         "Floodlight",
         "Conversion Linker",
+        "analytics_storage",
+        "ad_storage",
+        "ad_user_data",
+        "ad_personalization",
+        "unset value can be treated as granted",
+        "wait_for_update",
+        "ads_data_redaction",
+        "url_passthrough",
     )
     errors.extend(
         f"Google consent reference missing contract: {term}"
@@ -545,6 +610,10 @@ def check_content() -> list[str]:
         "## Analytics conformance proof",
         "## Consent configuration proof",
         "## Concise handoff",
+        "Recette cues",
+        "Payload map",
+        "Delta/change request",
+        "Browser event ID",
     )
     errors.extend(
         f"judgement reference missing section: {term}"
@@ -562,6 +631,12 @@ def check_content() -> list[str]:
         "live-only behavior",
         "firing option",
         "setup/cleanup references",
+        "Just Links",
+        "All Elements",
+        "Element Visibility",
+        "Scroll Depth",
+        "YouTube Video",
+        "Trigger Group",
     )
     errors.extend(
         f"trigger reference missing semantic: {term}"

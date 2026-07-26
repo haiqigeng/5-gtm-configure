@@ -51,12 +51,14 @@ Load only the applicable detailed playbooks:
 | X Pixel | [media-x.md](references/02-execution/media-x.md) |
 | Reddit Pixel | [media-reddit.md](references/02-execution/media-reddit.md) |
 | Criteo OneTag | [media-criteo.md](references/02-execution/media-criteo.md) |
+| Affiliate or partner-network browser tags | [media-affiliate.md](references/02-execution/media-affiliate.md) |
 | CMP blocking or consent lifecycle | [cmp-consent.md](references/02-execution/cmp-consent.md) |
 | OneTrust, Cookiebot, Didomi, or another identified CMP implementation | [cmp-platform-patterns.md](references/02-execution/cmp-platform-patterns.md) |
+| IAB TCF or Google Additional Consent is detected or requested | [tcf-consent.md](references/02-execution/tcf-consent.md) |
 | Advanced, native, cookieless, anonymous, or limited-data consent | [vendor-consent-modes.md](references/02-execution/vendor-consent-modes.md) |
 | Google basic or advanced Consent Mode | [google-consent-mode.md](references/02-execution/google-consent-mode.md) |
 | First-party user data, enhanced conversions, or advanced matching | [first-party-data.md](references/02-execution/first-party-data.md) |
-| dataLayer values, ecommerce arrays, eligibility, or transformations | [data-contract-and-transformations.md](references/02-execution/data-contract-and-transformations.md) |
+| dataLayer values, ecommerce arrays, runtime missing-data behavior, or transformations | [data-contract-and-transformations.md](references/02-execution/data-contract-and-transformations.md) |
 | Repeated source-to-destination array projection, scalar validation, or transformation vectors | [transformation-patterns.md](references/02-execution/transformation-patterns.md) |
 | Conversion Linker, click attribution, or cross-domain Google measurement | [conversion-linker-cross-domain.md](references/02-execution/conversion-linker-cross-domain.md) |
 | Triggers, variables, SPA, firing settings, or sequencing | [triggers-and-variables.md](references/02-execution/triggers-and-variables.md) |
@@ -88,6 +90,10 @@ narrowest accurate status: `Partial`, `Blocked`, or `Deferred`.
   events and values. Never translate a media tag by analogy with GA4 or another vendor.
 - Research the exact client-side product and inspect the installed template version, fields,
   permissions, defaults, and automatic behavior before designing its tags or transformations.
+- Use a compatible native or installed supported template whenever one exists. Never replace a
+  supported Google, Meta, Microsoft, or other product template with Custom HTML silently. If the
+  required template cannot be installed or updated under current authority, mark the affected work
+  `Blocked` instead of improvising a snippet.
 - Classify the target as a web container and discover adapter capability per applicable object
   family. Configure built-in variables, Google tag configuration/destinations, Zones, environments,
   templates, or container settings only under their documented authority and risk boundary.
@@ -98,6 +104,10 @@ narrowest accurate status: `Partial`, `Blocked`, or `Deferred`.
 - Inspect only the objects related to the requested implementation. Reuse semantically compatible
   objects, reconcile an in-scope conflict when safely authorized, and never add a known duplicate or
   perform unrelated audit or cleanup work.
+- Classify the request as greenfield or a delta against an existing related graph. For a delta,
+  trace every affected consumer before renaming, changing shared parameters or triggers, repointing
+  a destination, or pausing/unpausing a tag. Preserve unrelated objects; removal still requires
+  explicit destructive authority.
 - Default every in-scope analytics and media product to strict/basic CMP blocking. Detect the CMP and
   documented grant signal where possible; make unknown, undefined, uninitialized, and denied states
   block. Configure advanced/native denied-state behavior only after an explicit request and current
@@ -117,17 +127,25 @@ narrowest accurate status: `Partial`, `Blocked`, or `Deferred`.
 - Resolve multi-destination and environment routing explicitly. Never make production a lookup
   default or let test traffic, first-party data, or incompatible consent leak to another destination.
 - Preserve every required ecommerce item and exact vendor shape. Never assume the analytics item ID
-  is the media catalog ID, silently drop an invalid item, invent a fallback, or treat an empty
-  transformation as a firing gate. When required data is invalid, make the affected tag fail closed
-  through the smallest explicit eligibility condition.
+  is the media catalog ID, silently drop an item, invent a fallback, or treat an empty
+  transformation as a firing gate. Configure the approved business event and direct field mappings
+  even though a runtime value can be absent. Do not create payload-eligibility CJS variables or
+  validity triggers merely to suppress such sends; record the site/dataLayer dependency for runtime
+  recette. Add a firing condition only when the explicit brief or current product documentation
+  requires it, preferring a native trigger condition and using CJS only when unavoidable.
 - Use a dedicated workspace. Build dependencies before consumers, use stable IDs and fingerprints,
   re-read every saved object, compare intended and stored fields, confirm all references, and ensure
   an identical rerun creates no duplicate or repeated update.
 - Record external site, CMP, GA4-property, advertising-platform, catalog/feed, and publication work
   separately. Never claim that a GTM mutation completed another system's configuration.
+- For Google products under the default strict/basic route, prove both pre-grant blocking and
+  ownership of current Consent Mode defaults/updates for every applicable consent type. Do not
+  confuse built-in behavior, Additional Consent Checks, or a custom-template consent API.
 - If a critical requirement or mutation path is unavailable, mark the affected work `Blocked`; do
   not convert the run into a specification workflow. Preserve and report any exact partial saved
   state. Never require or claim runtime Preview, browser, network, CMP-journey, or vendor-platform
   validation, and never publish or create a GTM version.
-- Keep server-side GTM, Conversions API, browser/server deduplication, and event-ID architecture as
-  future extensions outside the current client-side implementation.
+- Keep server-side GTM, Conversions API, and browser/server deduplication architecture as future
+  extensions. Never invent or generate a browser event ID. An explicitly briefed, approved
+  browser-supplied `event_id` may be mapped when current browser documentation and the installed
+  template support it; record the server/deduplication design separately as deferred.

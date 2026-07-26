@@ -6,6 +6,7 @@
 - [Prefer controlled sources](#prefer-controlled-sources)
 - [Follow the vendor's field contract](#follow-the-vendors-field-contract)
 - [Resolve feature ownership per destination](#resolve-feature-ownership-per-destination)
+- [Configure Google first-party data natively](#configure-google-first-party-data-natively)
 - [Separate analytics identifiers from advertising matching](#separate-analytics-identifiers-from-advertising-matching)
 - [Design safe GTM objects](#design-safe-gtm-objects)
 - [Apply consent before collection and transmission](#apply-consent-before-collection-and-transmission)
@@ -67,10 +68,34 @@ Treat every destination feature independently even when it reads the same source
 | Microsoft user-data feature | Exact UET product/template, current accepted fields and mode, account dependency, and Microsoft consent route. |
 | Other media matching | Current official browser documentation, installed template, explicit accepted field set, source approval, and product-specific consent. |
 
-Do not create one shared “hashed user data” object for several vendors unless current schemas,
+Do not create one shared `hashed user data` object for several vendors unless current schemas,
 normalization, hash representation, consent, lifetime, consumers, and ownership are all proven
 identical. Prefer vendor-owned variables so a later policy or schema change cannot silently affect
 another destination.
+
+## Configure Google first-party data natively
+
+For an explicitly authorized browser-side Google feature, inspect the current native Google Ads or
+Google tag fields before creating transformations:
+
+1. Identify whether the requested feature is Google Ads enhanced conversions, GA4
+   user-provided-data collection, or another exact Google product. They are not interchangeable.
+2. Prefer GTM's native User-Provided Data variable when the selected tag field accepts it. Select
+   manual fields, a controlled dataLayer variable, or current automatic collection only as the
+   approved feature and documentation permit.
+3. Map only supported identifiers required by the approved feature. Keep raw source,
+   normalization, and hash ownership explicit.
+4. When the native tag/template hashes normalized raw data, provide the accepted raw form and do
+   not pre-hash it. When a documented pre-hashed mode is selected, supply only the required
+   SHA-256 representation and mark the saved mode so it cannot be hashed again.
+5. Apply the exact Google consent types, especially `ad_user_data` for advertising transmission,
+   plus the selected basic or advanced route.
+6. Record Google Ads/GA4 account-side activation, diagnostics, and terms as external dependencies;
+   a saved GTM variable does not complete them.
+
+Do not use GA4 `user_id`, event parameters, or user properties to transport advertising
+user-provided data. Do not add a Custom HTML hashing library when the native variable/template owns
+normalization and hashing.
 
 ## Separate analytics identifiers from advertising matching
 
@@ -104,7 +129,7 @@ Use synthetic test values when possible. Verify:
 - source availability at the exact event according to the approved contract;
 - normalization and hash ownership;
 - template field resolution;
-- configured collection fields remain ineligible before required consent;
+- configured collection fields remain blocked before required consent;
 - configured denied-state routes omit user data when prohibited by the approved contract;
 - no PII in GA4, URLs, logs, reports, or unrelated tags;
 - missing input produces no invented fallback.

@@ -113,6 +113,33 @@ class ConfigurationContractSchemaTest(unittest.TestCase):
         with self.assertRaisesRegex(ContractValidationError, "pre_change"):
             validate_document(contract)
 
+    def test_delta_actions_require_pre_change_and_rename_target(self) -> None:
+        for action in ("rename", "pause", "unpause"):
+            with self.subTest(action=action):
+                contract = valid_contract()
+                contract["implementation"]["objects"][0]["action"] = action
+                if action == "rename":
+                    contract["implementation"]["objects"][0]["new_name"] = "Renamed object"
+                with self.assertRaisesRegex(ContractValidationError, "pre_change"):
+                    validate_document(contract)
+
+        contract = valid_contract()
+        item = contract["implementation"]["objects"][0]
+        item["action"] = "rename"
+        item["pre_change"] = {"name": item["name"]}
+        with self.assertRaisesRegex(ContractValidationError, "new_name"):
+            validate_document(contract)
+
+        for action in ("rename", "pause", "unpause"):
+            with self.subTest(valid_action=action):
+                contract = valid_contract()
+                item = contract["implementation"]["objects"][0]
+                item["action"] = action
+                item["pre_change"] = {"paused": action == "unpause", "name": item["name"]}
+                if action == "rename":
+                    item["new_name"] = "Renamed object"
+                self.assertEqual(validate_document(contract)["schema_version"], "4.0")
+
     def test_scope_and_requirement_ids_must_match(self) -> None:
         contract = valid_contract()
         contract["scope"]["included"] = ["REQ-2"]

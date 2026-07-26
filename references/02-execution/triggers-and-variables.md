@@ -88,11 +88,15 @@ families:
 | Consent Initialization / Initialization | Use only for documented consent/default or earliest initialization work; do not send business events here. |
 | Page View / DOM Ready / Window Loaded | Choose the earliest event that has every required value and DOM dependency; prevent automatic/manual overlap. |
 | Custom Event | Preferred for approved application success events and vendor-neutral dataLayer timing. |
-| Click / Form Submission | Use only as an approved fallback with stable selectors and honest success semantics; waiting/check-validation settings require current proof. |
-| Element Visibility / Scroll / Timer | Define observation threshold, repetition, page scope, and analysis meaning explicitly; never proxy a conversion by convenience. |
-| History Change | Use for an approved SPA fallback and reconcile application and Enhanced Measurement routes. |
-| Video / JavaScript Error / other web trigger | Use only when the tracking plan explicitly measures that interaction and current built-ins expose the required source. |
-| Trigger Group | Prove lifecycle and reset/repetition behavior; do not use it to simulate consent revocation or a mutually exclusive predicate. |
+| Just Links | Use only for a real anchor-navigation interaction. Configure `Wait for Tags` and `Check Validation` only after proving their page-enable condition, timeout, browser behavior, and navigation impact; those options are mechanics, not conversion-success proof. |
+| All Elements | Use when the approved interaction is not reliably represented by an anchor. Filter on the clicked element/ancestor contract deliberately and do not substitute it for Just Links only to gain waiting behavior. |
+| Form Submission | Use only when the browser submit event honestly represents the approved outcome. Configure waiting/check validation and the enable condition from current proof; a valid browser submit is not proof of backend success. |
+| Element Visibility | Define selector/element source, minimum percent, minimum on-screen duration, DOM-change observation, once-per-page/element behavior, and page scope. Dynamic observation cost and repeated elements must be intentional. |
+| Scroll Depth | Define vertical/horizontal direction, percentage/pixel thresholds, page scope, and whether each threshold firing is a distinct approved interaction. Reconcile GA4 Enhanced Measurement scroll. |
+| YouTube Video | Enable the exact built-ins and capture options required for start/progress/complete; define percentage thresholds and JavaScript API support. Reconcile embedded-player availability and any automatic video measurement. |
+| History Change | Use for an approved SPA fallback; define which history sources/states qualify, retain old/new URL values correctly, and reconcile application and Enhanced Measurement routes. |
+| Timer / JavaScript Error / other web trigger | Use only when the tracking plan explicitly measures that interaction and current built-ins expose the required source. Define limit, interval, error fields, and page scope as applicable. |
+| Trigger Group | Treat it as an AND lifecycle: it fires after every member has fired since the group became active, with member repetition and page lifecycle verified. Do not use it to simulate consent revocation or a mutually exclusive predicate. |
 
 For every trigger, record event type, all-versus-some selection, row-level AND filters, regex intent,
 repeatability, required built-ins, and positive/negative static examples.
@@ -112,7 +116,13 @@ repeatability, required built-ins, and positive/negative static examples.
 
 Prefer dataLayer values over DOM extraction. Do not use a JavaScript Variable to access a value already exposed cleanly through a DLV.
 
-For every DLV, record whether Version 1 literal-dot or Version 2 nested-path semantics match the actual source key. Do not change a reused DLV version without inspecting every consumer.
+For every DLV, record whether Version 1 literal-dot or Version 2 nested-path semantics match the
+actual source key. Version 1 treats dots in the configured name literally and does not recursively
+merge object values across pushes; Version 2 interprets dot notation as nested keys and can merge
+dataLayer object state. Choose
+from the approved source contract, not preference. A change between versions can change nested
+resolution, persistence, object merging, and every consumer, so never update a reused DLV version
+without tracing all tags, triggers, tables, and transformations that reference it.
 
 ## Cover built-in and user-defined variables
 

@@ -36,8 +36,12 @@ Before design:
 5. confirm source types, arrays, null behavior, limits, reserved names, identity fields, and consent;
 6. record property-side administration separately.
 
-Block the affected requirement when no current primary schema or safe installed-template path can be
-established. Custom HTML is not an automatic fallback for missing product knowledge.
+Use the native tag first, then an official/vendor-supported template, then a verified organization-
+owned template, then another reviewed Gallery template. Block the affected requirement when no
+current primary schema or safe supported-template install/update path can be established. Custom
+HTML is allowed only when the vendor currently documents that browser implementation and no suitable
+supported template exists; it is never an automatic fallback for missing product knowledge or
+permission.
 
 ## Design the analytics graph
 
@@ -45,10 +49,22 @@ Determine whether the product requires a base/configuration tag, event tags, com
 settings variable, or one event-dispatch template. Reconcile hard-coded, plugin, partner, or existing
 container implementations before adding another initialization path.
 
+For every destination, resolve this operational surface rather than stopping at generic research:
+
+- property/site/project identity and environment routing;
+- one compatible base/configuration path and its page-load or initialization ownership;
+- official browser event method/name and every approved event field;
+- page, session, user, group, content, ecommerce, and campaign identities only where the approved
+  analytics contract and product support them;
+- automatic page views, click/scroll/form capture, SPA tracking, and duplicate ownership;
+- consent, anonymous/adaptive behavior, cookies/storage, and reset/revocation mechanics;
+- property-side definitions, goals/conversions, filters, or settings that remain external.
+
 Map every field through source, GTM resolution, installed-template field, and official destination
-parameter. Preserve exact approved semantics and use explicit eligibility for invalid required data.
-For SPAs, establish state update order, virtual page-view ownership, retained values, and duplicate
-prevention from current product documentation.
+parameter. Preserve exact approved semantics and map runtime values directly. A design-time missing
+required field blocks; a value absent at runtime is a source/recette dependency and does not justify
+a speculative Boolean eligibility variable. For SPAs, establish state update order, virtual
+page-view ownership, retained values, and duplicate prevention from current product documentation.
 
 ## Consent and identity
 
@@ -66,7 +82,8 @@ Use current official entry points for the exact product. Examples include:
 
 - Matomo browser tracking and GTM installation: https://matomo.org/faq/new-to-piwik/how-do-i-use-matomo-analytics-within-gtm-google-tag-manager/
 - Matomo consent: https://developer.matomo.org/guides/tracking-consent
-- Piwik PRO analytics and consent: https://help.piwik.pro/support/privacy/setting-consent-manager/
+- Piwik PRO tracking code through GTM: https://help.piwik.pro/support/getting-started/google-tag-manager-install-a-tracking-code/
+- Piwik PRO consent: https://help.piwik.pro/support/privacy/setting-consent-manager/
 - Adobe Experience Platform/Web SDK: https://experienceleague.adobe.com/docs/experience-platform/web-sdk/home.html
 
 Treat vendor-owned tag managers such as Adobe Tags or Matomo Tag Manager as other systems. This

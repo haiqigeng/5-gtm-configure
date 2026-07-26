@@ -5,12 +5,13 @@
 - [Treat the media brief as the primary business input](#treat-the-media-brief-as-the-primary-business-input)
 - [Resolve only required media inputs](#resolve-only-required-media-inputs)
 - [Use a four-authority model](#use-a-four-authority-model)
+- [Use the supported template first](#use-the-supported-template-first)
 - [Build a field-level implementation map](#build-a-field-level-implementation-map)
 - [Choose standard versus custom events](#choose-standard-versus-custom-events)
 - [Separate base/configuration and event behavior](#separate-baseconfiguration-and-event-behavior)
 - [Transform only for the documented schema](#transform-only-for-the-documented-schema)
 - [Preserve ecommerce cardinality](#preserve-ecommerce-cardinality)
-- [Fail closed on invalid required media data](#fail-closed-on-invalid-required-media-data)
+- [Handle runtime missing data without speculative gates](#handle-runtime-missing-data-without-speculative-gates)
 - [Govern first-party user data](#govern-first-party-user-data)
 - [Apply consent](#apply-consent)
 - [Record external platform dependencies](#record-external-platform-dependencies)
@@ -56,23 +57,40 @@ tracking plan.
 
 Never configure one media platform by analogy with GA4 or another media vendor.
 
+## Use the supported template first
+
+Inspect native tag types and installed templates before selecting an implementation. Use a
+compatible native or supported installed template when it can represent the current official
+browser contract. Inspect its publisher, repository/commit, permissions, fields, automatic
+behavior, and consumers; a Gallery listing alone is not proof of vendor ownership.
+
+Do not select Custom HTML because it is faster or because a source value is missing at runtime. If a
+compatible template exists but is not installed or is too old, use the template-governance
+installation/update path. When that action lacks authority or adapter support, mark the affected
+tag family `Blocked`; do not silently fall back to Custom HTML.
+
+Use Custom HTML or Custom Image only when current official vendor browser documentation requires or
+supports that route, no suitable template exists, and the exact snippet/pixel, permissions, CSP,
+sequencing, and consent behavior are established. This is an exceptional implementation decision,
+not a generic vendor cookbook.
+
 ## Build a field-level implementation map
 
 Record before mutation:
 
-| Field | Record |
+| Decision | Record |
 | --- | --- |
 | Business action | Human-readable action and exact success moment. |
-| Destination | Vendor, browser product, account/pixel/tag ID, and conversion action where applicable. |
-| Official event | Exact name and standard, custom, reserved, or deprecated status. |
-| Vendor parameter | Exact destination name. |
-| Requirement | Required, recommended, optional, or conditionally required. |
-| Contract | Type, format, enum, item/event scope, and cardinality. |
-| Source | dataLayer key, evidence grade, existing GTM variable, constant, or approved fallback. |
-| Transformation | Exact logic, null behavior, and zero/one/many output. |
-| Template UI field | Visible field in the installed template/version. |
-| Consent | CMP vendor identity, strict/basic block or explicitly approved native advanced behavior. |
-| Evidence | Official URL, title, access date, and representative resolved payload. |
+| Browser destination | Vendor, exact browser product, account/pixel/tag ID, and platform-side conversion object where applicable. |
+| Browser event | Exact name and standard, custom, reserved, or deprecated status. |
+| Destination parameter | Exact browser parameter name; mark server/CAPI-only fields as excluded from the browser mapping. |
+| Requirement | Required, conditionally required, or approved optional for this brief. Documentation alone does not authorize optional collection. |
+| Cardinality | Event-level versus item-level; scalar, object, or array; zero/one/many behavior. |
+| Source | Exact dataLayer key or approved literal, evidence grade, type, timing, and lifetime. |
+| GTM resolution | Direct field/DLV, constant, LUT/RLT, or necessary shape transformation. |
+| Template UI field | Exact field and stored type in the installed template/version. |
+| Consent | CMP identity, strict/basic block or explicitly approved native/advanced behavior. |
+| Evidence | Current official browser URL/title/access date plus approved source locator. |
 
 Do not conflate a dataLayer key, GTM variable, template UI field, and network parameter even when they share a label.
 
@@ -114,7 +132,7 @@ not silently coerce types or add a documented optional field that the media brie
 When the vendor requires an array:
 
 - return an array even for one item when the schema requires it;
-- map every eligible item rather than selecting item zero;
+- map every in-scope item rather than selecting item zero;
 - preserve the required object keys and exact number/string types;
 - handle missing IDs, quantities, prices, and currency according to documentation;
 - test empty, one-item, and multi-item payloads.
@@ -125,16 +143,19 @@ Establish the catalog/feed identifier convention explicitly. Do not assume that 
 `item_id`, SKU, product ID, item-group ID, or variant ID are interchangeable. Preserve all items;
 do not silently drop an item that lacks a destination-required identifier.
 
-## Fail closed on invalid required media data
+## Handle runtime missing data without speculative gates
 
-Determine required event-level and item-level eligibility from current official browser
-documentation, the explicit media use, and the installed template. If a required value or item
-contract is invalid, prevent the affected tag from becoming eligible.
+Configure the approved business event and every authorized browser field that has a source and
+supported template field. A dataLayer variable can resolve `undefined` or an ecommerce array can be
+empty at runtime; that possibility does not justify `CJS - ... Eligible`, duplicate validity
+parsers, or a second trigger that suppresses the tag. Runtime payload completeness belongs to the
+site/dataLayer contract and the separate recette workflow.
 
-Do not rely on a transformation returning an empty object, empty array, or `undefined` to stop the
-tag. Prefer a direct native source condition; use one narrow validity variable only when necessary.
-Default to blocking the complete event when any required item identifier is invalid. Use partial
-item delivery only when officially supported and explicitly selected by the media owner.
+Block configuration only when a design-time required field has no approved source, no valid
+mapping, or no supported template field. Add a payload-related firing condition only when the
+explicit brief or current official browser documentation requires it. Prefer a direct native source
+condition and use CJS only when the required rule cannot be represented natively. Never mix payload
+validation with the consent block.
 
 ## Govern first-party user data
 
@@ -166,15 +187,16 @@ If no dedicated playbook exists:
 
 1. Locate the current official browser implementation, event reference, parameter reference, consent, matching, and GTM/template documentation.
 2. Apply this generic mapping contract.
-3. Inspect template identity, version, permissions, and field definitions.
-4. Block any critical field or behavior that official documentation does not establish.
+3. Inspect the native and installed template identity, version, permissions, and field definitions.
+4. Use the supported template when compatible; do not substitute Custom HTML silently.
+5. Block any critical field or behavior that official documentation does not establish.
 
 Lack of a dedicated skill file never permits memory-based configuration.
 
 Use first-class playbooks for Google Ads, Floodlight, Microsoft Advertising, Meta, TikTok, Snap,
-LinkedIn, Pinterest, X, Reddit, and Criteo when applicable. A dedicated playbook supplies the
-decision procedure; current official documentation and installed-template fields still establish
-the actual event and parameter schema.
+LinkedIn, Pinterest, X, Reddit, Criteo, and affiliate networks when applicable. A dedicated
+playbook supplies the decision procedure; current official documentation and installed-template
+fields still establish the actual event and parameter schema.
 
 ## Verify the saved media setup
 
@@ -182,7 +204,7 @@ After mutation, re-read and compare:
 
 - template identity/version and every stored field type;
 - destination ID, official event/conversion, base/event separation, and automatic behavior;
-- source variables, transformations, validity guard, and all zero/one/many item shapes when used;
+- source variables, transformations, and all configured zero/one/many item shapes when used;
 - normal trigger, basic block or approved advanced consent settings, firing option, and sequencing;
 - folders, naming, stable IDs/fingerprints, references, and existing initialization consumers;
 - a recomputed no-op rerun with no duplicate base or event tag.
@@ -192,4 +214,7 @@ saved browser tag does not prove that those objects exist or that runtime delive
 
 ## Current client-side boundary
 
-Do not add event IDs or deduplication logic for a browser-only request. Record server-side GTM, Conversions API, and browser/server deduplication as deferred when encountered.
+Never generate an event ID or design browser/server deduplication for a browser-only request. When
+an explicit media brief supplies an approved browser `event_id`, map it only if current official
+browser documentation and the installed template support that browser field. Record server-side
+GTM, Conversions API, and deduplication architecture as deferred.

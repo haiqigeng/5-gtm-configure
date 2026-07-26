@@ -25,8 +25,9 @@ documented standard/custom event paths and the exact platform-side conversion re
 source, GTM variable, template field, and destination parameter separately.
 
 For ecommerce, reopen the current item/content schema, establish catalog identifiers, preserve all
-eligible items, and use explicit tag eligibility for invalid required data. Do not send a GA4 item
-array unchanged or select only its first item.
+approved items, and require every design-time source before mutation. Map runtime values directly;
+do not add a payload-eligibility helper. Do not send a GA4 item array unchanged or select only its
+first item.
 
 ## Consent and user data
 

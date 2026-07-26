@@ -32,8 +32,9 @@ brief. Keep the partner ID and any conversion identifier separate, map only curr
 fields, and reconcile an existing site/plugin implementation before adding GTM.
 
 Use a direct source mapping where possible. For ecommerce or value fields, apply the current
-official LinkedIn schema and fail closed on missing required values. Do not translate GA4 event
-names or item arrays by analogy.
+official LinkedIn schema. Require design-time sources before mutation and record runtime missing
+values as a site/dataLayer and recette dependency; do not create a payload-eligibility CJS. Do not
+translate GA4 event names or item arrays by analogy.
 
 ## Consent and sensitive pages
 

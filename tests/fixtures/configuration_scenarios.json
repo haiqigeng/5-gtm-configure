@@ -1,5 +1,5 @@
 {
-  "version": 5,
+  "version": 6,
   "description": "Operational configuration contract fixtures for deterministic policy checks, not model-output or runtime tests.",
   "allowed_statuses": ["Configured", "Partial", "Blocked", "Deferred"],
   "scenarios": [
@@ -362,6 +362,24 @@
       "external_dependencies": ["Authorize a compatible installed template version or supported implementation path."],
       "expected_invariants": ["template discrepancy recorded", "required field retained in intended contract"],
       "forbidden_invariants": ["required field dropped", "template field guessed", "Custom HTML invented automatically"]
+    },
+    {
+      "id": "first-party-data-narrow-consumer-scope",
+      "route": "analytics",
+      "request": "Use configure-gtm to implement an explicitly authorized GA4 user_id contract on one Google tag and GA4 user-provided-data collection on one approved generate_lead event in an authorized dedicated workspace. The source, consent, raw-data mode, account-side activation dependency, and representative payload are complete.",
+      "evidence_grades": ["approved-input", "official-current", "container-confirmed", "contract-sample"],
+      "expected_status": "Configured",
+      "live_state_claim": true,
+      "saved_object_readback": true,
+      "idempotent_second_execution": true,
+      "expected_actions": [
+        {"action": "update", "object_type": "Google tag", "name": "Google tag - Primary", "justification": "The approved user_id contract has one consuming Google tag, so the tag directly owns the setting."},
+        {"action": "create", "object_type": "variable", "name": "UPD - GA4 - Lead", "justification": "The native User-Provided Data variable owns the approved raw customer-data fields."},
+        {"action": "update", "object_type": "tag", "name": "GA4 - Event - generate_lead", "justification": "Only the authorized customer-data event consumes the native user_data value."}
+      ],
+      "external_dependencies": ["GA4 user-provided-data collection and required account-side terms/settings remain externally owned."],
+      "expected_invariants": ["user_id configured directly on its sole Google tag", "native User-Provided Data variable used", "user_data attached only to generate_lead", "unrelated events do not inherit user_data"],
+      "forbidden_invariants": ["Configuration Settings variable created for one Google tag", "GA4 user_data placed in a shared Event Settings variable", "user_data attached to all events", "user_id treated as user_data"]
     },
     {
       "id": "server-side-deduplication-deferred",

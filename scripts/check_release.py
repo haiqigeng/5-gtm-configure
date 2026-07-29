@@ -11,7 +11,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SEMVER = re.compile(r"^v(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)$")
-CURRENT_RELEASE = "5.0.0"
+CURRENT_RELEASE = "5.1.0"
 REFERENCE_LAYERS = {
     "01-orientation": {
         "official-source-policy.md",
@@ -55,46 +55,14 @@ REFERENCE_LAYERS = {
     },
     "03-judgement": {"acceptance-and-handoff.md"},
 }
+REQUIRED_REFERENCE_FILES = tuple(
+    f"references/{layer}/{filename}"
+    for layer, filenames in REFERENCE_LAYERS.items()
+    for filename in sorted(filenames)
+)
 REQUIRED_FILES = (
     "SKILL.md",
     "agents/openai.yaml",
-    "references/01-orientation/utility-contract.md",
-    "references/01-orientation/official-source-policy.md",
-    "references/02-execution/configuration-contract.md",
-    "references/02-execution/tracking-plan-fidelity-and-conformance.md",
-    "references/02-execution/implementation-workflow.md",
-    "references/02-execution/analytics-tags.md",
-    "references/02-execution/analytics-vendors.md",
-    "references/02-execution/client-side-object-surface.md",
-    "references/02-execution/media-tags.md",
-    "references/02-execution/media-affiliate.md",
-    "references/02-execution/media-criteo.md",
-    "references/02-execution/media-floodlight.md",
-    "references/02-execution/media-google-ads.md",
-    "references/02-execution/media-linkedin.md",
-    "references/02-execution/media-microsoft-ads.md",
-    "references/02-execution/media-meta.md",
-    "references/02-execution/media-pinterest.md",
-    "references/02-execution/media-reddit.md",
-    "references/02-execution/media-tiktok.md",
-    "references/02-execution/media-snapchat.md",
-    "references/02-execution/media-x.md",
-    "references/02-execution/cmp-consent.md",
-    "references/02-execution/cmp-platform-patterns.md",
-    "references/02-execution/tcf-consent.md",
-    "references/02-execution/vendor-consent-modes.md",
-    "references/02-execution/google-consent-mode.md",
-    "references/02-execution/conversion-linker-cross-domain.md",
-    "references/02-execution/first-party-data.md",
-    "references/02-execution/ga4-collection-safety.md",
-    "references/02-execution/data-contract-and-transformations.md",
-    "references/02-execution/transformation-patterns.md",
-    "references/02-execution/multi-destination-routing.md",
-    "references/02-execution/triggers-and-variables.md",
-    "references/02-execution/template-governance.md",
-    "references/02-execution/tool-adapters.md",
-    "references/02-execution/naming-and-reuse.md",
-    "references/03-judgement/acceptance-and-handoff.md",
     "README.md",
     "CHANGELOG.md",
     "LICENSE",
@@ -122,7 +90,7 @@ REQUIRED_FILES = (
     "tests/fixtures/forward_test_cases.json",
     "tests/fixtures/golden_object_graphs.json",
     "tests/fixtures/utility_scenarios.json",
-)
+) + REQUIRED_REFERENCE_FILES
 STALE_FILES = (
     "references/execution-contract.md",
     "references/official-source-policy.md",
@@ -134,14 +102,18 @@ STALE_FILES = (
     "tests/test_semantic_scenarios.py",
     "tests/fixtures/semantic_scenarios.json",
 )
-FORBIDDEN_ARTIFACT_NAMES = {
+FORBIDDEN_ARTIFACT_NAMES = {"release"}
+SCAN_EXCLUDED_NAMES = {
     ".coverage",
+    ".git",
+    ".mypy_cache",
     ".pytest_cache",
     ".ruff_cache",
+    ".venv",
     "__pycache__",
-    "release",
+    "dist",
+    "venv",
 }
-SCAN_EXCLUDED_ROOTS = {".git", ".venv", "dist", "venv"}
 
 
 def read(relative: str) -> str:
@@ -237,7 +209,7 @@ def check_required_files() -> list[str]:
     errors.extend(f"stale file remains: {path}" for path in STALE_FILES if (ROOT / path).exists())
     for path in ROOT.rglob("*"):
         relative = path.relative_to(ROOT)
-        if relative.parts[0] in SCAN_EXCLUDED_ROOTS:
+        if any(part in SCAN_EXCLUDED_NAMES for part in relative.parts):
             continue
         if path.name in FORBIDDEN_ARTIFACT_NAMES:
             errors.append(f"generated artifact must be removed: {relative}")

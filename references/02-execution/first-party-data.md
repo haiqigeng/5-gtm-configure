@@ -3,6 +3,7 @@
 ## Contents
 
 - [Treat matching features as opt-in scope](#treat-matching-features-as-opt-in-scope)
+- [Authorize collection and consumer scope](#authorize-collection-and-consumer-scope)
 - [Prefer controlled sources](#prefer-controlled-sources)
 - [Follow the vendor's field contract](#follow-the-vendors-field-contract)
 - [Resolve feature ownership per destination](#resolve-feature-ownership-per-destination)
@@ -29,6 +30,25 @@ Do not enable automatic or manual collection by default. Require:
 - an approved source contract, evidence grade, and representative non-production test data.
 
 Do not make the legal decision. Stop when the analyst cannot establish approved data use.
+
+## Authorize collection and consumer scope
+
+Approval of an identifier or matching feature does not authorize attaching it to every event. Before
+configuration, record:
+
+- the exact destination product and feature;
+- its approved collection mode: tag-wide automatic, tag-wide manual, event-specific, or
+  conversion-specific;
+- every authorized consuming tag, page, event, or tag family;
+- source availability, resolution timing, and lifetime at each authorized consumer;
+- the applicable consent state and any account-side activation or terms;
+- the GTM object that will own the setting.
+
+Use tag-wide collection only when it is explicitly requested, current official documentation
+supports it for the selected feature, and its wider collection scope is compatible with every
+destination and consent route involved. When consumer scope cannot be established, block only the
+affected first-party-data feature. Do not attach the data to all events as a fallback for
+uncertainty.
 
 ## Prefer controlled sources
 
@@ -93,6 +113,23 @@ Google tag fields before creating transformations:
 6. Record Google Ads/GA4 account-side activation, diagnostics, and terms as external dependencies;
    a saved GTM variable does not complete them.
 
+Select the narrowest native owner that matches the approved scope:
+
+| Approved use | Default GTM owner |
+| --- | --- |
+| GA4 `user_id` consumed by one Google tag | Configure it directly on that Google tag. |
+| The same `user_id` contract reused by multiple compatible Google tags | Use a Google tag Configuration Settings variable only when the shared source, lifecycle, reset behavior, consent, and consumers are all identical. |
+| GA4 user-provided-data collection on specific customer-data events | Use the native User-Provided Data variable through the `user_data` field on each authorized GA4 Event tag. |
+| Google Ads tag-wide user-provided data | Use the current documented Google tag or Google Ads route only when tag-wide collection was explicitly authorized. |
+| Google Ads event-specific enhanced conversions | Configure the exact conversion tag and its current native user-data field. |
+| Another vendor's browser matching feature | Use the supported installed template field owned by that vendor and approved consumer scope. |
+
+A Configuration Settings or Event Settings variable is a reuse mechanism, not a default layer.
+Follow the general direct-versus-shared decision rules in
+[analytics-tags.md](analytics-tags.md). Do not put GA4 user-provided data in a shared Event Settings
+variable merely to make it reach more events, and do not create a Configuration Settings variable
+for a value consumed by only one Google tag.
+
 Do not use GA4 `user_id`, event parameters, or user properties to transport advertising
 user-provided data. Do not add a Custom HTML hashing library when the native variable/template owns
 normalization and hashing.
@@ -102,6 +139,15 @@ normalization and hashing.
 Do not send email, phone, name, postal address, or other personally identifiable information to GA4 event parameters, user properties, URLs, titles, or debug fields.
 
 Do not reuse an advertising matching variable in an analytics tag without independently validating that the analytics destination permits that value.
+
+Keep these Google concepts separate:
+
+| Concept | Purpose and owner |
+| --- | --- |
+| GA4 `user_id` | An approved stable, non-PII identifier for signed-in user-state stitching. It is a Google tag configuration contract with explicit set, omit, and reset behavior. |
+| GA4 user-provided data | A separately activated matching feature for supported customer identifiers. Its native User-Provided Data variable is consumed only by the authorized collection events or pages. |
+| GA4 user properties | Approved analysis attributes with their own scope and lifecycle. They are not a transport for `user_id` or user-provided data. |
+| Advertising matching data | A destination-specific Google Ads or other media feature owned by its conversion/base tag and browser schema, not by GA4 event parameters. |
 
 ## Design safe GTM objects
 
@@ -127,6 +173,10 @@ Do not assume that hashing replaces consent or makes a value anonymous.
 Use synthetic test values when possible. Verify:
 
 - source availability at the exact event according to the approved contract;
+- the saved collection mode and complete authorized consumer set;
+- unrelated tags and events do not inherit the first-party data;
+- the selected direct tag field, Configuration Settings variable, Event Settings variable, or
+  native User-Provided Data variable is the narrowest correct owner;
 - normalization and hash ownership;
 - template field resolution;
 - configured collection fields remain blocked before required consent;

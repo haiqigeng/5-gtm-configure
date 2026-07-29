@@ -102,10 +102,17 @@ class ConfigurationContractSchemaTest(unittest.TestCase):
             validate_document(contract)
 
     def test_high_impact_action_requires_explicit_authority(self) -> None:
-        contract = valid_contract()
-        contract["implementation"]["objects"][0]["object_type"] = "Zone"
-        with self.assertRaisesRegex(ContractValidationError, "explicit_authority"):
-            validate_document(contract)
+        for object_type in (
+            "Zone",
+            "Destination Link",
+            "container-setting",
+            "Custom Template Code mutation",
+        ):
+            with self.subTest(object_type=object_type):
+                contract = valid_contract()
+                contract["implementation"]["objects"][0]["object_type"] = object_type
+                with self.assertRaisesRegex(ContractValidationError, "explicit_authority"):
+                    validate_document(contract)
 
     def test_update_requires_pre_change_state(self) -> None:
         contract = valid_contract()

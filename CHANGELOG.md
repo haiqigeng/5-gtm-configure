@@ -1,5 +1,57 @@
 # Changelog
 
+## 5.1.0
+
+### Why This Release Matters
+
+- Prevents an approved first-party identifier or matching feature from being interpreted as
+  permission to attach `user_data` to every analytics event.
+- Makes the choice between direct Google tag fields, Configuration Settings variables, native
+  User-Provided Data variables, and conversion-specific fields explicit and proportional.
+
+### What Changed
+
+- Require the exact destination feature, collection mode, authorized consuming tags/pages/events,
+  source timing and lifetime, consent route, account dependency, and owning GTM object before
+  configuring first-party data.
+- Configure `user_id` directly on its sole consuming Google tag. Use a Configuration Settings
+  variable only when the same source, lifecycle, reset behavior, consent, and consumer contract is
+  genuinely reused by multiple compatible Google tags.
+- Route GA4 user-provided data through the native User-Provided Data variable on only the
+  authorized GA4 Event tags. Keep tag-wide Google Ads collection and event-specific enhanced
+  conversions under their separately approved current native routes.
+- Separate GA4 `user_id`, GA4 user-provided data, GA4 user properties, and destination-specific
+  advertising matching in the implementation and acceptance contracts.
+- Add current official GA4 user-provided-data and User-ID documentation entry points plus a
+  deterministic narrow-consumer-scope regression scenario.
+- Derive the release checker's required reference inventory from the canonical reference-layer
+  map, tolerate ignored development caches, and stop release tests from deleting repository
+  caches.
+- Remove redundant high-impact-object matching logic and make the configuration-validator CLI use
+  its canonical contract loader.
+
+### What Users Should Do
+
+- State the exact first-party-data feature and whether collection is tag-wide, event-specific, or
+  conversion-specific, including every authorized consumer.
+- Prefer a direct tag field for one consumer and introduce a shared settings variable only when
+  there is a real compatible multi-tag reuse contract.
+
+### Validation
+
+- Add contract coverage for narrow first-party consumer scope and normalized high-impact GTM
+  object names.
+- Pass all 81 unit tests, skill and release validation, Ruff formatting/lint, deterministic
+  runtime packaging, and whitespace checks for `v5.1.0`.
+
+### Known Limits
+
+- First-party-data features remain explicit opt-in configuration. Client consent policy,
+  account-side activation/terms, runtime data quality, and observed transmission remain external
+  responsibilities.
+- This release does not add server-side GTM, offline uploads, Conversions API, or browser/server
+  deduplication.
+
 ## 5.0.0
 
 ### Why This Release Matters

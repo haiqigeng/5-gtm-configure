@@ -103,6 +103,7 @@ Use these as search entry points, then follow the current page for the exact req
 | GTM template Gallery and template API | https://developers.google.com/tag-platform/tag-manager/templates/gallery and https://developers.google.com/tag-platform/tag-manager/api/reference/rest/v2/accounts.containers.workspaces.templates |
 | GA4 events and ecommerce | https://developers.google.com/analytics/devguides/collection/ga4/reference/events and https://developers.google.com/analytics/devguides/collection/ga4/ecommerce |
 | GA4 configuration fields and page views | https://developers.google.com/analytics/devguides/collection/ga4/reference/config and https://developers.google.com/analytics/devguides/collection/ga4/views |
+| GA4 user-provided data and User-ID | https://support.google.com/analytics/answer/14077171, https://support.google.com/analytics/answer/14179229, https://support.google.com/analytics/answer/14171268, and https://support.google.com/analytics/answer/9213390 |
 | GA4 custom dimensions and metrics | https://support.google.com/analytics/answer/14240153 |
 | GA4 collection limits, reserved names, and PII safety | https://support.google.com/analytics/answer/9267744, https://developers.google.com/analytics/devguides/collection/protocol/ga4/reference, and https://support.google.com/analytics/answer/6366371 |
 | Google tag settings variables | https://support.google.com/tagmanager/answer/13438166 and https://support.google.com/tagmanager/answer/13438771 |

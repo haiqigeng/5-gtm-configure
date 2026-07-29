@@ -55,13 +55,12 @@ IMPLEMENTATION_ONLY_REQUIREMENT_KEYS = {
     "adapter_fields",
 }
 SEMANTIC_FIELD_MAPS = {"parameters", "user_properties", "item_parameters"}
-HIGH_IMPACT_TYPES = {
+HIGH_IMPACT_TYPE_KEYS = {
     "zone",
     "environment",
     "destination",
-    "destination link",
-    "container setting",
-    "custom template code",
+    "destinationlink",
+    "containersetting",
 }
 
 
@@ -183,8 +182,7 @@ def _validate_evidence(raw: Any, *, index: int) -> str:
 
 def _is_high_impact(object_type: str) -> bool:
     normalized = "".join(character for character in object_type.lower() if character.isalnum())
-    exact = {"zone", "environment", "destination", "destinationlink", "containersetting"}
-    return normalized in exact or "customtemplatecode" in normalized
+    return normalized in HIGH_IMPACT_TYPE_KEYS or "customtemplatecode" in normalized
 
 
 def _validate_object_action(raw: Any, *, index: int) -> None:
@@ -213,8 +211,8 @@ def _validate_object_action(raw: Any, *, index: int) -> None:
         _require_text(item.get("new_name"), f"{path}.new_name")
     if action == "remove" and item.get("destructive_authorization") is not True:
         raise ContractValidationError(f"{path}.destructive_authorization must be true for remove")
-    if action in {"create", "update", "rename", "pause", "unpause", "remove"} and (
-        object_type.lower() in HIGH_IMPACT_TYPES or _is_high_impact(object_type)
+    if action in {"create", "update", "rename", "pause", "unpause", "remove"} and _is_high_impact(
+        object_type
     ):
         if item.get("explicit_authority") is not True:
             raise ContractValidationError(
@@ -303,14 +301,14 @@ def validate_document(value: Any, *, allow_legacy: bool = False) -> dict[str, An
     return contract
 
 
-def load_contract(path: Path) -> dict[str, Any]:
+def load_contract(path: Path, *, allow_legacy: bool = False) -> dict[str, Any]:
     try:
         value = json.loads(path.read_text(encoding="utf-8"))
     except OSError as exc:
         raise ContractValidationError(f"cannot read {path}: {exc}") from exc
     except json.JSONDecodeError as exc:
         raise ContractValidationError(f"invalid JSON in {path}: {exc}") from exc
-    return validate_document(value)
+    return validate_document(value, allow_legacy=allow_legacy)
 
 
 def main() -> int:
@@ -320,9 +318,8 @@ def main() -> int:
     args = parser.parse_args()
 
     try:
-        value = json.loads(args.contract.read_text(encoding="utf-8"))
-        validate_document(value, allow_legacy=args.allow_legacy)
-    except (OSError, json.JSONDecodeError, ContractValidationError) as exc:
+        value = load_contract(args.contract, allow_legacy=args.allow_legacy)
+    except ContractValidationError as exc:
         print(json.dumps({"pass": False, "error": str(exc)}, ensure_ascii=False))
         return 2
 

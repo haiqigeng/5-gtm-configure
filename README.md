@@ -6,10 +6,10 @@ consent-controlled client-side Google Tag Manager workspaces.
 
 ## Current Release
 
-**v5.0.0** is the utility-first client-side configuration release. It makes native/supported
-templates and direct event/field mappings the normal implementation path, removes speculative
-payload-eligibility engineering, deepens GA4 and Google Consent Mode mechanics, supports safe
-greenfield and delta changes, and adds operational affiliate and conditional TCF 2.3 routes.
+**v5.1.0** strengthens client-side first-party-data configuration without changing the skill's
+utility-first north star. It requires an explicit collection mode and authorized consumer scope,
+selects the narrowest correct Google tag or variable owner, separates `user_id`, user-provided
+data, user properties, and advertising matching, and improves release-tooling reliability.
 
 ## Who It Serves
 
@@ -238,10 +238,10 @@ Run:
 python -m pip install -e ".[dev]"
 python -m ruff format --no-cache --check scripts tests
 python -m ruff check --no-cache scripts tests
-python scripts/check_release.py --tag v5.0.0 --release-notes CHANGELOG.md
+python scripts/check_release.py --tag v5.1.0 --release-notes CHANGELOG.md
 python -m unittest discover -s tests -v
 python -m compileall -q scripts
-python scripts/build_skill_package.py --output dist/configure-gtm-v5.0.0.zip
+python scripts/build_skill_package.py --output dist/configure-gtm-v5.1.0.zip
 git diff --check
 ~~~
 

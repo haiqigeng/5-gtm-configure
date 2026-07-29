@@ -18,7 +18,7 @@ class ConfigurationScenarioFixtureTest(unittest.TestCase):
         return next(item for item in self.scenarios if item["id"] == scenario_id)
 
     def test_scenario_corpus_has_expected_operational_coverage(self) -> None:
-        self.assertEqual(self.payload["version"], 5)
+        self.assertEqual(self.payload["version"], 6)
         self.assertIn("not model-output or runtime tests", self.payload["description"])
         expected_ids = {
             "ga4-tracking-plan-configured",
@@ -43,6 +43,7 @@ class ConfigurationScenarioFixtureTest(unittest.TestCase):
             "workspace-change-attribution",
             "lut-folder-organization",
             "installed-template-schema-conflict",
+            "first-party-data-narrow-consumer-scope",
             "server-side-deduplication-deferred",
         }
         self.assertEqual({scenario["id"] for scenario in self.scenarios}, expected_ids)
@@ -228,6 +229,20 @@ class ConfigurationScenarioFixtureTest(unittest.TestCase):
         self.assertEqual(scenario["preexisting_workspace_changes"], 2)
         self.assertEqual(scenario["current_run_changes"], 1)
         self.assertEqual(scenario["final_workspace_changes"], 3)
+
+    def test_first_party_data_uses_the_narrowest_authorized_owner_and_scope(self) -> None:
+        scenario = self.scenario("first-party-data-narrow-consumer-scope")
+        actions = {action["name"]: action for action in scenario["expected_actions"]}
+        self.assertEqual(actions["Google tag - Primary"]["action"], "update")
+        self.assertEqual(actions["UPD - GA4 - Lead"]["object_type"], "variable")
+        self.assertIn(
+            "user_data attached only to generate_lead",
+            scenario["expected_invariants"],
+        )
+        self.assertIn(
+            "user_data attached to all events",
+            scenario["forbidden_invariants"],
+        )
 
 
 if __name__ == "__main__":

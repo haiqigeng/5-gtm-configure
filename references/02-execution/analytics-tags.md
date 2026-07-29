@@ -199,7 +199,10 @@ Treat `user_id` as a separately approved Google tag configuration contract, not 
 parameter, user property, or custom dimension. Omit it while the user is not signed in, set the
 stable approved non-PII identifier when authentication state is established, and send `null` when
 the approved logout/reset event must clear a previously set value. Establish source, lifecycle,
-consent, persistence, and every consuming Google tag before configuration.
+consent, persistence, and every consuming Google tag before configuration. Configure `user_id`
+directly on one consuming Google tag; use a Configuration Settings variable only when the same
+contract is genuinely reused by multiple compatible Google tags. Keep `user_id`, GA4
+user-provided data, and user properties as separate features with separate owners and scopes.
 
 Configure approved user properties separately from `user_id`. Record their stable analysis purpose,
 source, scope, limits, and reset behavior. Treat content groups as explicit approved configuration

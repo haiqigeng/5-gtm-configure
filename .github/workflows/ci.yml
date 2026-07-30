@@ -7,12 +7,20 @@ on:
 
 jobs:
   validate:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            python: "3.11"
+          - os: windows-latest
+            python: "3.13"
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: ${{ matrix.python }}
       - name: Install lint dependency
         run: python -m pip install "ruff>=0.12,<1"
       - name: Check formatting and lint
@@ -20,7 +28,7 @@ jobs:
           python -m ruff format --no-cache --check scripts tests
           python -m ruff check --no-cache scripts tests
       - name: Validate release structure
-        run: python scripts/check_release.py --tag v5.1.0 --release-notes CHANGELOG.md
+        run: python scripts/check_release.py --tag v5.2.0 --release-notes CHANGELOG.md
       - name: Run tests
         run: python -m unittest discover -s tests -v
       - name: Compile scripts

@@ -5,8 +5,9 @@
 - [Purpose](#purpose)
 - [Common state contract](#common-state-contract)
 - [OneTrust](#onetrust)
-- [Cookiebot](#cookiebot)
 - [Didomi](#didomi)
+- [Axeptio](#axeptio)
+- [Secondary CMPs](#secondary-cmps)
 - [Other CMPs](#other-cmps)
 - [Saved-state acceptance](#saved-state-acceptance)
 
@@ -47,21 +48,6 @@ Reconcile auto-blocking, site-deployed scripts, the CMP template, GTM additional
 manual blocking. Do not create parallel default/update paths. Treat region mappings and category
 ownership as approved CMP inputs.
 
-## Cookiebot
-
-Inspect the current Cookiebot CMP gallery template, Domain Group ID, Consent Initialization setup,
-default regions, consent-type mapping, and documented update event. Determine whether the CMP is
-site-deployed or GTM-deployed and prevent duplicate initialization.
-
-Official entry points:
-
-- https://support.cookiebot.com/hc/en-us/articles/360003793854-Google-Tag-Manager-deployment
-- https://support.cookiebot.com/hc/en-us/articles/360016047000-Cookiebot-and-Google-Consent-Mode
-
-Do not infer that built-in consent checks satisfy the client's strict/basic policy. Attach additional
-blocking when required, or implement an explicitly approved advanced route without a defeating
-block.
-
 ## Didomi
 
 Inspect the current Didomi web SDK, direct-site versus GTM deployment, documented readiness/change
@@ -77,13 +63,48 @@ Prove that a vendor grant includes every required purpose when the client's poli
 Keep readiness and change triggers repeatable only where the consumer must become eligible after a
 later grant.
 
+## Axeptio
+
+Inspect the current Axeptio CMP Gallery template, direct-site versus GTM deployment, Project ID,
+cookie configuration, dataLayer name, GTM-event option, template version, and permissions. When GTM
+owns deployment, verify that the supported template owns initialization at Consent Initialization
+and prevent a second site or container initialization.
+
+Official entry points:
+
+- https://support.axeptio.eu/en/articles/273991-integrate-axeptio-via-google-tag-manager
+- https://support.axeptio.eu/en/articles/348263-how-axeptio-communicates-with-gtm-events-and-variables
+- https://support.axeptio.eu/en/articles/721671-google-tag-manager-and-integrated-consent-management
+- https://support.axeptio.eu/en/articles/704808-configure-google-consent-mode-v2-gtm-integration
+
+Verify the current documented readiness/update events, authorized-service state such as
+`axeptio_authorized_vendors`, and exact service identifiers from the client's widget rather than
+copying example values. Prefer the direct documented dataLayer state when one native GTM predicate
+expresses the grant. Keep service-level Axeptio gating separate from Google Consent Mode signals:
+under strict/basic behavior, prevent the service tag before its grant; use advanced Google behavior
+only when explicitly requested, and do not add Additional Consent Checks or exceptions that create
+an unproved double gate.
+
+For page-load tags, select the documented Axeptio readiness/grant opportunity that supports initial
+and later consent without duplicate initialization. For business-event tags, retain the business
+trigger and apply the reusable service block across its full event scope. Read back the CMP tag,
+template fields, consent defaults/updates owner, event and state variables, service predicates, and
+every consumer.
+
+## Secondary CMPs
+
+For Cookiebot, Commanders Act/TrustCommander, Usercentrics, or Quantcast, use the common state
+contract and reopen the selected CMP's current official GTM and consent documentation. Confirm its
+installed template, deployment owner, initialization and update lifecycle, exact grant state,
+Google consent mapping, and revocation behavior. These products remain supported but do not borrow
+the dedicated implementation details of OneTrust, Didomi, or Axeptio.
+
 ## Other CMPs
 
-For Axeptio, Commanders Act/TrustCommander, Usercentrics, Quantcast, or another CMP, follow the same
-state contract. Locate current official GTM and consent documentation, inspect the installed
-template, and record exact events and variables. If current primary evidence cannot establish a
-critical grant or lifecycle rule, block the affected tag rather than borrowing a OneTrust,
-Cookiebot, or Didomi pattern.
+For another identifiable CMP, follow the same state contract. Locate current official GTM and
+consent documentation, inspect the installed template, and record exact events and variables. If
+current primary evidence cannot establish a critical grant or lifecycle rule, block the affected
+tag rather than borrowing a OneTrust, Didomi, or Axeptio pattern.
 
 ## Saved-state acceptance
 

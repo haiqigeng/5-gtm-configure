@@ -131,9 +131,10 @@ Use these as search entry points, then follow the current page for the exact req
 | Piwik PRO tracking code through GTM | https://help.piwik.pro/support/getting-started/google-tag-manager-install-a-tracking-code/ |
 | Piwik PRO consent | https://help.piwik.pro/support/privacy/setting-consent-manager/ |
 | IAB Europe TCF 2.3 and Google TCF integration | https://iabeurope.eu/transparency-consent-framework/ and https://support.google.com/admanager/answer/9805023 |
-| Didomi GTM events, variables, and integration | https://developers.didomi.io/cmp/web-sdk/third-parties/tags-management/events-and-variables and https://developers.didomi.io/cmp/web-sdk/third-parties/tags-management/tag-managers/google-tag-manager/configure-the-didomi-gtm-integration |
-| OneTrust GTM and Google Consent Mode | https://my.onetrust.com/articles/en_US/Knowledge/UUID-301b21c8-a73a-05e8-175a-36c9036728dc and https://my.onetrust.com/articles/en_US/Knowledge/UUID-d81787f6-685c-2262-36c3-5f1f3369e2a7 |
-| Cookiebot GTM and Google Consent Mode | https://support.cookiebot.com/hc/en-us/articles/360003793854-Google-Tag-Manager-deployment and https://support.cookiebot.com/hc/en-us/articles/360016047000-Cookiebot-and-Google-Consent-Mode |
+| Didomi GTM events, variables, and integration (dedicated) | https://developers.didomi.io/cmp/web-sdk/third-parties/tags-management/events-and-variables and https://developers.didomi.io/cmp/web-sdk/third-parties/tags-management/tag-managers/google-tag-manager/configure-the-didomi-gtm-integration |
+| OneTrust GTM and Google Consent Mode (dedicated) | https://my.onetrust.com/articles/en_US/Knowledge/UUID-301b21c8-a73a-05e8-175a-36c9036728dc and https://my.onetrust.com/articles/en_US/Knowledge/UUID-d81787f6-685c-2262-36c3-5f1f3369e2a7 |
+| Axeptio GTM events, variables, template, and Consent Mode (dedicated) | https://support.axeptio.eu/en/articles/273991-integrate-axeptio-via-google-tag-manager, https://support.axeptio.eu/en/articles/348263-how-axeptio-communicates-with-gtm-events-and-variables, and https://support.axeptio.eu/en/articles/704808-configure-google-consent-mode-v2-gtm-integration |
+| Cookiebot GTM and Google Consent Mode (secondary) | https://support.cookiebot.com/hc/en-us/articles/360003793854-Google-Tag-Manager-deployment and https://support.cookiebot.com/hc/en-us/articles/360016047000-Cookiebot-and-Google-Consent-Mode |
 
 For any unlisted media platform, CMP, template, or supported feature, locate and cite its current official documentation before configuring it. Lack of a dedicated playbook never permits inference.
 

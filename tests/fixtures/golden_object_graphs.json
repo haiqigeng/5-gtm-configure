@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 3,
   "description": "Static intended-to-saved GTM object-graph characterization cases; not browser/runtime tests.",
   "cases": [
     {
@@ -11,12 +11,30 @@
             "object_type": "tag",
             "type": "gaawe",
             "name": "GA4 - Event - generate_lead",
-            "firingTriggerId": ["17"],
-            "blockingTriggerId": ["22", "21"],
+            "firingTriggerId": ["trigger::CE - generate_lead"],
+            "blockingTriggerId": [
+              "trigger::Block - CMP - GA4 denied",
+              "trigger::Block - CMP - uninitialized"
+            ],
             "fields": {
               "event_name": "generate_lead",
               "parameters": {"method": "{{DLV - event.method}}"}
             }
+          },
+          {
+            "object_type": "trigger",
+            "name": "CE - generate_lead",
+            "fields": {"event_name": "generate_lead"}
+          },
+          {
+            "object_type": "trigger",
+            "name": "Block - CMP - GA4 denied",
+            "fields": {"predicate": "ga4 != granted"}
+          },
+          {
+            "object_type": "trigger",
+            "name": "Block - CMP - uninitialized",
+            "fields": {"predicate": "cmp != ready"}
           }
         ]
       },
@@ -35,6 +53,27 @@
               "parameters": {"method": "{{DLV - event.method}}"},
               "event_name": "generate_lead"
             }
+          },
+          {
+            "object_type": "trigger",
+            "name": "Block - CMP - uninitialized",
+            "triggerId": "21",
+            "fingerprint": "server-generated",
+            "fields": {"predicate": "cmp != ready"}
+          },
+          {
+            "object_type": "trigger",
+            "name": "CE - generate_lead",
+            "triggerId": "17",
+            "fingerprint": "server-generated",
+            "fields": {"event_name": "generate_lead"}
+          },
+          {
+            "object_type": "trigger",
+            "name": "Block - CMP - GA4 denied",
+            "triggerId": "22",
+            "fingerprint": "server-generated",
+            "fields": {"predicate": "ga4 != granted"}
           }
         ]
       }
@@ -267,6 +306,117 @@
             "tagId": "51",
             "firingTriggerId": ["18"],
             "fields": {"event": "Purchase"}
+          }
+        ]
+      }
+    },
+    {
+      "id": "real-gtm-parameter-and-map-order-normalize",
+      "expected_pass": true,
+      "expected": {
+        "objects": [
+          {
+            "object_type": "tag",
+            "name": "GA4 - Event - generate_lead",
+            "type": "gaawe",
+            "parameter": [
+              {
+                "type": "template",
+                "key": "eventName",
+                "value": "generate_lead"
+              },
+              {
+                "type": "map",
+                "key": "eventSettings",
+                "map": [
+                  {"type": "template", "key": "method", "value": "{{DLV - method}}"},
+                  {"type": "boolean", "key": "debug", "value": "false"}
+                ]
+              }
+            ],
+            "monitoringMetadata": {
+              "type": "map",
+              "map": [
+                {"type": "template", "key": "status", "value": "enabled"},
+                {"type": "boolean", "key": "includeTagName", "value": "true"}
+              ]
+            }
+          }
+        ]
+      },
+      "saved": {
+        "objects": [
+          {
+            "object_type": "tag",
+            "name": "GA4 - Event - generate_lead",
+            "tagId": "81",
+            "type": "gaawe",
+            "parameter": [
+              {
+                "type": "map",
+                "key": "eventSettings",
+                "map": [
+                  {"type": "boolean", "key": "debug", "value": "false"},
+                  {"type": "template", "key": "method", "value": "{{DLV - method}}"}
+                ]
+              },
+              {
+                "type": "template",
+                "key": "eventName",
+                "value": "generate_lead"
+              }
+            ],
+            "monitoringMetadata": {
+              "type": "map",
+              "map": [
+                {"type": "boolean", "key": "includeTagName", "value": "true"},
+                {"type": "template", "key": "status", "value": "enabled"}
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "gtm-list-parameter-order-remains-material",
+      "expected_pass": false,
+      "expected_difference_contains": "array_mismatch",
+      "expected": {
+        "objects": [
+          {
+            "object_type": "tag",
+            "name": "Sequenced values",
+            "type": "custom",
+            "parameter": [
+              {
+                "type": "list",
+                "key": "steps",
+                "list": [
+                  {"type": "template", "key": "ignored-a", "value": "first"},
+                  {"type": "template", "key": "ignored-b", "value": "second"}
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "saved": {
+        "objects": [
+          {
+            "object_type": "tag",
+            "name": "Sequenced values",
+            "tagId": "82",
+            "type": "custom",
+            "parameter": [
+              {
+                "type": "list",
+                "key": "steps",
+                "list": [
+                  {"type": "template", "key": "ignored-x", "value": "second"},
+                  {"type": "template", "key": "ignored-y", "value": "first"}
+                ]
+              }
+            ]
           }
         ]
       }

@@ -57,7 +57,7 @@ Do not infer that similarly named CMP events and variables have the same role. F
 
 ## Route identified CMP platforms
 
-When the CMP is OneTrust, Cookiebot, Didomi, or another identifiable platform, load
+When the CMP is OneTrust, Didomi, Axeptio, or another identifiable platform, load
 `cmp-platform-patterns.md` after this general contract. Use its discovery route but keep the exact
 installed template, site deployment, vendor/category/purpose IDs, and current official lifecycle as
 the authority. Never copy one client's category IDs or another CMP's event names.

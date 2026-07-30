@@ -19,7 +19,7 @@ class ObjectGraphDiffTest(unittest.TestCase):
         cls.payload = json.loads(FIXTURE.read_text(encoding="utf-8"))
 
     def test_all_golden_cases_match_expected_result(self) -> None:
-        self.assertEqual(self.payload["version"], 2)
+        self.assertEqual(self.payload["version"], 3)
         for case in self.payload["cases"]:
             with self.subTest(case=case["id"]):
                 result = compare_graphs(case["expected"], case["saved"])
@@ -85,6 +85,50 @@ class ObjectGraphDiffTest(unittest.TestCase):
         self.assertEqual(normalized["parentFolderId"], "folder::Commerce")
         self.assertEqual(normalized["firingTriggerId"], ["trigger::CE - purchase"])
         self.assertEqual(normalized["setupTag"][0]["tagName"], "tag::Base")
+
+    def test_unresolved_raw_or_semantic_reference_fails(self) -> None:
+        for reference in ("17", "trigger::CE - purchase"):
+            with self.subTest(reference=reference):
+                graph = {
+                    "objects": [
+                        {
+                            "object_type": "tag",
+                            "name": "Purchase",
+                            "firingTriggerId": [reference],
+                        }
+                    ]
+                }
+                with self.assertRaisesRegex(GraphError, "unresolved trigger reference"):
+                    normalize_graph(graph)
+
+    def test_matching_dangling_references_cannot_prove_graph_equality(self) -> None:
+        graph = {
+            "objects": [
+                {
+                    "object_type": "tag",
+                    "name": "Purchase",
+                    "firingTriggerId": ["17"],
+                }
+            ]
+        }
+        with self.assertRaisesRegex(GraphError, "include the referenced object"):
+            compare_graphs(graph, graph)
+
+    def test_duplicate_keyed_gtm_parameter_fails(self) -> None:
+        graph = {
+            "objects": [
+                {
+                    "object_type": "tag",
+                    "name": "Duplicate parameters",
+                    "parameter": [
+                        {"type": "template", "key": "eventName", "value": "purchase"},
+                        {"type": "template", "key": "eventName", "value": "add_to_cart"},
+                    ],
+                }
+            ]
+        }
+        with self.assertRaisesRegex(GraphError, "duplicate GTM Parameter key"):
+            normalize_graph(graph)
 
 
 if __name__ == "__main__":

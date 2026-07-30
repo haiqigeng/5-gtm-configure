@@ -120,6 +120,20 @@ class ConfigurationContractSchemaTest(unittest.TestCase):
         with self.assertRaisesRegex(ContractValidationError, "pre_change"):
             validate_document(contract)
 
+        contract = valid_contract()
+        item = contract["implementation"]["objects"][0]
+        item["action"] = "update"
+        item["pre_change"] = None
+        with self.assertRaisesRegex(ContractValidationError, "must be an object"):
+            validate_document(contract)
+
+        contract = valid_contract()
+        item = contract["implementation"]["objects"][0]
+        item["action"] = "update"
+        item["pre_change"] = {}
+        with self.assertRaisesRegex(ContractValidationError, "must not be empty"):
+            validate_document(contract)
+
     def test_delta_actions_require_pre_change_and_rename_target(self) -> None:
         for action in ("rename", "pause", "unpause"):
             with self.subTest(action=action):
@@ -146,6 +160,65 @@ class ConfigurationContractSchemaTest(unittest.TestCase):
                 if action == "rename":
                     item["new_name"] = "Renamed object"
                 self.assertEqual(validate_document(contract)["schema_version"], "4.0")
+
+    def test_remove_requires_pre_change_and_destructive_authority(self) -> None:
+        contract = valid_contract()
+        item = contract["implementation"]["objects"][0]
+        item["action"] = "remove"
+        item["destructive_authorization"] = True
+        with self.assertRaisesRegex(ContractValidationError, "pre_change"):
+            validate_document(contract)
+
+        item["pre_change"] = {"name": item["name"], "tagId": "81"}
+        self.assertEqual(validate_document(contract)["schema_version"], "4.0")
+
+    def test_duplicate_and_contradictory_object_actions_fail(self) -> None:
+        duplicate_create = valid_contract()
+        duplicate_create["implementation"]["objects"].append(
+            deepcopy(duplicate_create["implementation"]["objects"][0])
+        )
+        with self.assertRaisesRegex(ContractValidationError, "duplicate or contradictory"):
+            validate_document(duplicate_create)
+
+        create_and_update = valid_contract()
+        update = deepcopy(create_and_update["implementation"]["objects"][0])
+        update["action"] = "update"
+        update["pre_change"] = {"name": update["name"], "tagId": "81"}
+        create_and_update["implementation"]["objects"].append(update)
+        with self.assertRaisesRegex(ContractValidationError, "duplicate or contradictory"):
+            validate_document(create_and_update)
+
+    def test_rename_target_cannot_collide_with_another_object_action(self) -> None:
+        contract = valid_contract()
+        renamed = contract["implementation"]["objects"][0]
+        renamed["action"] = "rename"
+        renamed["pre_change"] = {"name": renamed["name"], "tagId": "81"}
+        renamed["new_name"] = "GA4 - Event - qualified_lead"
+        other = deepcopy(renamed)
+        other["action"] = "create"
+        other["name"] = renamed["new_name"]
+        other.pop("pre_change")
+        other.pop("new_name")
+        contract["implementation"]["objects"].append(other)
+        with self.assertRaisesRegex(ContractValidationError, "duplicate or contradictory"):
+            validate_document(contract)
+
+    def test_object_action_evidence_must_support_the_action(self) -> None:
+        sample_only = valid_contract()
+        sample_only["implementation"]["objects"][0]["evidence"] = ["contract-sample"]
+        with self.assertRaisesRegex(ContractValidationError, "sole action evidence"):
+            validate_document(sample_only)
+
+        unauthorised_create = valid_contract()
+        unauthorised_create["implementation"]["objects"][0]["evidence"] = ["container-confirmed"]
+        with self.assertRaisesRegex(ContractValidationError, "approved-input.*official-current"):
+            validate_document(unauthorised_create)
+
+        unconfirmed_reuse = valid_contract()
+        unconfirmed_reuse["implementation"]["objects"][0]["action"] = "reuse"
+        unconfirmed_reuse["implementation"]["objects"][0]["evidence"] = ["approved-input"]
+        with self.assertRaisesRegex(ContractValidationError, "container-confirmed"):
+            validate_document(unconfirmed_reuse)
 
     def test_scope_and_requirement_ids_must_match(self) -> None:
         contract = valid_contract()

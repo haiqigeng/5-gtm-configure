@@ -202,13 +202,22 @@ contract explicitly requires a firing rule.
 
 Create the complete in-scope object graph before mutation. For each object record:
 
-- `create`, `update`, `rename`, `pause`, `unpause`, `reuse`, or `untouched`;
+- `create`, `update`, `rename`, `pause`, `unpause`, `reuse`, `untouched`, or explicitly
+  authorized `remove`;
 - object type, intended name/folder, stable existing ID/path, and fingerprint when applicable;
 - requirement or documented constraint that justifies it;
 - exact intended fields, references, consent route, and dependencies;
 - compatible consumers and relevant environment/hostname scope;
-- exact pre-change representation for an update;
+- exact non-empty pre-change representation for every update, rename, pause, unpause, or removal;
 - expected saved-object comparison.
+
+Represent each semantic GTM object once. Reject duplicate actions and contradictory combinations
+such as creating and updating the same type/name or renaming one object onto another claimed
+identity. Use stable object IDs as an additional identity when available.
+
+Support every mutation with `approved-input` or `official-current` evidence, as applicable.
+Existing-object actions also require `container-confirmed` evidence. A representative
+`contract-sample` can support source shape but cannot authorize an object action by itself.
 
 Use `rename`, `pause`, or `unpause` only for an approved delta and record the exact pre-change state,
 related consumers, and behavioral effect. Use `remove` only after explicit destructive authorization

@@ -53,7 +53,7 @@ Load only the applicable detailed playbooks:
 | Criteo OneTag | [media-criteo.md](references/02-execution/media-criteo.md) |
 | Affiliate or partner-network browser tags | [media-affiliate.md](references/02-execution/media-affiliate.md) |
 | CMP blocking or consent lifecycle | [cmp-consent.md](references/02-execution/cmp-consent.md) |
-| OneTrust, Cookiebot, Didomi, or another identified CMP implementation | [cmp-platform-patterns.md](references/02-execution/cmp-platform-patterns.md) |
+| OneTrust, Didomi, Axeptio, or another identified CMP implementation | [cmp-platform-patterns.md](references/02-execution/cmp-platform-patterns.md) |
 | IAB TCF or Google Additional Consent is detected or requested | [tcf-consent.md](references/02-execution/tcf-consent.md) |
 | Advanced, native, cookieless, anonymous, or limited-data consent | [vendor-consent-modes.md](references/02-execution/vendor-consent-modes.md) |
 | Google basic or advanced Consent Mode | [google-consent-mode.md](references/02-execution/google-consent-mode.md) |

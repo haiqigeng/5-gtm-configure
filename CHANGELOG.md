@@ -1,5 +1,63 @@
 # Changelog
 
+## 5.2.0
+
+### Why This Release Matters
+
+- Makes deterministic contract and saved-object verification reliable against contradictory
+  actions, incomplete delta evidence, unresolved references, real GTM API Parameter structures,
+  and Windows console encodings.
+- Promotes Axeptio beside OneTrust and Didomi as a dedicated CMP implementation route while keeping
+  less frequently used CMPs available through current official discovery.
+
+### What Changed
+
+- Reject duplicate or contradictory actions against the same normalized GTM type/name, stable ID,
+  or rename target.
+- Require non-empty pre-change state for update, rename, pause, unpause, and removal; retain
+  destructive authorization for removal.
+- Prevent `contract-sample` from authorizing an object action by itself. Require approved or current
+  official authority for mutations and confirmed container evidence for existing-object actions.
+- Normalize real GTM top-level Parameter and nested map arrays by unique key, preserve nested list
+  order while ignoring list-entry keys, and remove the ineffective set treatment of
+  `monitoringMetadata`.
+- Require the complete in-scope trigger, folder, and sequencing reference closure so matching
+  dangling IDs or semantic references cannot pass object-graph comparison.
+- Emit ASCII-safe JSON from every runtime CLI so Unicode names and evidence retain the intended
+  schema/difference exit code on Windows.
+- Add realistic API-shaped graph fixtures, encoding regression tests, and a Windows/Python 3.13 CI
+  lane.
+- Add dedicated Axeptio template, initialization, service-state, Consent Mode, late-grant,
+  double-gating, and saved-readback guidance. Reclassify Cookiebot, Commanders Act/TrustCommander,
+  Usercentrics, and Quantcast as secondary official-discovery routes.
+
+### What Users Should Do
+
+- Supply complete referenced-object graphs to `diff_object_graph.py`; include every referenced
+  trigger, folder, setup tag, and cleanup tag rather than comparing dangling raw IDs.
+- Record one action per semantic object, preserve exact non-empty pre-change state for deltas, and
+  use action evidence that actually authorizes or confirms the operation.
+- For Axeptio containers, establish the installed template and deployment owner, exact
+  service-level state and identifiers, selected basic or advanced route, and one consent
+  defaults/updates owner from current official documentation and container evidence.
+
+### Validation
+
+- Add regression coverage for Unicode CLI output, object-action conflicts, empty pre-change state,
+  weak action evidence, GTM Parameter/map/list behavior, duplicate Parameter keys, and unresolved
+  references.
+- Pass all 91 unit tests, release checker, Ruff format/lint, script compilation,
+  deterministic package build, and whitespace checks for `v5.2.0`.
+
+### Known Limits
+
+- Object-graph comparison is intentionally strict: a partial graph with unresolved consumer
+  references is invalid input rather than a successful equality proof.
+- Secondary CMPs remain operationally supported through live official discovery but do not have
+  dedicated platform playbooks.
+- Runtime Preview/network validation, legal consent decisions, publication, server-side GTM,
+  Conversions API, and browser/server deduplication remain outside this release.
+
 ## 5.1.0
 
 ### Why This Release Matters

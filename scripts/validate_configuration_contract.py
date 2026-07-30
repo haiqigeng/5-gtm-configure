@@ -29,6 +29,10 @@ ACTIONS = {
     "untouched",
     "remove",
 }
+DELTA_ACTIONS = {"update", "rename", "pause", "unpause", "remove"}
+MUTATING_ACTIONS = {"create", *DELTA_ACTIONS}
+EXISTING_OBJECT_ACTIONS = {"reuse", "untouched", *DELTA_ACTIONS}
+MUTATION_AUTHORITY_GRADES = {"approved-input", "official-current"}
 TOP_LEVEL_KEYS = {
     "schema_version",
     "route",
@@ -185,30 +189,57 @@ def _is_high_impact(object_type: str) -> bool:
     return normalized in HIGH_IMPACT_TYPE_KEYS or "customtemplatecode" in normalized
 
 
-def _validate_object_action(raw: Any, *, index: int) -> None:
+def _normalize_identity_part(value: str) -> str:
+    return " ".join(value.split()).casefold()
+
+
+def _validate_object_action(
+    raw: Any, *, index: int
+) -> tuple[str, str, str, str | None, str | None]:
     path = f"$.implementation.objects[{index}]"
     item = _require_object(raw, path)
     action = _require_text(item.get("action"), f"{path}.action")
     if action not in ACTIONS:
         raise ContractValidationError(f"{path}.action has unsupported value {action!r}")
     object_type = _require_text(item.get("object_type"), f"{path}.object_type")
-    _require_text(item.get("name"), f"{path}.name")
+    name = _require_text(item.get("name"), f"{path}.name")
     _require_text(item.get("justification"), f"{path}.justification")
 
     evidence = _require_array(item.get("evidence"), f"{path}.evidence")
     if not evidence:
         raise ContractValidationError(f"{path}.evidence must not be empty")
+    evidence_grades: set[str] = set()
     for evidence_index, grade in enumerate(evidence):
         value = _require_text(grade, f"{path}.evidence[{evidence_index}]")
         if value not in EVIDENCE_GRADES:
             raise ContractValidationError(
                 f"{path}.evidence[{evidence_index}] has unsupported value {value!r}"
             )
+        evidence_grades.add(value)
 
-    if action in {"update", "rename", "pause", "unpause"} and "pre_change" not in item:
-        raise ContractValidationError(f"{path}.pre_change is required for {action}")
+    if evidence_grades == {"contract-sample"}:
+        raise ContractValidationError(
+            f"{path}.evidence cannot use 'contract-sample' as sole action evidence"
+        )
+    if action in MUTATING_ACTIONS and not evidence_grades & MUTATION_AUTHORITY_GRADES:
+        raise ContractValidationError(
+            f"{path}.evidence needs 'approved-input' or 'official-current' for {action}"
+        )
+    if action in EXISTING_OBJECT_ACTIONS and "container-confirmed" not in evidence_grades:
+        raise ContractValidationError(
+            f"{path}.evidence needs 'container-confirmed' for existing-object action {action}"
+        )
+
+    if action in DELTA_ACTIONS:
+        pre_change = _require_object(item.get("pre_change"), f"{path}.pre_change")
+        if not pre_change:
+            raise ContractValidationError(f"{path}.pre_change must not be empty for {action}")
+
+    new_name: str | None = None
     if action == "rename":
-        _require_text(item.get("new_name"), f"{path}.new_name")
+        new_name = _require_text(item.get("new_name"), f"{path}.new_name")
+        if _normalize_identity_part(new_name) == _normalize_identity_part(name):
+            raise ContractValidationError(f"{path}.new_name must differ from the current name")
     if action == "remove" and item.get("destructive_authorization") is not True:
         raise ContractValidationError(f"{path}.destructive_authorization must be true for remove")
     if action in {"create", "update", "rename", "pause", "unpause", "remove"} and _is_high_impact(
@@ -218,6 +249,35 @@ def _validate_object_action(raw: Any, *, index: int) -> None:
             raise ContractValidationError(
                 f"{path}.explicit_authority must be true for high-impact {object_type!r}"
             )
+    object_id: str | None = None
+    if "object_id" in item:
+        object_id = _require_text(item["object_id"], f"{path}.object_id")
+    return action, object_type, name, object_id, new_name
+
+
+def _validate_object_action_conflicts(
+    records: list[tuple[str, str, str, str | None, str | None]],
+) -> None:
+    claimed: dict[tuple[str, str, str], tuple[int, str]] = {}
+    for index, (action, object_type, name, object_id, new_name) in enumerate(records):
+        normalized_type = _normalize_identity_part(object_type)
+        identities = [("name", normalized_type, _normalize_identity_part(name))]
+        if object_id is not None:
+            identities.append(("id", normalized_type, object_id))
+        if new_name is not None:
+            identities.append(("name", normalized_type, _normalize_identity_part(new_name)))
+
+        for identity in identities:
+            previous = claimed.get(identity)
+            if previous is not None:
+                previous_index, previous_action = previous
+                identity_value = identity[2]
+                raise ContractValidationError(
+                    "$.implementation.objects contains duplicate or contradictory actions "
+                    f"for {object_type!r} identity {identity_value!r}: "
+                    f"index {previous_index} {previous_action!r} and index {index} {action!r}"
+                )
+            claimed[identity] = (index, action)
 
 
 def validate_document(value: Any, *, allow_legacy: bool = False) -> dict[str, Any]:
@@ -286,8 +346,10 @@ def validate_document(value: Any, *, allow_legacy: bool = False) -> dict[str, An
     if container_type.lower() != "web":
         raise ContractValidationError("$.implementation.workspace.container_type must be 'web'")
     objects = _require_array(implementation.get("objects"), "$.implementation.objects")
+    object_action_records = []
     for index, raw in enumerate(objects):
-        _validate_object_action(raw, index=index)
+        object_action_records.append(_validate_object_action(raw, index=index))
+    _validate_object_action_conflicts(object_action_records)
 
     evidence = _require_array(contract["evidence"], "$.evidence")
     grades = {_validate_evidence(raw, index=index) for index, raw in enumerate(evidence)}
@@ -320,7 +382,7 @@ def main() -> int:
     try:
         value = load_contract(args.contract, allow_legacy=args.allow_legacy)
     except ContractValidationError as exc:
-        print(json.dumps({"pass": False, "error": str(exc)}, ensure_ascii=False))
+        print(json.dumps({"pass": False, "error": str(exc)}))
         return 2
 
     print(json.dumps({"pass": True, "schema_version": value.get("schema_version", "legacy")}))

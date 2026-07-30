@@ -345,8 +345,19 @@ class SkillContractTest(unittest.TestCase):
             self.assertIn(routed, skill)
         for vendor in ("Matomo", "Piwik PRO", "Adobe"):
             self.assertIn(vendor, analytics_vendors)
-        for cmp in ("OneTrust", "Cookiebot", "Didomi"):
+        for cmp in ("OneTrust", "Didomi", "Axeptio"):
             self.assertIn(cmp, cmp_platforms)
+            self.assertIn(f"## {cmp}", cmp_platforms)
+        for secondary_cmp in (
+            "Cookiebot",
+            "Commanders Act/TrustCommander",
+            "Usercentrics",
+            "Quantcast",
+        ):
+            self.assertIn(secondary_cmp, cmp_platforms)
+        self.assertNotIn("## Cookiebot", cmp_platforms)
+        self.assertIn("axeptio_authorized", cmp_platforms.lower())
+        self.assertIn("support.axeptio.eu", cmp_platforms)
         self.assertIn("Conversion Linker", cross_domain)
         self.assertIn("GA4 Admin", cross_domain)
 

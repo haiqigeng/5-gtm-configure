@@ -6,10 +6,11 @@ consent-controlled client-side Google Tag Manager workspaces.
 
 ## Current Release
 
-**v5.1.0** strengthens client-side first-party-data configuration without changing the skill's
-utility-first north star. It requires an explicit collection mode and authorized consumer scope,
-selects the narrowest correct Google tag or variable owner, separates `user_id`, user-provided
-data, user properties, and advertising matching, and improves release-tooling reliability.
+**v5.2.0** hardens the deterministic configuration controls without changing the skill's
+utility-first north star. It rejects contradictory object actions and unsupported mutation
+evidence, requires complete delta pre-state and object references, compares real GTM Parameter
+structures correctly, produces Windows-safe CLI JSON, and promotes Axeptio beside OneTrust and
+Didomi as a dedicated CMP route.
 
 ## Who It Serves
 
@@ -64,9 +65,10 @@ Use these meanings:
 - Implement strict/basic CMP gating by default, including Google consent default/update ownership,
   and explicitly requested Google, Microsoft, or vendor-native advanced/cookieless/anonymous
   behavior.
-- Implement current OneTrust, Cookiebot, Didomi, conditional TCF 2.3/Additional Consent, or another
-  documented CMP state/lifecycle pattern without borrowing signal semantics from a different CMP
-  or making legal-purpose decisions.
+- Apply dedicated OneTrust, Didomi, or Axeptio guidance, while routing Cookiebot, Commanders
+  Act/TrustCommander, Usercentrics, Quantcast, conditional TCF 2.3/Additional Consent, and other
+  CMPs through current official discovery without borrowing signal semantics or making legal-policy
+  decisions.
 - Configure explicitly requested first-party user-data features with controlled sources and consent.
 - Handle ecommerce arrays, catalog/feed identifiers, and source-to-destination shape conversion
   without speculative eligibility helpers; runtime missing data remains a site/dataLayer and
@@ -238,10 +240,10 @@ Run:
 python -m pip install -e ".[dev]"
 python -m ruff format --no-cache --check scripts tests
 python -m ruff check --no-cache scripts tests
-python scripts/check_release.py --tag v5.1.0 --release-notes CHANGELOG.md
+python scripts/check_release.py --tag v5.2.0 --release-notes CHANGELOG.md
 python -m unittest discover -s tests -v
 python -m compileall -q scripts
-python scripts/build_skill_package.py --output dist/configure-gtm-v5.1.0.zip
+python scripts/build_skill_package.py --output dist/configure-gtm-v5.2.0.zip
 git diff --check
 ~~~
 

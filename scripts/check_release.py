@@ -11,7 +11,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SEMVER = re.compile(r"^v(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)$")
-CURRENT_RELEASE = "5.1.0"
+CURRENT_RELEASE = "5.2.0"
 REFERENCE_LAYERS = {
     "01-orientation": {
         "official-source-policy.md",
@@ -79,6 +79,7 @@ REQUIRED_FILES = (
     "scripts/validate_configuration_contract.py",
     "scripts/validate_contract_conformance.py",
     "tests/test_configuration_contract_schema.py",
+    "tests/test_cli_json_output.py",
     "tests/test_release.py",
     "tests/test_forward_test_cases.py",
     "tests/test_object_graph_diff.py",

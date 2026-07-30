@@ -28,7 +28,7 @@ ROOT_METADATA_KEYS = {
     "updatedAt",
     "_meta",
 }
-SET_LIKE_KEYS = {"firingTriggerId", "blockingTriggerId", "monitoringMetadata"}
+SET_LIKE_KEYS = {"firingTriggerId", "blockingTriggerId"}
 ID_FIELDS = {
     "tagId": "tag",
     "triggerId": "trigger",
@@ -50,15 +50,66 @@ class GraphError(ValueError):
     """Raised when an object graph cannot be normalized safely."""
 
 
-def _canonical(value: Any, *, parent_key: str | None = None) -> Any:
+def _canonical(
+    value: Any,
+    *,
+    parent_key: str | None = None,
+    path: str = "$",
+    parameter_array_mode: str | None = None,
+) -> Any:
     if isinstance(value, dict):
-        return {key: _canonical(value[key], parent_key=key) for key in sorted(value)}
+        parameter_type = value.get("type")
+        output: dict[str, Any] = {}
+        for key in sorted(value):
+            child_mode = None
+            if key == "parameter":
+                child_mode = "keyed"
+            elif key == "map" and parameter_type == "map":
+                child_mode = "keyed"
+            elif key == "list" and parameter_type == "list":
+                child_mode = "ordered"
+            output[key] = _canonical(
+                value[key],
+                parent_key=key,
+                path=f"{path}.{key}",
+                parameter_array_mode=child_mode,
+            )
+        return output
     if isinstance(value, list):
-        normalized = [_canonical(item) for item in value]
+        normalized = []
+        parameter_keys: set[str] = set()
+        for index, raw_item in enumerate(value):
+            item = raw_item
+            if parameter_array_mode in {"keyed", "ordered"}:
+                if not isinstance(item, dict):
+                    raise GraphError(f"{path}[{index}] must be a GTM Parameter object")
+                if parameter_array_mode == "ordered":
+                    item = {key: child for key, child in item.items() if key != "key"}
+                else:
+                    key = item.get("key")
+                    if not isinstance(key, str) or not key.strip():
+                        raise GraphError(f"{path}[{index}].key must be a non-empty string")
+                    if key in parameter_keys:
+                        raise GraphError(f"{path} contains duplicate GTM Parameter key {key!r}")
+                    parameter_keys.add(key)
+            normalized.append(
+                _canonical(
+                    item,
+                    path=f"{path}[{index}]",
+                )
+            )
+        if parameter_array_mode == "keyed":
+            return sorted(
+                normalized,
+                key=lambda item: (
+                    item["key"],
+                    json.dumps(item, sort_keys=True),
+                ),
+            )
         if parent_key in SET_LIKE_KEYS:
             return sorted(
                 normalized,
-                key=lambda item: json.dumps(item, ensure_ascii=False, sort_keys=True),
+                key=lambda item: json.dumps(item, sort_keys=True),
             )
         return normalized
     return value
@@ -74,10 +125,20 @@ def _identity(item: dict[str, Any], path: str) -> tuple[str, str]:
     return object_type.strip(), name.strip()
 
 
-def _reference_maps(objects: list[dict[str, Any]]) -> dict[str, dict[str, str]]:
+def _normalized_object_type(value: str) -> str:
+    return "".join(character for character in value.casefold() if character.isalnum())
+
+
+def _reference_maps(
+    objects: list[dict[str, Any]],
+) -> tuple[dict[str, dict[str, str]], dict[str, set[str]]]:
     maps = {field: {} for field in ID_FIELDS}
+    identities = {semantic_type: set() for semantic_type in ID_FIELDS.values()}
     for index, item in enumerate(objects):
-        _, name = _identity(item, f"$.objects[{index}]")
+        object_type, name = _identity(item, f"$.objects[{index}]")
+        normalized_type = _normalized_object_type(object_type)
+        if normalized_type in identities:
+            identities[normalized_type].add(f"{normalized_type}::{name}")
         for field, semantic_type in ID_FIELDS.items():
             raw_id = item.get(field)
             if raw_id is None:
@@ -85,39 +146,94 @@ def _reference_maps(objects: list[dict[str, Any]]) -> dict[str, dict[str, str]]:
             if not isinstance(raw_id, str) or not raw_id.strip():
                 raise GraphError(f"$.objects[{index}].{field} must be a non-empty string")
             semantic = f"{semantic_type}::{name}"
+            identities[semantic_type].add(semantic)
             previous = maps[field].get(raw_id)
             if previous is not None and previous != semantic:
                 raise GraphError(f"duplicate {field} {raw_id!r} for {previous!r} and {semantic!r}")
             maps[field][raw_id] = semantic
-    return maps
+    return maps, identities
 
 
-def _semantic_reference(value: Any, mapping: dict[str, str]) -> Any:
+def _semantic_reference(
+    value: Any,
+    *,
+    mapping: dict[str, str],
+    identities: set[str],
+    semantic_type: str,
+    path: str,
+) -> Any:
     if isinstance(value, str):
-        return mapping.get(value, value)
+        translated = mapping.get(value, value)
+        if translated not in identities:
+            raise GraphError(
+                f"{path} contains unresolved {semantic_type} reference {value!r}; "
+                "include the referenced object in the graph"
+            )
+        return translated
     if isinstance(value, list):
-        return [_semantic_reference(item, mapping) for item in value]
-    return value
+        return [
+            _semantic_reference(
+                item,
+                mapping=mapping,
+                identities=identities,
+                semantic_type=semantic_type,
+                path=f"{path}[{index}]",
+            )
+            for index, item in enumerate(value)
+        ]
+    raise GraphError(f"{path} must be a string reference or an array of string references")
 
 
 def _translate_references(
     value: Any,
     *,
     maps: dict[str, dict[str, str]],
+    identities: dict[str, set[str]],
     parent_key: str | None = None,
+    path: str = "$",
 ) -> Any:
+    """Replace server IDs with semantic references and reject incomplete reference graphs."""
     if isinstance(value, dict):
         translated: dict[str, Any] = {}
         for key, item in value.items():
             if key in REFERENCE_FIELDS:
-                translated[key] = _semantic_reference(item, maps[REFERENCE_FIELDS[key]])
+                id_field = REFERENCE_FIELDS[key]
+                semantic_type = ID_FIELDS[id_field]
+                translated[key] = _semantic_reference(
+                    item,
+                    mapping=maps[id_field],
+                    identities=identities[semantic_type],
+                    semantic_type=semantic_type,
+                    path=f"{path}.{key}",
+                )
             elif key == "tagName" and parent_key in SEQUENCING_KEYS:
-                translated[key] = _semantic_reference(item, maps["tagId"])
+                translated[key] = _semantic_reference(
+                    item,
+                    mapping=maps["tagId"],
+                    identities=identities["tag"],
+                    semantic_type="tag",
+                    path=f"{path}.{key}",
+                )
             else:
-                translated[key] = _translate_references(item, maps=maps, parent_key=key)
+                translated[key] = _translate_references(
+                    item,
+                    maps=maps,
+                    identities=identities,
+                    parent_key=key,
+                    path=f"{path}.{key}",
+                )
         return translated
     if isinstance(value, list):
-        return [_translate_references(item, maps=maps, parent_key=parent_key) for item in value]
+        return [
+            _translate_references(
+                item,
+                maps=maps,
+                identities=identities,
+                parent_key=parent_key,
+                path=f"{path}[{index}]",
+            )
+            for index, item in enumerate(value)
+        ]
     return value
 
 
@@ -138,7 +254,7 @@ def normalize_graph(value: Any) -> dict[str, dict[str, Any]]:
         _identity(raw, path)
         raw_objects.append(raw)
 
-    maps = _reference_maps(raw_objects)
+    maps, identities = _reference_maps(raw_objects)
     normalized: dict[str, dict[str, Any]] = {}
     for index, raw in enumerate(raw_objects):
         path = f"$.objects[{index}]"
@@ -149,7 +265,15 @@ def normalize_graph(value: Any) -> dict[str, dict[str, Any]]:
         cleaned = {field: value for field, value in raw.items() if field not in ROOT_METADATA_KEYS}
         cleaned["object_type"] = object_type
         cleaned["name"] = name
-        normalized[key] = _canonical(_translate_references(cleaned, maps=maps))
+        normalized[key] = _canonical(
+            _translate_references(
+                cleaned,
+                maps=maps,
+                identities=identities,
+                path=path,
+            ),
+            path=path,
+        )
     return {key: normalized[key] for key in sorted(normalized)}
 
 
@@ -217,9 +341,9 @@ def main() -> int:
     try:
         report = compare_graphs(_load(args.expected), _load(args.saved))
     except GraphError as exc:
-        print(json.dumps({"pass": False, "error": str(exc)}, ensure_ascii=False))
+        print(json.dumps({"pass": False, "error": str(exc)}))
         return 2
-    print(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True))
+    print(json.dumps(report, indent=2, sort_keys=True))
     return 0 if report["pass"] else 1
 
 

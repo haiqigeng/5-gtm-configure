@@ -114,6 +114,16 @@ Normalize only documented server metadata such as top-level fingerprints, paths,
 timestamps. Never ignore nested tag fields, trigger references, consent, template fields, routing,
 or configuration values.
 
+Supply the complete in-scope reference closure: include every firing or blocking trigger, parent
+folder, and setup/cleanup tag referenced by a compared object, including a normalized record for a
+built-in trigger when it is a consumer reference. Use `<resource-family>::<name>` in an intended
+graph or supply the returned ID and referenced object in a saved graph. Treat an unresolved raw or
+semantic reference as invalid comparison input rather than proof of equality.
+
+Preserve the GTM API `parameter` shape. Top-level keyed parameters and nested `map` entries compare
+by their unique keys; nested `list` entries preserve order and ignore their own keys. Do not sort an
+ordered list or treat the `monitoringMetadata` Parameter object itself as a set.
+
 Never use a guessed template type code or API parameter. Derive it from the existing object, API schema, official template, or tool response.
 
 ## Maintain a current-operation journal

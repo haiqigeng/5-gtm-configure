@@ -168,10 +168,10 @@ def main() -> int:
     try:
         report = compare(load_contract(args.approved), load_contract(args.candidate))
     except ContractError as exc:
-        print(json.dumps({"pass": False, "error": str(exc)}, ensure_ascii=False))
+        print(json.dumps({"pass": False, "error": str(exc)}))
         return 2
 
-    print(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True))
+    print(json.dumps(report, indent=2, sort_keys=True))
     return 0 if report["pass"] else 1
 
 

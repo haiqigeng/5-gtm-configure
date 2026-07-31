@@ -8,9 +8,40 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from diff_object_graph import GraphError, compare_graphs, normalize_graph  # noqa: E402
+from diff_object_graph import (  # noqa: E402
+    STANDALONE_PARAMETER_FIELDS,
+    GraphError,
+    compare_graphs,
+    normalize_graph,
+)
 
 FIXTURE = ROOT / "tests" / "fixtures" / "golden_object_graphs.json"
+TAG_PARAMETER_FIELDS = {"priority", "monitoringMetadata", "consentType"}
+TRIGGER_PARAMETER_FIELDS = {
+    "checkValidation",
+    "continuousTimeMinMilliseconds",
+    "eventName",
+    "horizontalScrollPercentageList",
+    "interval",
+    "intervalSeconds",
+    "limit",
+    "maxTimerLengthSeconds",
+    "selector",
+    "totalTimeMinMilliseconds",
+    "uniqueTriggerId",
+    "verticalScrollPercentageList",
+    "visibilitySelector",
+    "visiblePercentageMax",
+    "visiblePercentageMin",
+    "waitForTags",
+    "waitForTagsTimeout",
+}
+VARIABLE_FORMAT_PARAMETER_FIELDS = {
+    "convertFalseToValue",
+    "convertNullToValue",
+    "convertTrueToValue",
+    "convertUndefinedToValue",
+}
 
 
 class ObjectGraphDiffTest(unittest.TestCase):
@@ -220,6 +251,95 @@ class ObjectGraphDiffTest(unittest.TestCase):
         reordered = json.loads(json.dumps(graph))
         reordered["objects"][0]["parameter"][0]["list"].reverse()
         self.assertFalse(compare_graphs(graph, reordered)["pass"])
+
+    def test_every_official_standalone_parameter_field_normalizes_type_casing(self) -> None:
+        self.assertEqual(
+            STANDALONE_PARAMETER_FIELDS,
+            TAG_PARAMETER_FIELDS | TRIGGER_PARAMETER_FIELDS | VARIABLE_FORMAT_PARAMETER_FIELDS,
+        )
+
+        for field in TRIGGER_PARAMETER_FIELDS:
+            with self.subTest(object_type="trigger", field=field):
+                expected = {
+                    "objects": [
+                        {
+                            "object_type": "trigger",
+                            "name": field,
+                            field: {"type": "TEMPLATE", "value": "same"},
+                        }
+                    ]
+                }
+                saved = json.loads(json.dumps(expected))
+                saved["objects"][0][field]["type"] = "template"
+                self.assertTrue(compare_graphs(expected, saved)["pass"])
+
+    def test_nested_standalone_parameters_normalize_without_changing_other_enums(self) -> None:
+        expected = {
+            "objects": [
+                {
+                    "object_type": "tag",
+                    "name": "Priority",
+                    "priority": {"type": "INTEGER", "value": "10"},
+                },
+                {
+                    "object_type": "tag",
+                    "name": "Consent",
+                    "consentSettings": {
+                        "consentStatus": "needed",
+                        "consentType": {
+                            "type": "LIST",
+                            "list": [{"type": "STRING", "value": "ad_storage"}],
+                        },
+                    },
+                },
+                {
+                    "object_type": "variable",
+                    "name": "Formatted",
+                    "formatValue": {
+                        "caseConversionType": "lowercase",
+                        "convertFalseToValue": {"type": "TEMPLATE", "value": "false"},
+                        "convertNullToValue": {"type": "TEMPLATE", "value": "unknown"},
+                        "convertTrueToValue": {"type": "TEMPLATE", "value": "true"},
+                        "convertUndefinedToValue": {
+                            "type": "TEMPLATE",
+                            "value": "unknown",
+                        },
+                    },
+                },
+            ]
+        }
+        saved = json.loads(json.dumps(expected))
+        saved["objects"][0]["priority"]["type"] = "integer"
+        saved["objects"][1]["consentSettings"]["consentType"]["type"] = "list"
+        saved["objects"][1]["consentSettings"]["consentType"]["list"][0]["type"] = "string"
+        for field in VARIABLE_FORMAT_PARAMETER_FIELDS:
+            saved["objects"][2]["formatValue"][field]["type"] = "template"
+        self.assertTrue(compare_graphs(expected, saved)["pass"])
+
+        saved["objects"][2]["formatValue"]["caseConversionType"] = "LOWERCASE"
+        self.assertFalse(compare_graphs(expected, saved)["pass"])
+
+    def test_condition_type_enum_casing_remains_material(self) -> None:
+        expected = {
+            "objects": [
+                {
+                    "object_type": "trigger",
+                    "name": "Page path",
+                    "filter": [
+                        {
+                            "type": "equals",
+                            "parameter": [
+                                {"type": "template", "key": "arg0", "value": "{{Page Path}}"},
+                                {"type": "template", "key": "arg1", "value": "/"},
+                            ],
+                        }
+                    ],
+                }
+            ]
+        }
+        saved = json.loads(json.dumps(expected))
+        saved["objects"][0]["filter"][0]["type"] = "EQUALS"
+        self.assertFalse(compare_graphs(expected, saved)["pass"])
 
 
 if __name__ == "__main__":

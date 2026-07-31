@@ -1,5 +1,41 @@
 # Changelog
 
+## 6.0.1
+
+### Why This Release Matters
+
+- Completes the v6 object-graph comparison fix across all client-side tag, trigger, and variable
+  fields that the official GTM API defines as Parameters.
+
+### What Changed
+
+- Normalize Parameter `type` casing for standalone tag priority and consent fields, trigger
+  validation, timing, selector, and visibility fields, and variable formatting conversions.
+- Keep raw tag, trigger, and variable type codes plus ConditionType and other non-Parameter enums
+  material so the comparator does not hide meaningful configuration differences.
+- Add API-shaped regressions covering every supported standalone Parameter field, nested
+  Parameters, and the non-Parameter enum boundary.
+- Clarify that `--allow-legacy` controls direct validation of historical contracts; unversioned
+  object graphs remain a deliberate internal comparator input and cannot authorize mutation.
+
+### What Users Should Do
+
+- No contract migration or workflow change is required. Continue generating schema v5 contracts
+  and use the comparator against complete intended and saved object graphs.
+
+### Validation
+
+- Run the focused object-graph regressions and complete unit-test suite.
+- Pass release checks, Ruff format/lint, script compilation, deterministic package comparison, and
+  whitespace validation for `v6.0.1`.
+
+### Known Limits
+
+- Non-Parameter enum casing remains significant unless real API or export evidence proves that a
+  specific enum is casing-insensitive.
+- This patch does not add runtime Preview/network validation, publication, server-side GTM,
+  Conversions API, browser/server deduplication, or new platform playbooks.
+
 ## 6.0.0
 
 ### Why This Release Matters
@@ -13,8 +49,9 @@
 
 - Introduce schema v5 for newly generated configuration contracts and require canonical GTM
   resource families in every current `object_type` action record.
-- Preserve historical schema v4 and unversioned comparator inputs behind the explicit
-  `--allow-legacy` compatibility flag; compatibility mode cannot authorize newly generated work.
+- Preserve historical schema v4 behind the direct validator's explicit `--allow-legacy`
+  compatibility flag. Unversioned object graphs remain internal comparator inputs and cannot
+  authorize newly generated work.
 - Normalize GTM Parameter `type` casing before applying keyed-map and ordered-list semantics, while
   keeping raw tag, trigger, and variable type codes material.
 - Add regression coverage for v4 compatibility, current resource-family enforcement, mixed-case

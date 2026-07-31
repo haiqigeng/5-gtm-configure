@@ -6,10 +6,9 @@ consent-controlled client-side Google Tag Manager workspaces.
 
 ## Current Release
 
-**v6.0.0** makes the configuration-contract boundary explicit without changing the skill's
-utility-first north star. New work uses schema v5 with canonical GTM resource families; previous v4
-contracts remain available through explicit compatibility mode. Object-graph comparison now
-normalizes GTM Parameter type casing across supported API and export/import evidence.
+**v6.0.1** completes object-graph normalization for every officially Parameter-typed client-side
+tag, trigger, and variable field. It keeps raw GTM object type codes and non-Parameter enums
+material, and does not change the skill's utility-first north star, workflow, or schema v5 contract.
 
 ## Who It Serves
 
@@ -240,10 +239,10 @@ Run:
 python -m pip install -e ".[dev]"
 python -m ruff format --no-cache --check scripts tests
 python -m ruff check --no-cache scripts tests
-python scripts/check_release.py --tag v6.0.0 --release-notes CHANGELOG.md
+python scripts/check_release.py --tag v6.0.1 --release-notes CHANGELOG.md
 python -m unittest discover -s tests -v
 python -m compileall -q scripts
-python scripts/build_skill_package.py --output dist/configure-gtm-v6.0.0.zip
+python scripts/build_skill_package.py --output dist/configure-gtm-v6.0.1.zip
 git diff --check
 ~~~
 

@@ -44,6 +44,34 @@ REFERENCE_FIELDS = {
     "parentFolderId": "folderId",
 }
 SEQUENCING_KEYS = {"setupTag", "teardownTag"}
+STANDALONE_PARAMETER_FIELDS = frozenset(
+    {
+        "checkValidation",
+        "consentType",
+        "continuousTimeMinMilliseconds",
+        "convertFalseToValue",
+        "convertNullToValue",
+        "convertTrueToValue",
+        "convertUndefinedToValue",
+        "eventName",
+        "horizontalScrollPercentageList",
+        "interval",
+        "intervalSeconds",
+        "limit",
+        "maxTimerLengthSeconds",
+        "monitoringMetadata",
+        "priority",
+        "selector",
+        "totalTimeMinMilliseconds",
+        "uniqueTriggerId",
+        "verticalScrollPercentageList",
+        "visibilitySelector",
+        "visiblePercentageMax",
+        "visiblePercentageMin",
+        "waitForTags",
+        "waitForTagsTimeout",
+    }
+)
 
 
 class GraphError(ValueError):
@@ -59,7 +87,7 @@ def _canonical(
     parameter_object: bool = False,
 ) -> Any:
     if isinstance(value, dict):
-        is_parameter = parameter_object or parent_key == "monitoringMetadata"
+        is_parameter = parameter_object or parent_key in STANDALONE_PARAMETER_FIELDS
         raw_parameter_type = value.get("type")
         parameter_type = (
             raw_parameter_type.casefold()

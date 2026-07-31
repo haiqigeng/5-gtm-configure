@@ -11,7 +11,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SEMVER = re.compile(r"^v(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)$")
-CURRENT_RELEASE = "6.0.0"
+CURRENT_RELEASE = "6.0.1"
 REFERENCE_LAYERS = {
     "01-orientation": {
         "official-source-policy.md",

@@ -17,7 +17,7 @@ class ReleaseChecksTest(unittest.TestCase):
                 sys.executable,
                 str(ROOT / "scripts" / "check_release.py"),
                 "--tag",
-                "v5.2.0",
+                "v6.0.0",
                 "--release-notes",
                 str(ROOT / "CHANGELOG.md"),
             ],
@@ -62,7 +62,7 @@ class ReleaseChecksTest(unittest.TestCase):
             notes = Path(temporary) / "CHANGELOG.md"
             notes.write_text(
                 "# Changelog\n\n"
-                "## 5.2.0\n\n"
+                "## 6.0.0\n\n"
                 "### Why This Release Matters\n\n"
                 "### What Changed\n\n"
                 "### What Users Should Do\n\n"

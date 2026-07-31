@@ -1,5 +1,45 @@
 # Changelog
 
+## 6.0.0
+
+### Why This Release Matters
+
+- Makes the configuration-contract compatibility boundary explicit instead of silently tightening
+  the meaning of an unchanged schema version.
+- Hardens deterministic comparison across supported GTM API and export/import evidence without
+  expanding the skill's client-side configuration scope.
+
+### What Changed
+
+- Introduce schema v5 for newly generated configuration contracts and require canonical GTM
+  resource families in every current `object_type` action record.
+- Preserve historical schema v4 and unversioned comparator inputs behind the explicit
+  `--allow-legacy` compatibility flag; compatibility mode cannot authorize newly generated work.
+- Normalize GTM Parameter `type` casing before applying keyed-map and ordered-list semantics, while
+  keeping raw tag, trigger, and variable type codes material.
+- Add regression coverage for v4 compatibility, current resource-family enforcement, mixed-case
+  Parameter maps, and uppercase ordered Parameter lists.
+
+### What Users Should Do
+
+- Generate new operational contracts with `schema_version: "5.0"` and canonical resource families
+  such as `tag`, `trigger`, `variable`, `folder`, `template`, or `zone`.
+- Use `--allow-legacy` only to inspect a previously produced v4 contract or unversioned comparator
+  input; migrate it to v5 before using it as a new mutation contract.
+
+### Validation
+
+- Run focused schema and object-graph regression tests plus the complete unit-test suite.
+- Pass release checks, Ruff format/lint, script compilation, deterministic package comparison, and
+  whitespace validation for `v6.0.0`.
+
+### Known Limits
+
+- Schema v4 compatibility deliberately preserves its historical, less strict object-action rules;
+  it is a read/migration path rather than the authority model for new writes.
+- This release does not add runtime Preview/network validation, publication, server-side GTM,
+  Conversions API, browser/server deduplication, or new platform playbooks.
+
 ## 5.2.0
 
 ### Why This Release Matters

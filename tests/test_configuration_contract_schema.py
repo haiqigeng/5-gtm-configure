@@ -16,7 +16,7 @@ from validate_configuration_contract import (  # noqa: E402
 
 def valid_contract() -> dict:
     return {
-        "schema_version": "4.0",
+        "schema_version": "5.0",
         "route": "analytics",
         "scope": {"included": ["REQ-1"], "reference_only": [], "excluded": []},
         "requirements": [
@@ -78,8 +78,14 @@ def valid_contract() -> dict:
 
 
 class ConfigurationContractSchemaTest(unittest.TestCase):
-    def test_valid_v4_contract_passes(self) -> None:
-        self.assertEqual(validate_document(valid_contract())["schema_version"], "4.0")
+    def test_valid_v5_contract_passes(self) -> None:
+        self.assertEqual(validate_document(valid_contract())["schema_version"], "5.0")
+
+    def test_current_contract_requires_canonical_object_resource_family(self) -> None:
+        contract = valid_contract()
+        contract["implementation"]["objects"][0]["object_type"] = "Google tag"
+        with self.assertRaisesRegex(ContractValidationError, "canonical GTM resource family"):
+            validate_document(contract)
 
     def test_analytics_field_requires_approved_provenance(self) -> None:
         contract = valid_contract()
@@ -103,10 +109,11 @@ class ConfigurationContractSchemaTest(unittest.TestCase):
 
     def test_high_impact_action_requires_explicit_authority(self) -> None:
         for object_type in (
-            "Zone",
-            "Destination Link",
-            "container-setting",
-            "Custom Template Code mutation",
+            "zone",
+            "destination",
+            "container setting",
+            "google tag configuration",
+            "template",
         ):
             with self.subTest(object_type=object_type):
                 contract = valid_contract()
@@ -159,7 +166,7 @@ class ConfigurationContractSchemaTest(unittest.TestCase):
                 item["pre_change"] = {"paused": action == "unpause", "name": item["name"]}
                 if action == "rename":
                     item["new_name"] = "Renamed object"
-                self.assertEqual(validate_document(contract)["schema_version"], "4.0")
+                self.assertEqual(validate_document(contract)["schema_version"], "5.0")
 
     def test_remove_requires_pre_change_and_destructive_authority(self) -> None:
         contract = valid_contract()
@@ -170,7 +177,7 @@ class ConfigurationContractSchemaTest(unittest.TestCase):
             validate_document(contract)
 
         item["pre_change"] = {"name": item["name"], "tagId": "81"}
-        self.assertEqual(validate_document(contract)["schema_version"], "4.0")
+        self.assertEqual(validate_document(contract)["schema_version"], "5.0")
 
     def test_duplicate_and_contradictory_object_actions_fail(self) -> None:
         duplicate_create = valid_contract()
@@ -276,7 +283,25 @@ class ConfigurationContractSchemaTest(unittest.TestCase):
         with self.assertRaisesRegex(ContractValidationError, "kind"):
             validate_document(contract)
 
-    def test_legacy_contract_is_only_allowed_explicitly(self) -> None:
+    def test_v4_contract_is_only_allowed_explicitly(self) -> None:
+        legacy = valid_contract()
+        legacy["schema_version"] = "4.0"
+        item = legacy["implementation"]["objects"][0]
+        item["object_type"] = "Google tag"
+        item["evidence"] = ["container-confirmed"]
+        historical_template = deepcopy(item)
+        historical_template["object_type"] = "template"
+        historical_template["name"] = "Historical custom template"
+        legacy["implementation"]["objects"].append(historical_template)
+
+        with self.assertRaisesRegex(ContractValidationError, "is legacy"):
+            validate_document(legacy)
+        self.assertEqual(
+            validate_document(deepcopy(legacy), allow_legacy=True)["schema_version"],
+            "4.0",
+        )
+
+    def test_unversioned_contract_is_only_allowed_explicitly(self) -> None:
         legacy = {"scope": {"included": ["REQ-1"]}, "requirements": [{"id": "REQ-1"}]}
         with self.assertRaisesRegex(ContractValidationError, "schema_version"):
             validate_document(legacy)

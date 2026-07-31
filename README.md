@@ -6,11 +6,10 @@ consent-controlled client-side Google Tag Manager workspaces.
 
 ## Current Release
 
-**v5.2.0** hardens the deterministic configuration controls without changing the skill's
-utility-first north star. It rejects contradictory object actions and unsupported mutation
-evidence, requires complete delta pre-state and object references, compares real GTM Parameter
-structures correctly, produces Windows-safe CLI JSON, and promotes Axeptio beside OneTrust and
-Didomi as a dedicated CMP route.
+**v6.0.0** makes the configuration-contract boundary explicit without changing the skill's
+utility-first north star. New work uses schema v5 with canonical GTM resource families; previous v4
+contracts remain available through explicit compatibility mode. Object-graph comparison now
+normalizes GTM Parameter type casing across supported API and export/import evidence.
 
 ## Who It Serves
 
@@ -214,7 +213,8 @@ analytics tag-configuration routes.
 - `references/01-orientation/`: north star, intake, authority, boundaries, and official sources.
 - `references/02-execution/`: operational workflow and detailed configuration playbooks.
 - `references/03-judgement/`: saved-state acceptance and concise handoff.
-- `scripts/validate_configuration_contract.py`: strict v4 authority and provenance validation.
+- `scripts/validate_configuration_contract.py`: strict v5 authority and provenance validation with
+  explicit v4 compatibility.
 - `scripts/validate_contract_conformance.py`: deterministic analytics contract comparator.
 - `scripts/diff_object_graph.py`: normalized intended-versus-saved object-graph comparison.
 - `scripts/check_release.py`: dependency-free structure/content/release checks.
@@ -240,10 +240,10 @@ Run:
 python -m pip install -e ".[dev]"
 python -m ruff format --no-cache --check scripts tests
 python -m ruff check --no-cache scripts tests
-python scripts/check_release.py --tag v5.2.0 --release-notes CHANGELOG.md
+python scripts/check_release.py --tag v6.0.0 --release-notes CHANGELOG.md
 python -m unittest discover -s tests -v
 python -m compileall -q scripts
-python scripts/build_skill_package.py --output dist/configure-gtm-v5.2.0.zip
+python scripts/build_skill_package.py --output dist/configure-gtm-v6.0.0.zip
 git diff --check
 ~~~
 

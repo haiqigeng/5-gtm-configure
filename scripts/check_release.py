@@ -11,7 +11,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SEMVER = re.compile(r"^v(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)$")
-CURRENT_RELEASE = "5.2.0"
+CURRENT_RELEASE = "6.0.0"
 REFERENCE_LAYERS = {
     "01-orientation": {
         "official-source-policy.md",
@@ -445,7 +445,7 @@ def check_content() -> list[str]:
             f"{label} reference missing contract: {term}" for term in terms if term not in text
         )
     deterministic_contracts = (
-        ("configuration schema validator", 'SCHEMA_VERSION = "4.0"', schema_validator),
+        ("configuration schema validator", 'SCHEMA_VERSION = "5.0"', schema_validator),
         ("configuration schema validator", "validate_document", schema_validator),
         ("configuration schema validator", "approved-input", schema_validator),
         ("object graph comparator", "normalize_graph", graph_diff),

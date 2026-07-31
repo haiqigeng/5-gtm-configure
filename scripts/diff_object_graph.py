@@ -56,9 +56,16 @@ def _canonical(
     parent_key: str | None = None,
     path: str = "$",
     parameter_array_mode: str | None = None,
+    parameter_object: bool = False,
 ) -> Any:
     if isinstance(value, dict):
-        parameter_type = value.get("type")
+        is_parameter = parameter_object or parent_key == "monitoringMetadata"
+        raw_parameter_type = value.get("type")
+        parameter_type = (
+            raw_parameter_type.casefold()
+            if is_parameter and isinstance(raw_parameter_type, str)
+            else raw_parameter_type
+        )
         output: dict[str, Any] = {}
         for key in sorted(value):
             child_mode = None
@@ -68,8 +75,11 @@ def _canonical(
                 child_mode = "keyed"
             elif key == "list" and parameter_type == "list":
                 child_mode = "ordered"
+            child = value[key]
+            if is_parameter and key == "type" and isinstance(child, str):
+                child = child.casefold()
             output[key] = _canonical(
-                value[key],
+                child,
                 parent_key=key,
                 path=f"{path}.{key}",
                 parameter_array_mode=child_mode,
@@ -96,6 +106,7 @@ def _canonical(
                 _canonical(
                     item,
                     path=f"{path}[{index}]",
+                    parameter_object=parameter_array_mode in {"keyed", "ordered"},
                 )
             )
         if parameter_array_mode == "keyed":

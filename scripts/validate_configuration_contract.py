@@ -10,7 +10,8 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
-SCHEMA_VERSION = "4.0"
+SCHEMA_VERSION = "5.0"
+LEGACY_SCHEMA_VERSIONS = {"4.0"}
 ROUTES = {"analytics", "media", "consent", "combined"}
 REQUIREMENT_KINDS = {"analytics", "media", "consent"}
 EVIDENCE_GRADES = {
@@ -59,17 +60,36 @@ IMPLEMENTATION_ONLY_REQUIREMENT_KEYS = {
     "adapter_fields",
 }
 SEMANTIC_FIELD_MAPS = {"parameters", "user_properties", "item_parameters"}
-HIGH_IMPACT_TYPE_KEYS = {
+V4_HIGH_IMPACT_TYPE_KEYS = {
     "zone",
     "environment",
     "destination",
     "destinationlink",
     "containersetting",
 }
+HIGH_IMPACT_TYPE_KEYS = {
+    *V4_HIGH_IMPACT_TYPE_KEYS,
+    "googletagconfiguration",
+    "template",
+}
+OBJECT_RESOURCE_FAMILIES = {
+    "built-in variable",
+    "container setting",
+    "destination",
+    "environment",
+    "folder",
+    "google tag configuration",
+    "tag",
+    "template",
+    "trigger",
+    "variable",
+    "workspace",
+    "zone",
+}
 
 
 class ContractValidationError(ValueError):
-    """Raised when a configuration contract violates the v4 authority boundary."""
+    """Raised when a configuration contract violates its declared authority boundary."""
 
 
 def _require_object(value: Any, path: str) -> dict[str, Any]:
@@ -184,13 +204,49 @@ def _validate_evidence(raw: Any, *, index: int) -> str:
     return grade
 
 
-def _is_high_impact(object_type: str) -> bool:
+def _is_high_impact(object_type: str, *, type_keys: set[str] = HIGH_IMPACT_TYPE_KEYS) -> bool:
     normalized = "".join(character for character in object_type.lower() if character.isalnum())
-    return normalized in HIGH_IMPACT_TYPE_KEYS or "customtemplatecode" in normalized
+    return normalized in type_keys or "customtemplatecode" in normalized
 
 
 def _normalize_identity_part(value: str) -> str:
     return " ".join(value.split()).casefold()
+
+
+def _validate_v4_object_action(raw: Any, *, index: int) -> None:
+    """Validate the historical v4 object-action rules without applying v5 tightening."""
+    path = f"$.implementation.objects[{index}]"
+    item = _require_object(raw, path)
+    action = _require_text(item.get("action"), f"{path}.action")
+    if action not in ACTIONS:
+        raise ContractValidationError(f"{path}.action has unsupported value {action!r}")
+    object_type = _require_text(item.get("object_type"), f"{path}.object_type")
+    _require_text(item.get("name"), f"{path}.name")
+    _require_text(item.get("justification"), f"{path}.justification")
+
+    evidence = _require_array(item.get("evidence"), f"{path}.evidence")
+    if not evidence:
+        raise ContractValidationError(f"{path}.evidence must not be empty")
+    for evidence_index, grade in enumerate(evidence):
+        value = _require_text(grade, f"{path}.evidence[{evidence_index}]")
+        if value not in EVIDENCE_GRADES:
+            raise ContractValidationError(
+                f"{path}.evidence[{evidence_index}] has unsupported value {value!r}"
+            )
+
+    if action in {"update", "rename", "pause", "unpause"} and "pre_change" not in item:
+        raise ContractValidationError(f"{path}.pre_change is required for {action}")
+    if action == "rename":
+        _require_text(item.get("new_name"), f"{path}.new_name")
+    if action == "remove" and item.get("destructive_authorization") is not True:
+        raise ContractValidationError(f"{path}.destructive_authorization must be true for remove")
+    if action in MUTATING_ACTIONS and _is_high_impact(
+        object_type, type_keys=V4_HIGH_IMPACT_TYPE_KEYS
+    ):
+        if item.get("explicit_authority") is not True:
+            raise ContractValidationError(
+                f"{path}.explicit_authority must be true for high-impact {object_type!r}"
+            )
 
 
 def _validate_object_action(
@@ -202,6 +258,11 @@ def _validate_object_action(
     if action not in ACTIONS:
         raise ContractValidationError(f"{path}.action has unsupported value {action!r}")
     object_type = _require_text(item.get("object_type"), f"{path}.object_type")
+    if object_type not in OBJECT_RESOURCE_FAMILIES:
+        supported = ", ".join(sorted(OBJECT_RESOURCE_FAMILIES))
+        raise ContractValidationError(
+            f"{path}.object_type must be a canonical GTM resource family: {supported}"
+        )
     name = _require_text(item.get("name"), f"{path}.name")
     _require_text(item.get("justification"), f"{path}.justification")
 
@@ -281,7 +342,7 @@ def _validate_object_action_conflicts(
 
 
 def validate_document(value: Any, *, allow_legacy: bool = False) -> dict[str, Any]:
-    """Validate a v4 document; optionally accept the legacy comparator shape."""
+    """Validate a v5 document; optionally accept v4 or the unversioned comparator shape."""
     contract = _require_object(value, "$")
     if "schema_version" not in contract:
         if not allow_legacy:
@@ -289,9 +350,16 @@ def validate_document(value: Any, *, allow_legacy: bool = False) -> dict[str, An
         _validate_legacy(contract)
         return contract
 
-    if contract.get("schema_version") != SCHEMA_VERSION:
+    schema_version = contract.get("schema_version")
+    is_legacy_v4 = schema_version in LEGACY_SCHEMA_VERSIONS
+    if schema_version != SCHEMA_VERSION and not (allow_legacy and is_legacy_v4):
+        if is_legacy_v4:
+            raise ContractValidationError(
+                f"$.schema_version {schema_version!r} is legacy; migrate to {SCHEMA_VERSION!r} "
+                "or rerun with --allow-legacy"
+            )
         raise ContractValidationError(
-            f"$.schema_version must be {SCHEMA_VERSION!r}, got {contract.get('schema_version')!r}"
+            f"$.schema_version must be {SCHEMA_VERSION!r}, got {schema_version!r}"
         )
     unexpected = sorted(set(contract) - TOP_LEVEL_KEYS)
     if unexpected:
@@ -346,10 +414,14 @@ def validate_document(value: Any, *, allow_legacy: bool = False) -> dict[str, An
     if container_type.lower() != "web":
         raise ContractValidationError("$.implementation.workspace.container_type must be 'web'")
     objects = _require_array(implementation.get("objects"), "$.implementation.objects")
-    object_action_records = []
-    for index, raw in enumerate(objects):
-        object_action_records.append(_validate_object_action(raw, index=index))
-    _validate_object_action_conflicts(object_action_records)
+    if is_legacy_v4:
+        for index, raw in enumerate(objects):
+            _validate_v4_object_action(raw, index=index)
+    else:
+        object_action_records = []
+        for index, raw in enumerate(objects):
+            object_action_records.append(_validate_object_action(raw, index=index))
+        _validate_object_action_conflicts(object_action_records)
 
     evidence = _require_array(contract["evidence"], "$.evidence")
     grades = {_validate_evidence(raw, index=index) for index, raw in enumerate(evidence)}
@@ -374,7 +446,7 @@ def load_contract(path: Path, *, allow_legacy: bool = False) -> dict[str, Any]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Validate a configure-gtm v4 contract.")
+    parser = argparse.ArgumentParser(description="Validate a configure-gtm v5 contract.")
     parser.add_argument("--contract", type=Path, required=True)
     parser.add_argument("--allow-legacy", action="store_true")
     args = parser.parse_args()

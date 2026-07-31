@@ -4,7 +4,7 @@
 
 - [Purpose and priority](#purpose-and-priority)
 - [Keep business and implementation decisions separate](#keep-business-and-implementation-decisions-separate)
-- [Use the versioned v4 contract](#use-the-versioned-v4-contract)
+- [Use the versioned v5 contract](#use-the-versioned-v5-contract)
 - [Use one concise record per requirement](#use-one-concise-record-per-requirement)
 - [Compact example](#compact-example)
 - [Retain critical provenance](#retain-critical-provenance)
@@ -44,9 +44,9 @@ Do not use implementation infrastructure to add or change an analytics payload. 
 folder references, consent settings, trigger references, and template mechanics are not payload
 enrichment, but each must serve the current configuration or a documented product constraint.
 
-## Use the versioned v4 contract
+## Use the versioned v5 contract
 
-When the map is normalized to JSON, use `schema_version: "4.0"` and keep these top-level sections:
+When the map is normalized to JSON, use `schema_version: "5.0"` and keep these top-level sections:
 
 | Section | Contents |
 | --- | --- |
@@ -69,9 +69,9 @@ Keep `workspace`, `tag_type`, `template`, `gtm_variable`, object IDs, fingerprin
 folder references, consent mechanics, and adapter fields under `implementation`. Do not mark them as
 approved collection semantics and do not make the conformance comparator skip arbitrary fields.
 
-Run `scripts/validate_configuration_contract.py` for a v4 JSON map. The analytics equality
-comparator accepts legacy v3 normalized inputs for compatibility, but every newly created v4 map
-must pass the strict versioned validator.
+Run `scripts/validate_configuration_contract.py` for a v5 JSON map. Use `--allow-legacy` only to
+read a previously produced v4 contract or an unversioned comparator input; never use compatibility
+mode to authorize new mutation. Every newly created map must use v5 and pass the strict validator.
 
 ## Use one concise record per requirement
 
@@ -101,7 +101,7 @@ Use this proportional shape; extend it only for real risk:
 
 ```json
 {
-  "schema_version": "4.0",
+  "schema_version": "5.0",
   "route": "analytics",
   "scope": {"included": ["REQ-12"], "reference_only": [], "excluded": []},
   "requirements": [{
@@ -204,7 +204,8 @@ Create the complete in-scope object graph before mutation. For each object recor
 
 - `create`, `update`, `rename`, `pause`, `unpause`, `reuse`, `untouched`, or explicitly
   authorized `remove`;
-- object type, intended name/folder, stable existing ID/path, and fingerprint when applicable;
+- canonical GTM resource family in `object_type`, intended name/folder, stable existing ID/path,
+  and fingerprint when applicable;
 - requirement or documented constraint that justifies it;
 - exact intended fields, references, consent route, and dependencies;
 - compatible consumers and relevant environment/hostname scope;
@@ -214,6 +215,11 @@ Create the complete in-scope object graph before mutation. For each object recor
 Represent each semantic GTM object once. Reject duplicate actions and contradictory combinations
 such as creating and updating the same type/name or renaming one object onto another claimed
 identity. Use stable object IDs as an additional identity when available.
+
+Use only these canonical `object_type` values: `tag`, `trigger`, `variable`, `built-in variable`,
+`folder`, `template`, `zone`, `environment`, `destination`, `google tag configuration`,
+`container setting`, or `workspace`. Record product, tag, trigger, variable, or template subtype in
+the intended fields rather than inventing another resource-family label.
 
 Support every mutation with `approved-input` or `official-current` evidence, as applicable.
 Existing-object actions also require `container-confirmed` evidence. A representative

@@ -89,7 +89,7 @@ Do not mutate from an informal prose summary. If the adapter cannot represent a 
 preserve the intended type/shape, stop that object and use another authorized adapter or mark the
 affected configuration `Blocked`.
 
-For analytics, use the strict v4 configuration-contract validation, normalized collection contract,
+For analytics, use the strict v5 configuration-contract validation, normalized collection contract,
 and zero-difference conformance result as adapter preconditions. Keep technical infrastructure fields
 separate so the adapter does not mistake a required GTM reference for an approved outgoing
 parameter.
@@ -107,7 +107,7 @@ For every adapter:
 7. Stop on a conflict or unexpected consumer rather than overwriting silently.
 
 When complete JSON is available, use `scripts/diff_object_graph.py` as a read-only comparison aid.
-Annotate every normalized record with its GTM resource family in `object_type`; do not reuse the raw
+Annotate every normalized record with its canonical GTM resource family in `object_type`; do not reuse the raw
 GTM `type` field for that annotation because tag, trigger, and variable type codes are material
 configuration and must remain comparable.
 Normalize only documented server metadata such as top-level fingerprints, paths, generated IDs, and

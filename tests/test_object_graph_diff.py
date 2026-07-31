@@ -65,6 +65,9 @@ class ObjectGraphDiffTest(unittest.TestCase):
         self.assertFalse(report["pass"])
         self.assertIn("type", str(report["object_differences"]))
 
+        saved["objects"][0]["type"] = "GAAWE"
+        self.assertFalse(compare_graphs(expected, saved)["pass"])
+
     def test_returned_ids_become_semantic_cross_object_references(self) -> None:
         graph = {
             "objects": [
@@ -129,6 +132,94 @@ class ObjectGraphDiffTest(unittest.TestCase):
         }
         with self.assertRaisesRegex(GraphError, "duplicate GTM Parameter key"):
             normalize_graph(graph)
+
+    def test_parameter_type_casing_is_normalized_before_map_comparison(self) -> None:
+        expected = {
+            "objects": [
+                {
+                    "object_type": "tag",
+                    "name": "Purchase",
+                    "parameter": [
+                        {
+                            "type": "MAP",
+                            "key": "eventSettingsTable",
+                            "map": [
+                                {"type": "TEMPLATE", "key": "value", "value": "{{DLV - value}}"},
+                                {
+                                    "type": "TEMPLATE",
+                                    "key": "currency",
+                                    "value": "{{DLV - currency}}",
+                                },
+                            ],
+                        }
+                    ],
+                    "monitoringMetadata": {
+                        "type": "MAP",
+                        "map": [
+                            {"type": "TEMPLATE", "key": "status", "value": "enabled"},
+                            {"type": "BOOLEAN", "key": "includeTagName", "value": "true"},
+                        ],
+                    },
+                }
+            ]
+        }
+        saved = {
+            "objects": [
+                {
+                    "object_type": "tag",
+                    "name": "Purchase",
+                    "parameter": [
+                        {
+                            "type": "map",
+                            "key": "eventSettingsTable",
+                            "map": [
+                                {
+                                    "type": "template",
+                                    "key": "currency",
+                                    "value": "{{DLV - currency}}",
+                                },
+                                {"type": "template", "key": "value", "value": "{{DLV - value}}"},
+                            ],
+                        }
+                    ],
+                    "monitoringMetadata": {
+                        "type": "map",
+                        "map": [
+                            {
+                                "type": "boolean",
+                                "key": "includeTagName",
+                                "value": "true",
+                            },
+                            {"type": "template", "key": "status", "value": "enabled"},
+                        ],
+                    },
+                }
+            ]
+        }
+        self.assertTrue(compare_graphs(expected, saved)["pass"])
+
+    def test_uppercase_list_parameter_remains_ordered(self) -> None:
+        graph = {
+            "objects": [
+                {
+                    "object_type": "tag",
+                    "name": "Ordered list",
+                    "parameter": [
+                        {
+                            "type": "LIST",
+                            "key": "items",
+                            "list": [
+                                {"type": "TEMPLATE", "key": "ignored", "value": "first"},
+                                {"type": "TEMPLATE", "key": "ignored", "value": "second"},
+                            ],
+                        }
+                    ],
+                }
+            ]
+        }
+        reordered = json.loads(json.dumps(graph))
+        reordered["objects"][0]["parameter"][0]["list"].reverse()
+        self.assertFalse(compare_graphs(graph, reordered)["pass"])
 
 
 if __name__ == "__main__":

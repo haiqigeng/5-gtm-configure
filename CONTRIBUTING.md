@@ -10,7 +10,7 @@ Before opening a pull request, run:
 python -m pip install -e ".[dev]"
 python -m ruff format --no-cache --check scripts tests
 python -m ruff check --no-cache scripts tests
-python scripts/check_release.py --tag v5.2.0 --release-notes CHANGELOG.md
+python scripts/check_release.py --tag v6.0.0 --release-notes CHANGELOG.md
 python -m unittest discover -s tests -v
 python -m compileall -q scripts
 python scripts/build_skill_package.py --output dist/configure-gtm-test.zip

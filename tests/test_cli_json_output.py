@@ -16,7 +16,7 @@ SCRIPTS = ROOT / "scripts"
 def strict_contract() -> dict:
     name = "GA4 - Event - café ☕"
     return {
-        "schema_version": "4.0",
+        "schema_version": "5.0",
         "route": "analytics",
         "scope": {"included": ["REQ-☕"], "reference_only": [], "excluded": []},
         "requirements": [

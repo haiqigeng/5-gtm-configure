@@ -1,0 +1,407 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/haiqigeng/gtm-configure/schemas/configuration-run.schema.json",
+  "title": "configure-gtm configuration run",
+  "description": "Adapter-neutral saved-state, recovery, and recette handoff contract for one client-side GTM configuration run.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "run",
+    "requirements",
+    "object_changes",
+    "payload_mappings",
+    "consent_routes",
+    "saved_readback",
+    "official_sources",
+    "external_dependencies",
+    "recovery_boundary",
+    "idempotency",
+    "recette_handoff"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "run": {
+      "type": "object",
+      "required": [
+        "id",
+        "phase",
+        "status",
+        "started_at",
+        "updated_at",
+        "target",
+        "contract",
+        "publication"
+      ],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "phase": {"enum": ["preflight", "mutation", "readback", "complete"]},
+        "status": {
+          "enum": ["In progress", "Configured", "Partial", "Blocked", "Deferred"]
+        },
+        "started_at": {"type": "string", "format": "date-time"},
+        "updated_at": {"type": "string", "format": "date-time"},
+        "target": {
+          "type": "object",
+          "required": ["account_id", "container_id", "workspace_id", "container_type"],
+          "properties": {
+            "account_id": {"type": "string", "minLength": 1},
+            "container_id": {"type": "string", "minLength": 1},
+            "workspace_id": {"type": "string", "minLength": 1},
+            "container_type": {"const": "web"}
+          }
+        },
+        "contract": {
+          "type": "object",
+          "required": ["schema_version", "requirement_ids", "source_locator", "fingerprint"],
+          "properties": {
+            "schema_version": {"type": "string", "minLength": 1},
+            "requirement_ids": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {"type": "string", "minLength": 1}
+            },
+            "source_locator": {"type": "string", "minLength": 1},
+            "fingerprint": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+          }
+        },
+        "publication": {
+          "type": "object",
+          "required": ["performed", "version_created"],
+          "properties": {
+            "performed": {"const": false},
+            "version_created": {"const": false}
+          }
+        }
+      }
+    },
+    "requirements": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "source_locator",
+          "source_event",
+          "destination",
+          "status",
+          "object_keys"
+        ],
+        "properties": {
+          "id": {"type": "string", "minLength": 1},
+          "kind": {"enum": ["analytics", "media", "consent"]},
+          "source_locator": {"type": "string", "minLength": 1},
+          "source_event": {"type": ["string", "null"]},
+          "destination": {"type": ["string", "null"]},
+          "status": {
+            "enum": ["In progress", "Configured", "Partial", "Blocked", "Deferred"]
+          },
+          "object_keys": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {"type": "string", "minLength": 1}
+          }
+        }
+      }
+    },
+    "object_changes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "operation_id",
+          "requirement_ids",
+          "action",
+          "object_type",
+          "name",
+          "object_key",
+          "dependencies",
+          "state",
+          "evidence",
+          "journal"
+        ],
+        "properties": {
+          "operation_id": {"type": "string", "minLength": 1},
+          "requirement_ids": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {"type": "string", "minLength": 1}
+          },
+          "action": {
+            "enum": [
+              "create",
+              "update",
+              "replace",
+              "rename",
+              "pause",
+              "unpause",
+              "reuse",
+              "untouched",
+              "remove"
+            ]
+          },
+          "object_type": {
+            "enum": [
+              "built-in variable",
+              "container setting",
+              "destination",
+              "environment",
+              "folder",
+              "google tag configuration",
+              "tag",
+              "template",
+              "trigger",
+              "variable",
+              "workspace",
+              "zone"
+            ]
+          },
+          "name": {"type": "string", "minLength": 1},
+          "object_key": {"type": "string", "minLength": 1},
+          "object_id": {"type": "string", "minLength": 1},
+          "dependencies": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {"type": "string", "minLength": 1}
+          },
+          "intended": {"type": ["object", "null"]},
+          "pre_change": {"type": "object"},
+          "replacement_reason": {"type": "string", "minLength": 1},
+          "destructive_authorization": {"type": "boolean"},
+          "permission_delta": {
+            "type": "object",
+            "required": ["added", "removed", "evidence_locator"],
+            "properties": {
+              "added": {"type": "array", "uniqueItems": true, "items": {"type": "string"}},
+              "removed": {"type": "array", "uniqueItems": true, "items": {"type": "string"}},
+              "evidence_locator": {"type": "string", "minLength": 1}
+            }
+          },
+          "state": {
+            "enum": [
+              "planned",
+              "in_progress",
+              "saved",
+              "verified",
+              "failed",
+              "uncertain",
+              "skipped"
+            ]
+          },
+          "evidence": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {"type": "string", "minLength": 1}
+          },
+          "journal": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["state", "at", "note"],
+              "properties": {
+                "state": {
+                  "enum": [
+                    "planned",
+                    "in_progress",
+                    "saved",
+                    "verified",
+                    "failed",
+                    "uncertain",
+                    "skipped"
+                  ]
+                },
+                "at": {"type": "string", "format": "date-time"},
+                "note": {"type": "string", "minLength": 1}
+              }
+            }
+          },
+          "result": {"type": "object"},
+          "error": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "payload_mappings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "requirement_id",
+          "destination_field",
+          "source",
+          "gtm_resolution",
+          "template_field",
+          "status",
+          "provenance_locator"
+        ],
+        "properties": {
+          "requirement_id": {"type": "string", "minLength": 1},
+          "destination_field": {"type": "string", "minLength": 1},
+          "source": {"type": ["string", "null"]},
+          "gtm_resolution": {"type": ["string", "null"]},
+          "template_field": {"type": ["string", "null"]},
+          "status": {
+            "enum": ["pending", "mapped", "intentionally-omitted", "external", "blocked"]
+          },
+          "provenance_locator": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "consent_routes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "requirement_id",
+          "product",
+          "mode",
+          "mechanism",
+          "normal_trigger",
+          "blocking_triggers",
+          "unknown_behavior",
+          "evidence"
+        ],
+        "properties": {
+          "requirement_id": {"type": "string", "minLength": 1},
+          "product": {"type": "string", "minLength": 1},
+          "mode": {"enum": ["strict-basic", "advanced-native"]},
+          "mechanism": {"enum": ["blocking-trigger", "grant-event", "native-advanced"]},
+          "normal_trigger": {"type": "string", "minLength": 1},
+          "blocking_triggers": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {"type": "string", "minLength": 1}
+          },
+          "unknown_behavior": {"type": "string", "minLength": 1},
+          "evidence": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {"type": "string", "minLength": 1}
+          }
+        }
+      }
+    },
+    "saved_readback": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "operation_id",
+          "object_key",
+          "object_id",
+          "fingerprint",
+          "verified",
+          "differences",
+          "verified_at"
+        ],
+        "properties": {
+          "operation_id": {"type": "string", "minLength": 1},
+          "object_key": {"type": "string", "minLength": 1},
+          "object_id": {"type": ["string", "null"]},
+          "fingerprint": {"type": ["string", "null"]},
+          "verified": {"const": true},
+          "differences": {"type": "array", "maxItems": 0},
+          "verified_at": {"type": "string", "format": "date-time"}
+        }
+      }
+    },
+    "official_sources": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["url", "title", "access_date", "supports"],
+        "properties": {
+          "url": {"type": "string", "format": "uri", "pattern": "^https://"},
+          "title": {"type": "string", "minLength": 1},
+          "access_date": {"type": "string", "format": "date"},
+          "supports": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {"type": "string", "minLength": 1}
+          }
+        }
+      }
+    },
+    "external_dependencies": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "requirement_ids", "owner", "action", "status"],
+        "properties": {
+          "id": {"type": "string", "minLength": 1},
+          "requirement_ids": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {"type": "string", "minLength": 1}
+          },
+          "owner": {"type": "string", "minLength": 1},
+          "action": {"type": "string", "minLength": 1},
+          "status": {"enum": ["open", "resolved", "deferred"]}
+        }
+      }
+    },
+    "recovery_boundary": {
+      "oneOf": [
+        {"type": "null"},
+        {
+          "type": "object",
+          "required": ["reason", "last_verified_operation", "unsafe_operations", "next_action"],
+          "properties": {
+            "reason": {"type": "string", "minLength": 1},
+            "last_verified_operation": {"type": ["string", "null"]},
+            "unsafe_operations": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": {"type": "string", "minLength": 1}
+            },
+            "next_action": {"type": "string", "minLength": 1}
+          }
+        }
+      ]
+    },
+    "idempotency": {
+      "type": "object",
+      "required": ["checked", "remaining_actions"],
+      "properties": {
+        "checked": {"type": "boolean"},
+        "remaining_actions": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "recette_handoff": {
+      "type": "object",
+      "required": [
+        "manifest_version",
+        "requirements",
+        "runtime_validation_performed",
+        "publication_performed"
+      ],
+      "properties": {
+        "manifest_version": {"const": "1.0"},
+        "requirements": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "expected_tags", "expected_consent_states", "cues"],
+            "properties": {
+              "id": {"type": "string", "minLength": 1},
+              "expected_tags": {"type": "array", "items": {"type": "string"}},
+              "expected_consent_states": {"type": "array", "items": {"type": "string"}},
+              "cues": {"type": "array", "items": {"type": "string"}}
+            }
+          }
+        },
+        "runtime_validation_performed": {"const": false},
+        "publication_performed": {"const": false}
+      }
+    }
+  }
+}

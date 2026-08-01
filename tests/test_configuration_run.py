@@ -1,0 +1,324 @@
+from __future__ import annotations
+
+import json
+import subprocess
+import sys
+import tempfile
+import unittest
+from copy import deepcopy
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "scripts"))
+
+from configuration_run import (  # noqa: E402
+    RunValidationError,
+    checkpoint_operation,
+    create_from_contract,
+    inspect_document,
+    render_markdown,
+    reopen_failed_operation,
+    validate_document,
+)
+
+
+def contract() -> dict:
+    return {
+        "schema_version": "5.0",
+        "route": "analytics",
+        "scope": {
+            "included": ["TP::Events::12::generate_lead"],
+            "reference_only": [],
+            "excluded": [],
+        },
+        "requirements": [
+            {
+                "id": "TP::Events::12::generate_lead",
+                "authority": {
+                    "grade": "approved-input",
+                    "locator": "Tracking Plan / Events / row 12",
+                },
+                "event_name": "generate_lead",
+                "source_event": "form_success",
+                "parameters": {
+                    "method": {
+                        "source": "event.method",
+                        "provenance": {
+                            "grade": "approved-input",
+                            "locator": "Tracking Plan / Events / row 12 / method",
+                        },
+                    }
+                },
+            }
+        ],
+        "implementation": {
+            "workspace": {
+                "account_id": "1",
+                "container_id": "2",
+                "id": "3",
+                "container_type": "web",
+            },
+            "objects": [
+                {
+                    "action": "create",
+                    "object_type": "tag",
+                    "name": "GA4 - Event - generate_lead",
+                    "requirement_ids": ["TP::Events::12::generate_lead"],
+                    "justification": "Implements the approved event.",
+                    "evidence": [
+                        "approved-input",
+                        "official-current",
+                        "container-confirmed",
+                    ],
+                    "intended": {
+                        "object_type": "tag",
+                        "name": "GA4 - Event - generate_lead",
+                        "type": "gaawe",
+                    },
+                }
+            ],
+        },
+        "evidence": [
+            {
+                "grade": "official-current",
+                "locator": "GA4 event schema",
+                "url": "https://developers.google.com/example",
+                "title": "GA4 event schema",
+                "access_date": "2026-08-01",
+            },
+            {"grade": "container-confirmed", "locator": "Workspace stable IDs"},
+        ],
+        "external_dependencies": ["Publish only after separate recette and approval."],
+    }
+
+
+def run_document() -> dict:
+    return create_from_contract(
+        contract(),
+        run_id="RUN-001",
+        source_locator="Tracking Plan / Events",
+        timestamp="2026-08-01T10:00:00Z",
+    )
+
+
+class ConfigurationRunTest(unittest.TestCase):
+    def test_contract_ingestion_preserves_stable_requirement_identity(self) -> None:
+        document = run_document()
+        requirement_id = "TP::Events::12::generate_lead"
+        self.assertEqual(document["run"]["contract"]["requirement_ids"], [requirement_id])
+        self.assertEqual(document["requirements"][0]["id"], requirement_id)
+        self.assertEqual(document["object_changes"][0]["requirement_ids"], [requirement_id])
+        self.assertTrue(document["run"]["contract"]["fingerprint"].startswith("sha256:"))
+
+    def test_multi_requirement_contract_requires_explicit_object_links(self) -> None:
+        value = contract()
+        second = deepcopy(value["requirements"][0])
+        second["id"] = "TP::Events::13::sign_up"
+        second["authority"]["locator"] = "Tracking Plan / Events / row 13"
+        value["requirements"].append(second)
+        value["scope"]["included"].append(second["id"])
+        del value["implementation"]["objects"][0]["requirement_ids"]
+        with self.assertRaisesRegex(RunValidationError, "multi-requirement"):
+            create_from_contract(
+                value,
+                run_id="RUN-002",
+                source_locator="Tracking Plan / Events",
+                timestamp="2026-08-01T10:00:00Z",
+            )
+
+    def test_canonical_object_dependencies_become_operation_ids(self) -> None:
+        value = contract()
+        value["implementation"]["objects"].insert(
+            0,
+            {
+                "action": "create",
+                "object_type": "trigger",
+                "name": "CE - form_success",
+                "requirement_ids": ["TP::Events::12::generate_lead"],
+                "justification": "Implements the approved source event.",
+                "evidence": ["approved-input", "container-confirmed"],
+                "intended": {"object_type": "trigger", "name": "CE - form_success"},
+            },
+        )
+        value["implementation"]["objects"][1]["dependencies"] = ["trigger::CE - form_success"]
+        document = create_from_contract(
+            value,
+            run_id="RUN-DEPS",
+            source_locator="Tracking Plan / Events",
+            timestamp="2026-08-01T10:00:00Z",
+        )
+        self.assertEqual(document["object_changes"][1]["dependencies"], ["OP-001"])
+
+        invalid = contract()
+        invalid["implementation"]["objects"][0]["dependencies"] = ["trigger::Missing"]
+        with self.assertRaisesRegex(RunValidationError, "unknown canonical object keys"):
+            create_from_contract(
+                invalid,
+                run_id="RUN-BAD-DEPS",
+                source_locator="Tracking Plan / Events",
+                timestamp="2026-08-01T10:00:00Z",
+            )
+
+    def test_checkpoint_requires_readback_proof_and_exposes_resume_state(self) -> None:
+        document = run_document()
+        document = checkpoint_operation(
+            document,
+            operation_id="OP-001",
+            state="in_progress",
+            note="Starting mutation.",
+            timestamp="2026-08-01T10:01:00Z",
+        )
+        self.assertFalse(inspect_document(document)["resumable"])
+
+        with self.assertRaisesRegex(RunValidationError, "passing saved-readback"):
+            checkpoint_operation(
+                document,
+                operation_id="OP-001",
+                state="verified",
+                note="Unproven claim.",
+                timestamp="2026-08-01T10:02:00Z",
+                result={"object_id": "9", "fingerprint": "abc"},
+            )
+
+        document = checkpoint_operation(
+            document,
+            operation_id="OP-001",
+            state="verified",
+            note="Authoritative readback matched.",
+            timestamp="2026-08-01T10:02:00Z",
+            result={"object_id": "9", "fingerprint": "abc"},
+            comparison={"pass": True},
+        )
+        self.assertTrue(inspect_document(document)["resumable"])
+        self.assertEqual(document["saved_readback"][0]["operation_id"], "OP-001")
+
+    def test_known_failed_operation_requires_explicit_reopen_before_retry(self) -> None:
+        document = checkpoint_operation(
+            run_document(),
+            operation_id="OP-001",
+            state="failed",
+            note="Authentication expired before any write.",
+            timestamp="2026-08-01T10:01:00Z",
+            error="authentication expired",
+        )
+        self.assertEqual(inspect_document(document)["ready_operations"], [])
+        document = reopen_failed_operation(
+            document,
+            operation_id="OP-001",
+            note="Authentication renewed and target identity revalidated.",
+            timestamp="2026-08-01T10:02:00Z",
+        )
+        self.assertEqual(inspect_document(document)["ready_operations"], ["OP-001"])
+        self.assertNotIn("error", document["object_changes"][0])
+
+        with self.assertRaisesRegex(RunValidationError, "only a failed"):
+            reopen_failed_operation(
+                document,
+                operation_id="OP-001",
+                note="No second reopen.",
+                timestamp="2026-08-01T10:03:00Z",
+            )
+
+    def test_configured_requires_complete_readback_and_idempotency(self) -> None:
+        document = run_document()
+        document = checkpoint_operation(
+            document,
+            operation_id="OP-001",
+            state="verified",
+            note="Existing state matched exactly.",
+            timestamp="2026-08-01T10:02:00Z",
+            result={"object_id": "9", "fingerprint": "abc"},
+            comparison={"pass": True},
+        )
+        document["run"]["phase"] = "complete"
+        document["run"]["status"] = "Configured"
+        document["requirements"][0]["status"] = "Configured"
+        document["idempotency"] = {"checked": True, "remaining_actions": []}
+        self.assertEqual(validate_document(document)["run"]["status"], "Configured")
+
+        invalid = deepcopy(document)
+        invalid["saved_readback"] = []
+        with self.assertRaisesRegex(RunValidationError, "lacks verified readback"):
+            validate_document(invalid)
+
+    def test_strict_basic_grant_event_cannot_be_double_gated(self) -> None:
+        document = run_document()
+        document["consent_routes"] = [
+            {
+                "requirement_id": "TP::Events::12::generate_lead",
+                "product": "GA4",
+                "mode": "strict-basic",
+                "mechanism": "grant-event",
+                "normal_trigger": "Didomi - analytics vendor granted",
+                "blocking_triggers": ["Block - Didomi - analytics denied"],
+                "unknown_behavior": "block",
+                "evidence": ["official-current", "container-confirmed"],
+            }
+        ]
+        with self.assertRaisesRegex(RunValidationError, "cannot combine"):
+            validate_document(document)
+
+    def test_template_mutation_requires_permission_delta(self) -> None:
+        document = run_document()
+        item = document["object_changes"][0]
+        item["object_type"] = "template"
+        item["name"] = "Vendor template"
+        item["object_key"] = "template::Vendor template"
+        with self.assertRaisesRegex(RunValidationError, "permission_delta"):
+            validate_document(document)
+        item["permission_delta"] = {
+            "added": ["inject_script:https://vendor.example"],
+            "removed": [],
+            "evidence_locator": "Installed template permission diff",
+        }
+        self.assertEqual(validate_document(document)["schema_version"], "1.0")
+
+    def test_renderer_has_preflight_human_and_machine_layers(self) -> None:
+        rendered = render_markdown(run_document(), embed_machine=True)
+        self.assertIn("# Pre-mutation impact preview", rendered)
+        self.assertIn("## Executive summary", rendered)
+        self.assertIn("## Analyst and developer change log", rendered)
+        self.assertIn("## Machine handoff", rendered)
+        self.assertIn('"schema_version": "1.0"', rendered)
+        self.assertIn("routine in-scope writes may proceed", rendered)
+
+    def test_cli_init_validate_inspect_and_render(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            contract_path = root / "contract.json"
+            run_path = root / "run.json"
+            handoff_path = root / "handoff.md"
+            contract_path.write_text(json.dumps(contract()), encoding="utf-8")
+            commands = [
+                [
+                    "init",
+                    "--contract",
+                    str(contract_path),
+                    "--run-id",
+                    "RUN-CLI",
+                    "--source-locator",
+                    "Tracking Plan / Events",
+                    "--timestamp",
+                    "2026-08-01T10:00:00Z",
+                    "--output",
+                    str(run_path),
+                ],
+                ["validate", "--run", str(run_path)],
+                ["inspect", "--run", str(run_path)],
+                ["render", "--run", str(run_path), "--output", str(handoff_path)],
+            ]
+            for command in commands:
+                result = subprocess.run(
+                    [sys.executable, str(ROOT / "scripts" / "configuration_run.py"), *command],
+                    cwd=ROOT,
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertTrue(handoff_path.exists())
+            self.assertIn("Executive summary", handoff_path.read_text(encoding="utf-8"))
+
+
+if __name__ == "__main__":
+    unittest.main()

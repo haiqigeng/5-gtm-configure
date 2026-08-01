@@ -23,6 +23,7 @@ EVIDENCE_GRADES = {
 ACTIONS = {
     "create",
     "update",
+    "replace",
     "rename",
     "pause",
     "unpause",
@@ -30,7 +31,8 @@ ACTIONS = {
     "untouched",
     "remove",
 }
-DELTA_ACTIONS = {"update", "rename", "pause", "unpause", "remove"}
+LEGACY_ACTIONS = ACTIONS - {"replace"}
+DELTA_ACTIONS = {"update", "replace", "rename", "pause", "unpause", "remove"}
 MUTATING_ACTIONS = {"create", *DELTA_ACTIONS}
 EXISTING_OBJECT_ACTIONS = {"reuse", "untouched", *DELTA_ACTIONS}
 MUTATION_AUTHORITY_GRADES = {"approved-input", "official-current"}
@@ -108,11 +110,6 @@ def _require_text(value: Any, path: str) -> str:
     if not isinstance(value, str) or not value.strip():
         raise ContractValidationError(f"{path} must be a non-empty string")
     return value.strip()
-
-
-def _validate_legacy(value: dict[str, Any]) -> None:
-    _require_object(value.get("scope"), "$.scope")
-    _require_array(value.get("requirements"), "$.requirements")
 
 
 def _validate_provenance(
@@ -218,7 +215,7 @@ def _validate_v4_object_action(raw: Any, *, index: int) -> None:
     path = f"$.implementation.objects[{index}]"
     item = _require_object(raw, path)
     action = _require_text(item.get("action"), f"{path}.action")
-    if action not in ACTIONS:
+    if action not in LEGACY_ACTIONS:
         raise ContractValidationError(f"{path}.action has unsupported value {action!r}")
     object_type = _require_text(item.get("object_type"), f"{path}.object_type")
     _require_text(item.get("name"), f"{path}.name")
@@ -250,7 +247,10 @@ def _validate_v4_object_action(raw: Any, *, index: int) -> None:
 
 
 def _validate_object_action(
-    raw: Any, *, index: int
+    raw: Any,
+    *,
+    index: int,
+    requirement_ids: set[str],
 ) -> tuple[str, str, str, str | None, str | None]:
     path = f"$.implementation.objects[{index}]"
     item = _require_object(raw, path)
@@ -265,6 +265,17 @@ def _validate_object_action(
         )
     name = _require_text(item.get("name"), f"{path}.name")
     _require_text(item.get("justification"), f"{path}.justification")
+
+    if "requirement_ids" in item:
+        linked_ids = _require_array(item["requirement_ids"], f"{path}.requirement_ids")
+        normalized_ids = {_require_text(value, f"{path}.requirement_ids[]") for value in linked_ids}
+        if len(normalized_ids) != len(linked_ids):
+            raise ContractValidationError(f"{path}.requirement_ids contains duplicate IDs")
+        unknown_ids = sorted(normalized_ids - requirement_ids)
+        if unknown_ids:
+            raise ContractValidationError(
+                f"{path}.requirement_ids contains unknown requirement IDs: {', '.join(unknown_ids)}"
+            )
 
     evidence = _require_array(item.get("evidence"), f"{path}.evidence")
     if not evidence:
@@ -301,8 +312,13 @@ def _validate_object_action(
         new_name = _require_text(item.get("new_name"), f"{path}.new_name")
         if _normalize_identity_part(new_name) == _normalize_identity_part(name):
             raise ContractValidationError(f"{path}.new_name must differ from the current name")
-    if action == "remove" and item.get("destructive_authorization") is not True:
-        raise ContractValidationError(f"{path}.destructive_authorization must be true for remove")
+    if action in {"remove", "replace"} and item.get("destructive_authorization") is not True:
+        raise ContractValidationError(f"{path}.destructive_authorization must be true for {action}")
+    if action == "replace":
+        _require_text(item.get("replacement_reason"), f"{path}.replacement_reason")
+        intended = _require_object(item.get("intended"), f"{path}.intended")
+        if not intended:
+            raise ContractValidationError(f"{path}.intended must not be empty for replace")
     if action in {"create", "update", "rename", "pause", "unpause", "remove"} and _is_high_impact(
         object_type
     ):
@@ -313,6 +329,8 @@ def _validate_object_action(
     object_id: str | None = None
     if "object_id" in item:
         object_id = _require_text(item["object_id"], f"{path}.object_id")
+    if action == "replace" and object_id is None:
+        raise ContractValidationError(f"{path}.object_id is required for replace")
     return action, object_type, name, object_id, new_name
 
 
@@ -341,14 +359,62 @@ def _validate_object_action_conflicts(
             claimed[identity] = (index, action)
 
 
+def _validate_object_dependencies(objects: list[Any]) -> None:
+    """Require dependency edges to use stable canonical object keys."""
+    keys: list[str] = []
+    for index, raw in enumerate(objects):
+        path = f"$.implementation.objects[{index}]"
+        item = _require_object(raw, path)
+        object_type = _require_text(item.get("object_type"), f"{path}.object_type")
+        name = _require_text(item.get("name"), f"{path}.name")
+        keys.append(f"{object_type}::{name}")
+
+    known = set(keys)
+    dependency_map: dict[str, list[str]] = {}
+    for index, raw in enumerate(objects):
+        path = f"$.implementation.objects[{index}]"
+        item = _require_object(raw, path)
+        dependencies = _require_array(item.get("dependencies", []), f"{path}.dependencies")
+        normalized = [_require_text(value, f"{path}.dependencies[]") for value in dependencies]
+        if len(set(normalized)) != len(normalized):
+            raise ContractValidationError(f"{path}.dependencies contains duplicate keys")
+        object_key = keys[index]
+        if object_key in normalized:
+            raise ContractValidationError(f"{path}.dependencies cannot contain its own object key")
+        unknown = sorted(set(normalized) - known)
+        if unknown:
+            raise ContractValidationError(
+                f"{path}.dependencies contains unknown canonical object keys: " + ", ".join(unknown)
+            )
+        dependency_map[object_key] = normalized
+
+    visiting: set[str] = set()
+    visited: set[str] = set()
+
+    def visit(object_key: str) -> None:
+        if object_key in visiting:
+            raise ContractValidationError(
+                f"$.implementation.objects dependency cycle includes {object_key!r}"
+            )
+        if object_key in visited:
+            return
+        visiting.add(object_key)
+        for dependency in dependency_map[object_key]:
+            visit(dependency)
+        visiting.remove(object_key)
+        visited.add(object_key)
+
+    for object_key in keys:
+        visit(object_key)
+
+
 def validate_document(value: Any, *, allow_legacy: bool = False) -> dict[str, Any]:
-    """Validate a v5 document; optionally accept v4 or the unversioned comparator shape."""
+    """Validate a v5 mutation contract; optionally accept an explicit historical v4 contract."""
     contract = _require_object(value, "$")
     if "schema_version" not in contract:
-        if not allow_legacy:
-            raise ContractValidationError("$.schema_version is required")
-        _validate_legacy(contract)
-        return contract
+        raise ContractValidationError(
+            "$.schema_version is required; unversioned comparison inputs cannot authorize mutation"
+        )
 
     schema_version = contract.get("schema_version")
     is_legacy_v4 = schema_version in LEGACY_SCHEMA_VERSIONS
@@ -420,8 +486,15 @@ def validate_document(value: Any, *, allow_legacy: bool = False) -> dict[str, An
     else:
         object_action_records = []
         for index, raw in enumerate(objects):
-            object_action_records.append(_validate_object_action(raw, index=index))
+            object_action_records.append(
+                _validate_object_action(
+                    raw,
+                    index=index,
+                    requirement_ids=requirement_ids,
+                )
+            )
         _validate_object_action_conflicts(object_action_records)
+        _validate_object_dependencies(objects)
 
     evidence = _require_array(contract["evidence"], "$.evidence")
     grades = {_validate_evidence(raw, index=index) for index, raw in enumerate(evidence)}

@@ -179,6 +179,43 @@ class ConfigurationContractSchemaTest(unittest.TestCase):
         item["pre_change"] = {"name": item["name"], "tagId": "81"}
         self.assertEqual(validate_document(contract)["schema_version"], "5.0")
 
+    def test_replace_is_one_governed_existing_object_action(self) -> None:
+        contract = valid_contract()
+        item = contract["implementation"]["objects"][0]
+        item.update(
+            {
+                "action": "replace",
+                "object_id": "81",
+                "pre_change": {"name": item["name"], "tagId": "81", "type": "legacy"},
+                "intended": {"name": item["name"], "type": "gaawe"},
+                "replacement_reason": "The adapter cannot express the approved type migration as an update.",
+                "destructive_authorization": True,
+            }
+        )
+        self.assertEqual(validate_document(contract)["schema_version"], "5.0")
+
+        for missing in (
+            "object_id",
+            "pre_change",
+            "intended",
+            "replacement_reason",
+            "destructive_authorization",
+        ):
+            with self.subTest(missing=missing):
+                invalid = deepcopy(contract)
+                del invalid["implementation"]["objects"][0][missing]
+                with self.assertRaises(ContractValidationError):
+                    validate_document(invalid)
+
+    def test_object_requirement_links_must_reference_included_ids(self) -> None:
+        contract = valid_contract()
+        contract["implementation"]["objects"][0]["requirement_ids"] = ["REQ-1"]
+        self.assertEqual(validate_document(contract)["schema_version"], "5.0")
+
+        contract["implementation"]["objects"][0]["requirement_ids"] = ["REQ-99"]
+        with self.assertRaisesRegex(ContractValidationError, "unknown requirement IDs"):
+            validate_document(contract)
+
     def test_duplicate_and_contradictory_object_actions_fail(self) -> None:
         duplicate_create = valid_contract()
         duplicate_create["implementation"]["objects"].append(
@@ -301,11 +338,12 @@ class ConfigurationContractSchemaTest(unittest.TestCase):
             "4.0",
         )
 
-    def test_unversioned_contract_is_only_allowed_explicitly(self) -> None:
+    def test_unversioned_input_never_enters_mutation_validator(self) -> None:
         legacy = {"scope": {"included": ["REQ-1"]}, "requirements": [{"id": "REQ-1"}]}
         with self.assertRaisesRegex(ContractValidationError, "schema_version"):
             validate_document(legacy)
-        self.assertEqual(validate_document(deepcopy(legacy), allow_legacy=True), legacy)
+        with self.assertRaisesRegex(ContractValidationError, "cannot authorize mutation"):
+            validate_document(deepcopy(legacy), allow_legacy=True)
 
 
 if __name__ == "__main__":

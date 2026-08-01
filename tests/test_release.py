@@ -17,7 +17,7 @@ class ReleaseChecksTest(unittest.TestCase):
                 sys.executable,
                 str(ROOT / "scripts" / "check_release.py"),
                 "--tag",
-                "v6.0.1",
+                "v6.1.0",
                 "--release-notes",
                 str(ROOT / "CHANGELOG.md"),
             ],
@@ -62,7 +62,7 @@ class ReleaseChecksTest(unittest.TestCase):
             notes = Path(temporary) / "CHANGELOG.md"
             notes.write_text(
                 "# Changelog\n\n"
-                "## 6.0.1\n\n"
+                "## 6.1.0\n\n"
                 "### Why This Release Matters\n\n"
                 "### What Changed\n\n"
                 "### What Users Should Do\n\n"
@@ -105,11 +105,14 @@ class ReleaseChecksTest(unittest.TestCase):
             ROOT / "SKILL.md",
             ROOT / "agents" / "openai.yaml",
             ROOT / "LICENSE",
+            ROOT / "scripts" / "adapter_runtime.py",
+            ROOT / "scripts" / "configuration_run.py",
             ROOT / "scripts" / "diff_object_graph.py",
             ROOT / "scripts" / "validate_configuration_contract.py",
             ROOT / "scripts" / "validate_contract_conformance.py",
         ]
         expected_sources.extend(sorted((ROOT / "references").rglob("*.md")))
+        expected_sources.extend(sorted((ROOT / "schemas").rglob("*.json")))
         expected_names = {
             (Path("configure-gtm") / source.relative_to(ROOT)).as_posix()
             for source in expected_sources

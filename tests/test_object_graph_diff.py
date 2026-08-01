@@ -9,6 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from diff_object_graph import (  # noqa: E402
+    BUILT_IN_TRIGGER_IDS,
     STANDALONE_PARAMETER_FIELDS,
     GraphError,
     compare_graphs,
@@ -147,6 +148,42 @@ class ObjectGraphDiffTest(unittest.TestCase):
         }
         with self.assertRaisesRegex(GraphError, "include the referenced object"):
             compare_graphs(graph, graph)
+
+    def test_builtin_trigger_ids_do_not_require_synthetic_trigger_records(self) -> None:
+        self.assertEqual(
+            BUILT_IN_TRIGGER_IDS,
+            {"2147479553", "2147479572", "2147479573"},
+        )
+        for trigger_id in BUILT_IN_TRIGGER_IDS:
+            with self.subTest(trigger_id=trigger_id):
+                graph = {
+                    "objects": [
+                        {
+                            "object_type": "tag",
+                            "name": "Built-in trigger consumer",
+                            "firingTriggerId": [trigger_id],
+                        }
+                    ]
+                }
+                normalized = normalize_graph(graph)["tag::Built-in trigger consumer"]
+                self.assertEqual(
+                    normalized["firingTriggerId"],
+                    [f"trigger::builtin::{trigger_id}"],
+                )
+                self.assertTrue(compare_graphs(graph, graph)["pass"])
+
+    def test_unknown_reserved_looking_trigger_still_requires_closure(self) -> None:
+        graph = {
+            "objects": [
+                {
+                    "object_type": "tag",
+                    "name": "Unknown trigger consumer",
+                    "firingTriggerId": ["2147479599"],
+                }
+            ]
+        }
+        with self.assertRaisesRegex(GraphError, "unresolved trigger reference"):
+            normalize_graph(graph)
 
     def test_duplicate_keyed_gtm_parameter_fails(self) -> None:
         graph = {

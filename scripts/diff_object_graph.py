@@ -38,6 +38,13 @@ ID_FIELDS = {
     "zoneId": "zone",
     "environmentId": "environment",
 }
+BUILT_IN_TRIGGER_IDS = frozenset(
+    {
+        "2147479553",  # All Pages
+        "2147479572",  # Consent Initialization - All Pages
+        "2147479573",  # Initialization - All Pages
+    }
+)
 REFERENCE_FIELDS = {
     "firingTriggerId": "triggerId",
     "blockingTriggerId": "triggerId",
@@ -173,6 +180,10 @@ def _reference_maps(
 ) -> tuple[dict[str, dict[str, str]], dict[str, set[str]]]:
     maps = {field: {} for field in ID_FIELDS}
     identities = {semantic_type: set() for semantic_type in ID_FIELDS.values()}
+    for trigger_id in BUILT_IN_TRIGGER_IDS:
+        semantic = f"trigger::builtin::{trigger_id}"
+        maps["triggerId"][trigger_id] = semantic
+        identities["trigger"].add(semantic)
     for index, item in enumerate(objects):
         object_type, name = _identity(item, f"$.objects[{index}]")
         normalized_type = _normalized_object_type(object_type)

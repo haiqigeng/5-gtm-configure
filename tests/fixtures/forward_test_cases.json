@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "description": "Anonymized raw-artifact cases for independent fresh-run evaluation of configure-gtm v5; expected controls are held separately from prompts.",
+  "description": "Anonymized raw-artifact cases for independent fresh-run evaluation of configure-gtm v6.1; expected controls are held separately from prompts.",
   "cases": [
     {
       "id": "ga4-extra-field-and-pii",

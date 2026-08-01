@@ -29,6 +29,12 @@ Record:
 - container/zone type restrictions, boundaries, and linked-container ownership when Zones are present;
 - update diff and changed permissions when an update is available.
 
+For every template create, update, or replacement, record a machine-readable permission delta in
+the configuration-run artifact: exact added permissions, removed permissions, and inspected
+version/repository locator. Surface new domains, script injection, network/API, storage, cookie,
+global-variable, or data-access permissions in the preflight view. This is an evidence summary, not
+a publisher reputation score or a claim that the template is safe.
+
 Do not add or update a template as an incidental side effect. Obtain approval when installation, update, or new permissions materially expand execution or data access.
 
 Treat template lifecycle actions separately:

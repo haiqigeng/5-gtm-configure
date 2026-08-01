@@ -1,5 +1,63 @@
 # Changelog
 
+## 6.1.0
+
+### Why This Release Matters
+
+- Makes operational execution recoverable and machine-handoff-ready without changing the skill's
+  client-side GTM north star or moving runtime recette/publication into configuration.
+- Fixes two real saved-graph/delta defects and reduces mandatory instruction load while preserving
+  the expert configuration controls.
+
+### What Changed
+
+- Add the versioned `configuration-run@1.0` schema and a dependency-free controller that ingests a
+  strict v5 configuration contract, preserves stable requirement IDs, resolves canonical object
+  dependencies, validates run state, writes atomic checkpoints, identifies safe resume operations,
+  explicitly reopens proved no-write failures, and renders executive, analyst/developer, and
+  machine/recette handoff layers.
+- Add an adapter-neutral safety state machine plus integration regressions for complete cursor
+  pagination, bounded rate-limit retries, authentication expiry, ambiguous writes, partial saves,
+  dependency stopping, durable resume, and idempotent reruns.
+- Add one governed `replace` action for an authorized same-identity migration that cannot be
+  expressed as an update. Require stable object ID, exact pre-change/intended state, replacement
+  reason, destructive authority, recovery, and readback instead of contradictory remove/create
+  rows.
+- Recognize GTM's three reserved web-container trigger IDs during saved-graph comparison without
+  requiring synthetic trigger records; continue rejecting every other unresolved reference.
+- Isolate unversioned historical comparison inputs inside the conformance comparator. The mutation
+  validator's `--allow-legacy` path now accepts only explicit schema-v4 contracts.
+- Add stable tracking-plan requirement identity, template permission-delta, preflight impact, and
+  grant-event-versus-blocking-trigger rules to the operational handoff.
+- Consolidate duplicated mandatory guidance and stage detailed references, reducing the core
+  runtime instruction load from 11,244 to below 7,500 words without adding a low-quality mode.
+
+### What Users Should Do
+
+- Continue producing strict schema-v5 configuration contracts. For a mutation run, initialize and
+  maintain `configuration-run.json`, checkpoint every write, and render the handoff from that same
+  validated artifact.
+- Resolve `in_progress` or `uncertain` operations by authoritative readback before retrying. Use
+  `replace` only under its explicit destructive/recovery authority.
+- Continue using ordinary MCP/API/UI operations; the adapter helper is directly usable by
+  programmatic adapters and defines the same state transitions for tool-mediated runs.
+
+### Validation
+
+- Add focused contract, graph, configuration-run, CLI, package, and fake-adapter integration
+  regressions for every new invariant and confirmed defect.
+- Pass the complete unit suite, release checker, Ruff format/lint, script compilation,
+  deterministic package comparison, and whitespace checks for `v6.1.0`.
+
+### Known Limits
+
+- The skill deliberately does not guess or parse arbitrary tracking-plan workbook layouts; it
+  ingests the normalized strict configuration contract and preserves its source locators/IDs.
+- MCP and signed-in UI calls remain orchestrated by the agent, so they follow rather than directly
+  instantiate the packaged Python adapter protocol.
+- Drift monitoring, scheduled mutation, multi-container rollout, runtime Preview/network recette,
+  publication, server-side GTM, CAPI, and browser/server deduplication remain outside this release.
+
 ## 6.0.1
 
 ### Why This Release Matters

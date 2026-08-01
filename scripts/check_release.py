@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import subprocess
 import sys
@@ -11,7 +12,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SEMVER = re.compile(r"^v(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)$")
-CURRENT_RELEASE = "6.0.1"
+CURRENT_RELEASE = "6.1.0"
 REFERENCE_LAYERS = {
     "01-orientation": {
         "official-source-policy.md",
@@ -24,6 +25,7 @@ REFERENCE_LAYERS = {
         "cmp-consent.md",
         "cmp-platform-patterns.md",
         "configuration-contract.md",
+        "configuration-run-and-resume.md",
         "conversion-linker-cross-domain.md",
         "data-contract-and-transformations.md",
         "first-party-data.md",
@@ -75,9 +77,14 @@ REQUIRED_FILES = (
     ".github/workflows/release.yml",
     "scripts/check_release.py",
     "scripts/build_skill_package.py",
+    "scripts/adapter_runtime.py",
+    "scripts/configuration_run.py",
     "scripts/diff_object_graph.py",
     "scripts/validate_configuration_contract.py",
     "scripts/validate_contract_conformance.py",
+    "schemas/configuration-run.schema.json",
+    "tests/test_adapter_runtime.py",
+    "tests/test_configuration_run.py",
     "tests/test_configuration_contract_schema.py",
     "tests/test_cli_json_output.py",
     "tests/test_release.py",
@@ -225,6 +232,7 @@ def check_content() -> list[str]:
     utility = read("references/01-orientation/utility-contract.md")
     sources = read("references/01-orientation/official-source-policy.md")
     configuration_contract = read("references/02-execution/configuration-contract.md")
+    configuration_run_reference = read("references/02-execution/configuration-run-and-resume.md")
     fidelity = read("references/02-execution/tracking-plan-fidelity-and-conformance.md")
     workflow = read("references/02-execution/implementation-workflow.md")
     analytics = read("references/02-execution/analytics-tags.md")
@@ -265,7 +273,13 @@ def check_content() -> list[str]:
     ci_workflow = read(".github/workflows/ci.yml")
     release_workflow = read(".github/workflows/release.yml")
     schema_validator = read("scripts/validate_configuration_contract.py")
+    run_controller = read("scripts/configuration_run.py")
+    adapter_runtime = read("scripts/adapter_runtime.py")
     graph_diff = read("scripts/diff_object_graph.py")
+    run_schema = read("schemas/configuration-run.schema.json")
+    compact_skill = " ".join(skill.split())
+    compact_utility = " ".join(utility.split())
+    compact_configuration_contract = " ".join(configuration_contract.split())
     required_terms = (
         "01 - Orientation",
         "02 - Execution",
@@ -273,12 +287,12 @@ def check_content() -> list[str]:
         "Operationally implement an approved analytics tracking plan",
         "saved, verified GTM object graph",
         "explicit media implementation brief",
-        "Default every in-scope analytics and media product to strict/basic CMP blocking",
-        "installed template version",
+        "Default every product to strict/basic CMP blocking",
+        "installed template",
         "Inspect only the objects related to the requested implementation",
-        "LUTs/RLTs for real deterministic",
+        "LUT/RLT for deterministic routing",
         "shallow folder",
-        "Do not create payload-eligibility CJS variables",
+        "payload-eligibility variables",
         "supported template whenever one exists",
         "greenfield or a delta",
         "configuration-contract.md",
@@ -287,7 +301,9 @@ def check_content() -> list[str]:
         "future extensions",
     )
     errors.extend(
-        f"SKILL.md missing required term: {term}" for term in required_terms if term not in skill
+        f"SKILL.md missing required term: {term}"
+        for term in required_terms
+        if term not in compact_skill
     )
     utility_terms = (
         "## Audience",
@@ -309,7 +325,7 @@ def check_content() -> list[str]:
     errors.extend(
         f"utility contract missing requirement authority: {term}"
         for term in contract_terms
-        if term not in utility
+        if term not in compact_utility
     )
     configuration_contract_terms = (
         "# Operational configuration map",
@@ -329,12 +345,29 @@ def check_content() -> list[str]:
         "pause",
         "unpause",
         "A repeated run against the final saved state",
-        "Do not add a Custom",
+        "payload-eligibility CJS",
     )
     errors.extend(
         f"configuration contract missing requirement: {term}"
         for term in configuration_contract_terms
-        if term not in configuration_contract
+        if term not in compact_configuration_contract
+    )
+    configuration_run_terms = (
+        "Use one durable run artifact",
+        "Preserve stable requirement identity",
+        "Render impact without adding a routine approval gate",
+        "Checkpoint every write boundary",
+        "Resume only from proved state",
+        "not retried automatically",
+        "Use replace as one governed action",
+        "Summarize template permission changes",
+        "Hand off in three layers",
+        "configuration-run@1.0",
+    )
+    errors.extend(
+        f"configuration-run reference missing requirement: {term}"
+        for term in configuration_run_terms
+        if term not in configuration_run_reference
     )
     source_terms = (
         "Never rely on memory",
@@ -350,7 +383,7 @@ def check_content() -> list[str]:
     errors.extend(
         f"official source policy missing contract: {term}"
         for term in source_terms
-        if term not in sources
+        if term.casefold() not in sources.casefold()
     )
     workflow_terms = (
         "# Operational implementation workflow",
@@ -448,10 +481,17 @@ def check_content() -> list[str]:
         ("configuration schema validator", 'SCHEMA_VERSION = "5.0"', schema_validator),
         ("configuration schema validator", "validate_document", schema_validator),
         ("configuration schema validator", "approved-input", schema_validator),
+        ("configuration-run controller", 'SCHEMA_VERSION = "1.0"', run_controller),
+        ("configuration-run controller", "checkpoint_operation", run_controller),
+        ("configuration-run controller", "reopen_failed_operation", run_controller),
+        ("configuration-run controller", "render_markdown", run_controller),
+        ("adapter state machine", "collect_paginated", adapter_runtime),
+        ("adapter state machine", "AmbiguousWriteError", adapter_runtime),
         ("object graph comparator", "normalize_graph", graph_diff),
         ("object graph comparator", "compare_graphs", graph_diff),
         ("object graph comparator", "extra_objects", graph_diff),
         ("object graph comparator", "REFERENCE_FIELDS", graph_diff),
+        ("object graph comparator", "BUILT_IN_TRIGGER_IDS", graph_diff),
         ("object graph comparator", "parentFolderId", graph_diff),
         ("object graph comparator", "setupTag", graph_diff),
     )
@@ -564,7 +604,7 @@ def check_content() -> list[str]:
     errors.extend(
         f"consent logic contract missing: {term}"
         for term in consent_logic_terms
-        if term not in combined_logic
+        if term.casefold() not in combined_logic.casefold()
     )
     forbidden_consent_logic = (
         "one narrow Boolean variable",
@@ -580,13 +620,12 @@ def check_content() -> list[str]:
         "## Configured means saved and verified",
         "## Operational statuses",
         "## Configuration judgement matrix",
-        "## Analytics conformance proof",
-        "## Consent configuration proof",
-        "## Concise handoff",
+        "## Analytics and consent proof",
+        "## Three-layer handoff",
         "Recette cues",
         "Payload map",
-        "Delta/change request",
-        "Browser event ID",
+        "Same-identity migration cannot be updated",
+        "browser event ID",
     )
     errors.extend(
         f"judgement reference missing section: {term}"
@@ -625,6 +664,9 @@ def check_content() -> list[str]:
         "Discover exact actions and pagination",
         "Do not guess a generic action alias",
         "Maintain a current-operation journal",
+        "scripts/adapter_runtime.py",
+        "in_progress",
+        "uncertain",
     )
     errors.extend(
         f"tool-adapter reference missing contract: {term}"
@@ -726,6 +768,45 @@ def check_content() -> list[str]:
     )
     if "Specification complete" in runtime_contract:
         errors.append("obsolete planning-only success status remains in runtime documentation")
+
+    misleading_legacy_phrases = (
+        "Use `--allow-legacy` only to read a previously produced v4 contract or an unversioned",
+        "v4 authority boundary",
+    )
+    errors.extend(
+        f"stale legacy-contract wording remains: {term}"
+        for term in misleading_legacy_phrases
+        if term in runtime_contract
+    )
+
+    mandatory_runtime_files = (
+        "SKILL.md",
+        "references/01-orientation/utility-contract.md",
+        "references/01-orientation/official-source-policy.md",
+        "references/02-execution/implementation-workflow.md",
+        "references/02-execution/configuration-contract.md",
+        "references/02-execution/configuration-run-and-resume.md",
+        "references/03-judgement/acceptance-and-handoff.md",
+    )
+    mandatory_words = sum(len(re.findall(r"\S+", read(path))) for path in mandatory_runtime_files)
+    if mandatory_words > 7500:
+        errors.append(f"mandatory runtime instruction load exceeds 7,500 words: {mandatory_words}")
+
+    try:
+        parsed_run_schema = json.loads(run_schema)
+    except json.JSONDecodeError as exc:
+        errors.append(f"configuration-run schema is invalid JSON: {exc}")
+    else:
+        if parsed_run_schema.get("properties", {}).get("schema_version", {}).get("const") != "1.0":
+            errors.append("configuration-run schema does not declare version 1.0")
+        if parsed_run_schema.get("additionalProperties") is not False:
+            errors.append("configuration-run schema must reject unknown top-level fields")
+
+    if "unversioned comparison inputs cannot authorize mutation" not in schema_validator:
+        errors.append("mutation validator does not isolate unversioned comparison input")
+    for built_in_id in ("2147479553", "2147479572", "2147479573"):
+        if built_in_id not in graph_diff:
+            errors.append(f"object graph comparator is missing built-in trigger {built_in_id}")
     return errors
 
 

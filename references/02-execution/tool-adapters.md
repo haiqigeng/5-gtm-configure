@@ -114,11 +114,12 @@ Normalize only documented server metadata such as top-level fingerprints, paths,
 timestamps. Never ignore nested tag fields, trigger references, consent, template fields, routing,
 or configuration values.
 
-Supply the complete in-scope reference closure: include every firing or blocking trigger, parent
-folder, and setup/cleanup tag referenced by a compared object, including a normalized record for a
-built-in trigger when it is a consumer reference. Use `<resource-family>::<name>` in an intended
-graph or supply the returned ID and referenced object in a saved graph. Treat an unresolved raw or
-semantic reference as invalid comparison input rather than proof of equality.
+Supply the complete in-scope reference closure: include every user-created firing or blocking
+trigger, parent folder, and setup/cleanup tag referenced by a compared object. The comparator
+recognizes GTM's three reserved web-container triggers (`2147479553`, `2147479572`, and
+`2147479573`) directly because trigger-list responses omit them; do not synthesize fake trigger
+records. Any other unresolved raw or semantic reference remains invalid comparison input rather
+than proof of equality.
 
 Preserve the GTM API `parameter` shape. Top-level keyed parameters and nested `map` entries compare
 by their unique keys; nested `list` entries preserve order and ignore their own keys. Do not sort an
@@ -128,10 +129,12 @@ Never use a guessed template type code or API parameter. Derive it from the exis
 
 ## Maintain a current-operation journal
 
-Before mutation, snapshot the dedicated workspace identity, synchronization/conflict state, and all
-pre-existing workspace changes. For every current-operation write, record the requirement ID, action,
-object path/ID, pre-change fingerprint and representation when applicable, returned fingerprint,
-saved result, and verification status.
+Use the versioned configuration-run artifact as the durable current-operation journal. Before
+mutation, snapshot the dedicated workspace identity, synchronization/conflict state, and all pre-
+existing workspace changes. For every write, record the requirement ID, action, object path/ID,
+pre-change fingerprint and representation when applicable, returned fingerprint, saved result, and
+verification status. Persist `in_progress` immediately before the call and atomically checkpoint its
+outcome before starting a dependent operation.
 
 Report these separately:
 
@@ -153,6 +156,8 @@ Do not use names alone as idempotency keys. Compare stable IDs where present and
 
 ## Handle authentication, quotas, and uncertain writes
 
+- On a resumed run, validate and inspect the configuration-run artifact first. Resolve any
+  `in_progress` or `uncertain` operation by authoritative readback before a new write.
 - Stop immediately on wrong-account, wrong-container, expired-authentication, or permission errors;
   never fall back to another visible container or account.
 - Honor documented retry or quota guidance for throttling and transient server errors. Use bounded
@@ -164,6 +169,10 @@ Do not use names alone as idempotency keys. Compare stable IDs where present and
   object and recovery action instead of risking a duplicate.
 - Re-discover the adapter capability profile after an unsupported-field or schema-drift error; do
   not remove an intended field merely to make the adapter accept the request.
+
+For a programmatic adapter, `scripts/adapter_runtime.py` provides the tested pagination, bounded
+retry, read-before-write, ambiguous-response, dependency-stop, and checkpoint state machine. MCP
+and UI runs must apply the same transitions even when they cannot call the helper directly.
 
 ## Handle partial failure
 

@@ -23,7 +23,7 @@ Google Consent Mode is not a GA4-only feature. Current Google documentation list
 - Floodlight;
 - Conversion Linker.
 
-Verify this live list for every implementation. Decide basic or advanced behavior per destination/product, then reconcile those decisions with the actual Google tag and helper execution units.
+Verify this live list for every implementation. Decide basic or advanced behavior per destination/product, then reconcile those decisions with the actual Google tag and helper execution units. Treat every shared Google execution unit as one consent-controlled execution surface until current official capabilities prove that its destinations can be separated.
 
 A blocking trigger attached to one shared Google tag blocks that tag for every connected destination; leaving the tag unblocked can expose every connected destination to that tag's denied-state behavior. Do not claim that incompatible per-product policies coexist merely because the destinations are listed separately. If one executable Google tag or helper serves products that require different routes, use only a current, officially supported destination-specific separation that the analyst approves. Otherwise mark the affected configuration `Blocked` pending an architecture decision.
 

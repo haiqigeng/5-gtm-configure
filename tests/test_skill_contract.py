@@ -26,7 +26,7 @@ class SkillContractTest(unittest.TestCase):
     def test_entrypoint_defines_saved_object_graph_as_success(self) -> None:
         skill = read("SKILL.md")
         self.assertIn("Operationally implement an approved analytics tracking plan", skill)
-        self.assertIn("saved, verified GTM object graph as the unit of success", skill)
+        self.assertIn("saved, verified GTM object graph as the unit of success", compact(skill))
         self.assertIn("Create, update, or reuse every required GTM object", compact(skill))
         self.assertNotIn("Specification complete", skill)
 
@@ -94,7 +94,7 @@ class SkillContractTest(unittest.TestCase):
         workflow = read("references/02-execution/implementation-workflow.md")
         for term in ("blocking-error", "advisory", "implementation-note"):
             self.assertIn(f"`{term}`", fidelity)
-        self.assertIn("never use documentation as permission to substitute", sources)
+        self.assertIn("never use documentation as permission to substitute", sources.lower())
         self.assertIn("Preserve a technically valid advisory by default", compact(workflow))
 
     def test_current_official_and_installed_template_evidence_are_mandatory(self) -> None:
@@ -125,7 +125,10 @@ class SkillContractTest(unittest.TestCase):
         skill = read("SKILL.md")
         utility = read("references/01-orientation/utility-contract.md")
         workflow = read("references/02-execution/implementation-workflow.md")
-        self.assertIn("Inspect only the objects related to the requested implementation", skill)
+        self.assertIn(
+            "Inspect only the objects related to the requested implementation",
+            compact(skill),
+        )
         self.assertIn("does not authorize general cleanup", utility)
         self.assertIn("Inspect only objects that can supply, consume, duplicate", workflow)
         self.assertIn(
@@ -138,7 +141,7 @@ class SkillContractTest(unittest.TestCase):
         workflow = read("references/02-execution/implementation-workflow.md")
         naming = read("references/02-execution/naming-and-reuse.md")
         data = read("references/02-execution/data-contract-and-transformations.md")
-        self.assertIn("never as proof of best practice", skill)
+        self.assertIn("never as proof of best practice", compact(skill))
         self.assertIn("before evaluating local reuse", workflow)
         self.assertIn("Existing prevalence is not evidence of best", naming)
         self.assertIn("After selecting the target pattern", data)
@@ -151,7 +154,10 @@ class SkillContractTest(unittest.TestCase):
         self.assertIn("Follow the default naming convention", skill)
         self.assertIn("Actively evaluate a LUT/RLT", naming)
         self.assertIn("create or reuse one shallow folder", naming)
-        self.assertIn("LUTs or RLTs for real deterministic multi-scenario mappings", workflow)
+        self.assertIn(
+            "LUTs or RLTs for real deterministic multi-scenario mappings",
+            compact(workflow),
+        )
         self.assertIn("narrow Custom JavaScript", skill)
 
     def test_media_brief_and_official_schema_drive_media_tags(self) -> None:
@@ -276,7 +282,10 @@ class SkillContractTest(unittest.TestCase):
             self.assertIn("pre-existing workspace changes", text)
             self.assertIn("current-run", text)
             self.assertIn("final workspace totals", text)
-        self.assertIn("no runtime recette, publication, Submit, or GTM", acceptance)
+        self.assertIn(
+            "no runtime recette, publication, Submit, or GTM",
+            compact(acceptance),
+        )
 
     def test_external_administration_is_not_silently_claimed(self) -> None:
         analytics = read("references/02-execution/analytics-tags.md")
@@ -320,7 +329,7 @@ class SkillContractTest(unittest.TestCase):
         ):
             self.assertIn(term, surface)
         self.assertIn("explicit authority", surface)
-        self.assertIn("object-family coverage", skill)
+        self.assertIn("object-family coverage", skill.lower())
         self.assertIn("capability independently for workspace", adapters)
 
     def test_ga4_safety_and_multi_destination_routing_fail_closed(self) -> None:
@@ -372,6 +381,39 @@ class SkillContractTest(unittest.TestCase):
         self.assertIn("compare_graphs", graph_diff)
         self.assertIn('"scripts/validate_configuration_contract.py"', package)
         self.assertIn('"scripts/diff_object_graph.py"', package)
+        self.assertIn('"scripts/configuration_run.py"', package)
+        self.assertIn('"scripts/adapter_runtime.py"', package)
+        self.assertIn('"schemas"', package)
+
+    def test_runtime_run_contract_is_routed_without_instruction_bloat(self) -> None:
+        skill = read("SKILL.md")
+        run_reference = read("references/02-execution/configuration-run-and-resume.md")
+        run_script = read("scripts/configuration_run.py")
+        adapter_runtime = read("scripts/adapter_runtime.py")
+        self.assertIn("configuration-run-and-resume.md", skill)
+        self.assertIn("configuration-run schema", skill)
+        for term in (
+            "Use one durable run artifact",
+            "Checkpoint every write boundary",
+            "Resume only from proved state",
+            "not retried automatically",
+            "Hand off in three layers",
+        ):
+            self.assertIn(term, run_reference)
+        self.assertIn('SCHEMA_VERSION = "1.0"', run_script)
+        self.assertIn("reopen_failed_operation", run_script)
+        self.assertIn("collect_paginated", adapter_runtime)
+        mandatory = (
+            "SKILL.md",
+            "references/01-orientation/utility-contract.md",
+            "references/01-orientation/official-source-policy.md",
+            "references/02-execution/implementation-workflow.md",
+            "references/02-execution/configuration-contract.md",
+            "references/02-execution/configuration-run-and-resume.md",
+            "references/03-judgement/acceptance-and-handoff.md",
+        )
+        word_count = sum(len(read(path).split()) for path in mandatory)
+        self.assertLessEqual(word_count, 7500)
 
     def test_user_data_runtime_and_future_boundaries_remain_guarded(self) -> None:
         user_data = read("references/02-execution/first-party-data.md")

@@ -12,6 +12,9 @@ INCLUDED = (
     "SKILL.md",
     "agents/openai.yaml",
     "references",
+    "schemas",
+    "scripts/adapter_runtime.py",
+    "scripts/configuration_run.py",
     "scripts/diff_object_graph.py",
     "scripts/validate_configuration_contract.py",
     "scripts/validate_contract_conformance.py",
@@ -26,7 +29,11 @@ def package_files() -> list[Path]:
         if source.is_file():
             files.append(source)
         elif source.is_dir():
-            files.extend(path for path in source.rglob("*.md") if path.is_file())
+            files.extend(
+                path
+                for path in source.rglob("*")
+                if path.is_file() and path.suffix in {".md", ".json"}
+            )
     return sorted(files, key=lambda path: path.relative_to(ROOT).as_posix())
 
 

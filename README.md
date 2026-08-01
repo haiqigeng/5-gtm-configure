@@ -6,9 +6,11 @@ consent-controlled client-side Google Tag Manager workspaces.
 
 ## Current Release
 
-**v6.0.1** completes object-graph normalization for every officially Parameter-typed client-side
-tag, trigger, and variable field. It keeps raw GTM object type codes and non-Parameter enums
-material, and does not change the skill's utility-first north star, workflow, or schema v5 contract.
+**v6.1.0** adds a versioned, adapter-neutral configuration-run artifact for preflight impact,
+durable mutation checkpoints, saved readback, recovery, idempotency, and machine-readable recette
+handoff. It also recognizes reserved built-in trigger IDs without synthetic records, adds one
+governed `replace` action, isolates legacy comparison input from mutation authority, and reduces the
+mandatory instruction load while preserving the utility-first north star.
 
 ## Who It Serves
 
@@ -77,6 +79,11 @@ Use these meanings:
   cleaning unrelated container content.
 - Apply explicit delta changes—including update, rename, trigger/destination fanout, pause, and
   unpause—after tracing every affected consumer and preserving pre-change state.
+- Run same-identity migrations as one governed `replace` action when supported update cannot reach
+  the approved target and destructive authority, recovery, and readback are explicit.
+- Persist a `configuration-run@1.0` manifest across MCP, API, export/import, or UI execution so a
+  session can resume safely after authentication expiry, throttling, timeout, or partial save;
+  failed no-write operations require an explicit reopen after their blocker is resolved.
 
 ## Inputs
 
@@ -108,8 +115,9 @@ A successful run returns:
 - an official-source manifest plus approved-input and implementation-decision provenance;
 - authoritative object readback, resolved references, fingerprints, workspace conflict state, and
   deterministic object-graph diff and idempotent rerun result;
-- a compact recette-ready manifest with expected execution, payload mappings, consent states, saved
-  object IDs/references, partial state, blockers, and external dependencies;
+- a validated `configuration-run@1.0` machine manifest plus executive and analyst/developer views,
+  covering expected execution, payload/consent mappings, saved IDs, checkpoints, partial recovery,
+  blockers, external dependencies, and recette cues;
 - confirmation that runtime recette and publication did not occur.
 
 Use `Configured`, `Partial`, `Blocked`, or `Deferred`. If mutation access or a critical decision is
@@ -126,8 +134,9 @@ The runtime package remains organized around three layers:
 3. **Judgement** assigns an operational status from authoritative saved state and returns a concise
    handoff without claiming runtime behavior.
 
-`SKILL.md` directly routes every reference. The workflow is deliberately short; sophistication
-lives in conditional configuration requirements and implementation traps.
+`SKILL.md` directly routes every reference and stages mandatory reading across intake, pre-mutation,
+and final judgement. The workflow is deliberately short; product detail stays conditional. The
+versioned run artifact carries execution state so prose does not become the recovery mechanism.
 
 ## Key Defaults And Traps
 
@@ -167,6 +176,8 @@ lives in conditional configuration requirements and implementation traps.
   lifecycle, user properties/content groups, `traffic_type`, and `debug_mode`.
 - Batch unresolved critical inputs after safe discovery, validate the versioned configuration
   contract before mutation, and compare intended versus saved object graphs deterministically.
+- Checkpoint every write, stop dependents on unresolved state, and never retry an ambiguous mutation
+  before authoritative identity/readback proves whether it saved.
 - Never publish or create a GTM version.
 
 ## Official Documentation Policy
@@ -188,9 +199,10 @@ unavailable semantic operations. Discover exact adapter actions, pagination, lim
 and conflict behavior before writing.
 
 Resolve the dedicated workspace by stable ID, capture pre-existing changes and fingerprints, build
-the full object graph, write in dependency order, and read each object back. On an uncertain write,
-read before retrying. On partial failure, stop dependent writes and preserve the exact saved recovery
-boundary. Do not publish to expose a mutation.
+the full object graph, initialize the configuration-run manifest, write in dependency order, and
+read each object back. Persist `in_progress` immediately before a write and its exact outcome after.
+On an uncertain write, read before retrying. On partial failure, stop dependent writes and preserve
+the exact saved recovery boundary. Do not publish to expose a mutation.
 
 ## Boundaries
 
@@ -212,6 +224,10 @@ analytics tag-configuration routes.
 - `references/01-orientation/`: north star, intake, authority, boundaries, and official sources.
 - `references/02-execution/`: operational workflow and detailed configuration playbooks.
 - `references/03-judgement/`: saved-state acceptance and concise handoff.
+- `schemas/configuration-run.schema.json`: versioned execution/recovery/recette interchange shape.
+- `scripts/configuration_run.py`: contract ingestion, validation, canonical dependency resolution,
+  atomic checkpoints, explicit failed-operation reopen, resume inspection, and layered handoff.
+- `scripts/adapter_runtime.py`: tested adapter-neutral pagination and mutation safety state machine.
 - `scripts/validate_configuration_contract.py`: strict v5 authority and provenance validation with
   explicit v4 compatibility.
 - `scripts/validate_contract_conformance.py`: deterministic analytics contract comparator.
@@ -228,8 +244,9 @@ analytics tag-configuration routes.
 
 ## Install The Skill
 
-Copy `SKILL.md`, `agents/`, `references/`, the three runtime scripts in `scripts/`, and `LICENSE` into
-the target agent's skill directory. Repository tests and release tooling are not runtime files.
+Install the release archive or copy `SKILL.md`, `agents/`, `references/`, `schemas/`, the five runtime
+scripts in `scripts/`, and `LICENSE` into the target skill directory. Repository tests, README, and
+release tooling are not runtime files.
 
 ## Release Checks
 
@@ -239,10 +256,10 @@ Run:
 python -m pip install -e ".[dev]"
 python -m ruff format --no-cache --check scripts tests
 python -m ruff check --no-cache scripts tests
-python scripts/check_release.py --tag v6.0.1 --release-notes CHANGELOG.md
+python scripts/check_release.py --tag v6.1.0 --release-notes CHANGELOG.md
 python -m unittest discover -s tests -v
 python -m compileall -q scripts
-python scripts/build_skill_package.py --output dist/configure-gtm-v6.0.1.zip
+python scripts/build_skill_package.py --output dist/configure-gtm-v6.1.0.zip
 git diff --check
 ~~~
 

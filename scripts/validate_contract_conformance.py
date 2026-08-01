@@ -15,6 +15,18 @@ class ContractError(ValueError):
     """Raised when a normalized contract does not satisfy the comparison schema."""
 
 
+def _validate_unversioned_comparison(value: Any) -> None:
+    """Accept only the minimal historical comparison shape, never a mutation contract."""
+    if not isinstance(value, dict):
+        raise ContractError("unversioned comparison input must be an object")
+    scope = value.get("scope")
+    requirements = value.get("requirements")
+    if not isinstance(scope, dict):
+        raise ContractError("unversioned comparison input needs $.scope as an object")
+    if not isinstance(requirements, list):
+        raise ContractError("unversioned comparison input needs $.requirements as an array")
+
+
 def load_contract(path: Path) -> dict[str, Any]:
     try:
         value = json.loads(path.read_text(encoding="utf-8"))
@@ -22,10 +34,13 @@ def load_contract(path: Path) -> dict[str, Any]:
         raise ContractError(f"cannot read {path}: {exc}") from exc
     except json.JSONDecodeError as exc:
         raise ContractError(f"invalid JSON in {path}: {exc}") from exc
-    try:
-        validate_document(value, allow_legacy=True)
-    except ContractValidationError as exc:
-        raise ContractError(f"{path}: {exc}") from exc
+    if isinstance(value, dict) and "schema_version" not in value:
+        _validate_unversioned_comparison(value)
+    else:
+        try:
+            validate_document(value, allow_legacy=True)
+        except ContractValidationError as exc:
+            raise ContractError(f"{path}: {exc}") from exc
     return value
 
 

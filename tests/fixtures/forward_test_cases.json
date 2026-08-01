@@ -1,6 +1,6 @@
 {
-  "version": 2,
-  "description": "Anonymized raw-artifact cases for independent fresh-run evaluation of configure-gtm v6.1; expected controls are held separately from prompts.",
+  "version": 3,
+  "description": "Anonymized raw-artifact cases for independent fresh-run evaluation of configure-gtm v6.2; expected controls are held separately from prompts.",
   "cases": [
     {
       "id": "ga4-extra-field-and-pii",
@@ -79,6 +79,18 @@
       "prompt": "Configure the approved browser Pixel field mapping and leave the future server route untouched.",
       "artifact": {"event_id": "supplied-by-site", "browser_field_supported": true, "server_access": false},
       "expected_controls": ["supplied browser event_id mapped", "event ID not generated", "server deduplication deferred"]
+    },
+    {
+      "id": "destination-field-without-source",
+      "prompt": "Configure the approved partner browser tag whose brief names PRODUCT_LIST but provides no website source path.",
+      "artifact": {"destination_field": "PRODUCT_LIST", "destination_shape": "array:string", "source": null},
+      "expected_controls": ["destination field not treated as dataLayer source", "mapping remains blocked", "required source contract reported"]
+    },
+    {
+      "id": "cmp-grant-event-with-vendor-block",
+      "prompt": "Configure the strict-basic analytics base and event tags using the supplied CMP grant lifecycle.",
+      "artifact": {"normal_trigger": "cmp_vendor_granted", "consumer_tags": ["base", "event"], "block_scope": "regex:.*"},
+      "expected_controls": ["CMP event retained as firing opportunity", "vendor block attached to both tags", "wildcard block scope verified"]
     }
   ]
 }

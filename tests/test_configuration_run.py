@@ -43,6 +43,8 @@ def contract() -> dict:
                 "parameters": {
                     "method": {
                         "source": "event.method",
+                        "source_shape": "scalar:string",
+                        "destination_shape": "scalar:string",
                         "provenance": {
                             "grade": "approved-input",
                             "locator": "Tracking Plan / Events / row 12 / method",
@@ -99,6 +101,35 @@ def run_document() -> dict:
         source_locator="Tracking Plan / Events",
         timestamp="2026-08-01T10:00:00Z",
     )
+
+
+def ready_run_document() -> dict:
+    document = run_document()
+    document["payload_mappings"][0].update(
+        {
+            "shape_compatibility": "compatible",
+            "mapping_method": "direct-dlv",
+            "gtm_resolution": "DLV - event.method",
+            "template_field": "Event parameter - method",
+            "missing_behavior": "Leave the field unset and record a recette dependency.",
+            "status": "mapped",
+        }
+    )
+    document["consent_routes"] = [
+        {
+            "requirement_id": "TP::Events::12::generate_lead",
+            "product": "GA4",
+            "mode": "strict-basic",
+            "mechanism": "blocking-trigger",
+            "normal_trigger": "CE - form_success",
+            "blocking_triggers": ["Block - Didomi - GA4 denied"],
+            "blocking_event_scope": "regex:.*",
+            "scope_exception_reason": None,
+            "unknown_behavior": "block",
+            "evidence": ["official-current", "container-confirmed"],
+        }
+    ]
+    return validate_document(document)
 
 
 class ConfigurationRunTest(unittest.TestCase):
@@ -160,7 +191,7 @@ class ConfigurationRunTest(unittest.TestCase):
             )
 
     def test_checkpoint_requires_readback_proof_and_exposes_resume_state(self) -> None:
-        document = run_document()
+        document = ready_run_document()
         document = checkpoint_operation(
             document,
             operation_id="OP-001",
@@ -194,7 +225,7 @@ class ConfigurationRunTest(unittest.TestCase):
 
     def test_known_failed_operation_requires_explicit_reopen_before_retry(self) -> None:
         document = checkpoint_operation(
-            run_document(),
+            ready_run_document(),
             operation_id="OP-001",
             state="failed",
             note="Authentication expired before any write.",
@@ -220,7 +251,7 @@ class ConfigurationRunTest(unittest.TestCase):
             )
 
     def test_configured_requires_complete_readback_and_idempotency(self) -> None:
-        document = run_document()
+        document = ready_run_document()
         document = checkpoint_operation(
             document,
             operation_id="OP-001",
@@ -241,21 +272,98 @@ class ConfigurationRunTest(unittest.TestCase):
         with self.assertRaisesRegex(RunValidationError, "lacks verified readback"):
             validate_document(invalid)
 
-    def test_strict_basic_grant_event_cannot_be_double_gated(self) -> None:
+    def test_cmp_grant_event_and_vendor_block_have_independent_roles(self) -> None:
         document = run_document()
         document["consent_routes"] = [
             {
                 "requirement_id": "TP::Events::12::generate_lead",
                 "product": "GA4",
                 "mode": "strict-basic",
-                "mechanism": "grant-event",
+                "mechanism": "blocking-trigger",
                 "normal_trigger": "Didomi - analytics vendor granted",
                 "blocking_triggers": ["Block - Didomi - analytics denied"],
+                "blocking_event_scope": "regex:.*",
+                "scope_exception_reason": None,
                 "unknown_behavior": "block",
                 "evidence": ["official-current", "container-confirmed"],
             }
         ]
-        with self.assertRaisesRegex(RunValidationError, "cannot combine"):
+        self.assertEqual(
+            validate_document(document)["consent_routes"][0]["mechanism"], "blocking-trigger"
+        )
+
+        without_block = deepcopy(document)
+        without_block["consent_routes"][0]["blocking_triggers"] = []
+        with self.assertRaisesRegex(RunValidationError, "must not be empty"):
+            validate_document(without_block)
+
+    def test_vendor_wide_block_defaults_to_regex_all_events(self) -> None:
+        document = ready_run_document()
+        route = document["consent_routes"][0]
+        route["blocking_event_scope"] = "regex:^(purchase|add_to_cart)$"
+        with self.assertRaisesRegex(RunValidationError, "scope_exception_reason"):
+            validate_document(document)
+
+        route["scope_exception_reason"] = (
+            "The vendor block intentionally serves this event family only."
+        )
+        self.assertEqual(validate_document(document)["run"]["status"], "In progress")
+
+    def test_mutation_waits_for_complete_field_and_consent_preflight(self) -> None:
+        pending = run_document()
+        inspection = inspect_document(pending)
+        self.assertEqual(inspection["ready_operations"], [])
+        self.assertIn("OP-001", inspection["preflight_blockers"])
+        with self.assertRaisesRegex(RunValidationError, "preflight is incomplete"):
+            checkpoint_operation(
+                pending,
+                operation_id="OP-001",
+                state="in_progress",
+                note="Attempt before the mapping and consent decisions are complete.",
+                timestamp="2026-08-01T10:01:00Z",
+            )
+
+        resolved = ready_run_document()
+        self.assertEqual(inspect_document(resolved)["ready_operations"], ["OP-001"])
+
+    def test_mapping_method_must_match_shape_decision(self) -> None:
+        document = ready_run_document()
+        mapping = document["payload_mappings"][0]
+        mapping["shape_compatibility"] = "conversion-required"
+        with self.assertRaisesRegex(RunValidationError, "requires compatible"):
+            validate_document(document)
+
+        mapping["mapping_method"] = "custom-javascript"
+        mapping["gtm_resolution"] = "CJS - Vendor - method"
+        self.assertEqual(validate_document(document)["run"]["status"], "In progress")
+
+    def test_destination_name_cannot_silently_become_a_datalayer_source(self) -> None:
+        value = contract()
+        field = value["requirements"][0]["parameters"].pop("method")
+        del field["source"]
+        del field["source_shape"]
+        field["destination_shape"] = "array:string"
+        value["requirements"][0]["parameters"]["PRODUCT_LIST"] = field
+        document = create_from_contract(
+            value,
+            run_id="RUN-DESTINATION-SOURCE",
+            source_locator="Media brief / PRODUCT_LIST",
+            timestamp="2026-08-01T10:00:00Z",
+        )
+        mapping = document["payload_mappings"][0]
+        mapping.update(
+            {
+                "source": "PRODUCT_LIST",
+                "source_shape": "array:string",
+                "shape_compatibility": "compatible",
+                "mapping_method": "direct-dlv",
+                "gtm_resolution": "DLV - PRODUCT_LIST",
+                "template_field": "PRODUCT_LIST",
+                "missing_behavior": "Leave unset when unavailable.",
+                "status": "mapped",
+            }
+        )
+        with self.assertRaisesRegex(RunValidationError, "source_authority_grade"):
             validate_document(document)
 
     def test_template_mutation_requires_permission_delta(self) -> None:
@@ -280,7 +388,7 @@ class ConfigurationRunTest(unittest.TestCase):
         self.assertIn("## Analyst and developer change log", rendered)
         self.assertIn("## Machine handoff", rendered)
         self.assertIn('"schema_version": "1.0"', rendered)
-        self.assertIn("routine in-scope writes may proceed", rendered)
+        self.assertIn("resolve mapping/consent blockers", rendered)
 
     def test_cli_init_validate_inspect_and_render(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

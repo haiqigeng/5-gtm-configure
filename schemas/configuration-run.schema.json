@@ -241,8 +241,30 @@
           "requirement_id": {"type": "string", "minLength": 1},
           "destination_field": {"type": "string", "minLength": 1},
           "source": {"type": ["string", "null"]},
+          "source_authority_grade": {"type": ["string", "null"]},
+          "source_authority_locator": {"type": ["string", "null"]},
+          "source_shape": {"type": ["string", "null"]},
+          "destination_shape": {"type": ["string", "null"]},
+          "shape_compatibility": {
+            "type": ["string", "null"],
+            "enum": ["compatible", "conversion-required", null]
+          },
+          "mapping_method": {
+            "type": ["string", "null"],
+            "enum": [
+              "constant",
+              "custom-javascript",
+              "direct-dlv",
+              "lookup-table",
+              "native-template",
+              "regex-table",
+              "settings-variable",
+              null
+            ]
+          },
           "gtm_resolution": {"type": ["string", "null"]},
           "template_field": {"type": ["string", "null"]},
+          "missing_behavior": {"type": ["string", "null"]},
           "status": {
             "enum": ["pending", "mapped", "intentionally-omitted", "external", "blocked"]
           },
@@ -275,6 +297,8 @@
             "uniqueItems": true,
             "items": {"type": "string", "minLength": 1}
           },
+          "blocking_event_scope": {"type": ["string", "null"]},
+          "scope_exception_reason": {"type": ["string", "null"]},
           "unknown_behavior": {"type": "string", "minLength": 1},
           "evidence": {
             "type": "array",

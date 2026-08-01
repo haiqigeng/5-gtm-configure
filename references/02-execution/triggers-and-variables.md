@@ -74,7 +74,11 @@ For an SPA:
 
 Create the smallest reusable set of blocks that expresses the approved CMP predicate. One vendor/platform block is preferred when one native condition represents the complete grant. When category/purpose, vendor, product consent type, or initialization are independent required grants, use semantically named reusable blocks so any missing grant blocks; do not force mutually exclusive denial conditions into one AND trigger. Name vendor blocks `Block - <CMP> - <Vendor> denied` and qualify shared category/purpose blocks clearly.
 
-Make the blocking trigger's event matcher cover every normal event used by its consumer tags. For Custom Event consumers, use a tested regex scope when one shared block must cover several event names. Do not use a CMP readiness/change event as the exception's event name for unrelated business-event tags: the exception must activate on the same GTM event that could fire the tag.
+Make the blocking trigger's event matcher cover every normal event used by its consumer tags. For a
+vendor-wide Custom Event block, default to a tested `.*` regex matcher so new consumer events remain
+covered. Use an enumerated or narrower regex only for an intentionally restricted consumer family
+and record why. Do not use a CMP readiness/change event as the exception's event name for unrelated
+business-event tags: the exception must activate on the same GTM event that could fire the tag.
 
 Do not label a normal Custom Event trigger as a blocking trigger. Do not append `CE` to a block name. Inspect all consumers before changing a shared block.
 

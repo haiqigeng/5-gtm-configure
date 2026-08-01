@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import subprocess
 import sys
@@ -9,6 +10,13 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts" / "validate_contract_conformance.py"
+sys.path.insert(0, str(ROOT / "scripts"))
+
+from import_ga4_tracking_plan_handoff import (  # noqa: E402
+    HandoffError,
+    normalized_approved_semantics,
+    verify_delivery,
+)
 
 
 def contract(*requirements: dict, scope: dict | None = None) -> dict:
@@ -153,6 +161,65 @@ class ContractConformanceTest(unittest.TestCase):
         report = json.loads(result.stdout)
         self.assertFalse(report["pass"])
         self.assertIn("non-empty string id", report["error"])
+
+    def test_ga4_delivery_import_preserves_approved_semantics_and_hashes(self) -> None:
+        plan = {
+            "events": [
+                {
+                    "event_name": "generate_lead",
+                    "classification": "official",
+                    "journey_ids": ["lead_generation"],
+                    "measurement_opportunity_ids": ["lead_success"],
+                    "trigger": "Confirmed form success.",
+                    "data_layer": {"clear": ["event_data"]},
+                    "parameters": [
+                        {
+                            "name": "form_name",
+                            "scope": "event",
+                            "type": "string",
+                            "requirement": "required",
+                            "data_layer_path": "event_data.form_name",
+                            "destination": "ga4_event_parameter",
+                        }
+                    ],
+                }
+            ]
+        }
+        with tempfile.TemporaryDirectory() as raw:
+            delivery = Path(raw)
+            plan_path = delivery / "plan.json"
+            plan_path.write_text(json.dumps(plan), encoding="utf-8")
+            digest = hashlib.sha256(plan_path.read_bytes()).hexdigest()
+            handoff = {
+                "handoff_version": "1.0.0",
+                "skill": {"name": "ga4-tracking-plan", "version": "2.5.0"},
+                "approval": {"state": "approved", "approved_by": "Analyst"},
+                "plan": {"canonical_sha256": digest},
+                "artifacts": [
+                    {
+                        "path": "plan.json",
+                        "role": "canonical_tracking_plan",
+                        "sha256": digest,
+                    }
+                ],
+            }
+            (delivery / "handoff.json").write_text(json.dumps(handoff), encoding="utf-8")
+            verified_handoff, verified_plan = verify_delivery(delivery)
+            imported = normalized_approved_semantics(verified_handoff, verified_plan)
+            self.assertEqual(imported["scope"]["included"], ["GA4::001::generate_lead"])
+            requirement = imported["requirements"][0]
+            self.assertEqual(requirement["measurement_opportunity_ids"], ["lead_success"])
+            self.assertEqual(
+                requirement["parameters"]["event::form_name"]["source"],
+                "event_data.form_name",
+            )
+            imported_field = requirement["parameters"]["event::form_name"]
+            self.assertEqual(imported_field["source_shape"], "string")
+            self.assertEqual(imported_field["destination_shape"], "string")
+            self.assertEqual(imported_field["source_authority"]["grade"], "approved-input")
+            plan_path.write_text("{}", encoding="utf-8")
+            with self.assertRaisesRegex(HandoffError, "hash mismatch"):
+                verify_delivery(delivery)
 
 
 if __name__ == "__main__":

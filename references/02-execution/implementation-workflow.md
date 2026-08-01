@@ -73,7 +73,8 @@ authority separate. Capture only what mutation and proof need:
 
 - stable requirement/source locator, approved action, success moment, source event/path/type/shape;
 - destination identity, official event/conversion, exact outgoing field set, and intended use;
-- source → GTM resolution → template field → destination field, including missing-data behavior;
+- approved actual source/authority and source shape → GTM method → template field →
+  destination field/shape, including missing-data behavior;
 - template/version, normal trigger, consent route, firing option, folder, and dependencies;
 - one object action with canonical resource family, intended fields, evidence, and pre-change state
   for deltas;
@@ -90,9 +91,12 @@ requirement or documented constraint. Prefer direct template fields and DLVs, th
 or genuinely shared settings variables, then LUTs or RLTs for real deterministic multi-scenario
 mappings. Use narrow CJS only for a required shape conversion.
 
-Create precise normal triggers and the smallest reusable basic-consent block set. A CMP grant event
-used as the normal page-load trigger must not also receive a redundant vendor block. Reconcile page
-views, automatic/manual business events, shared execution units, routing, and environment isolation.
+Create precise normal triggers and the smallest reusable basic-consent block set. Attach the
+complete block set to every in-scope vendor base/configuration and event tag. Use a verified CMP
+readiness/grant event independently when it supplies an initial or later-grant firing opportunity.
+For a vendor-wide Custom Event block, prefer a verified `.*` regex scope; use a narrower scope only
+for a documented consumer boundary. Reconcile page views, automatic/manual business events, shared
+execution units, routing, and environment isolation.
 
 For ecommerce, preserve every mapped item and exact destination shape. Do not assume analytics and
 media catalog IDs match, filter invalid items silently, invent a fallback, or turn an empty

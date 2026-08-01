@@ -31,6 +31,8 @@ def valid_contract() -> dict:
                 "parameters": {
                     "method": {
                         "source": "event.method",
+                        "source_shape": "scalar:string",
+                        "destination_shape": "scalar:string",
                         "provenance": {
                             "grade": "approved-input",
                             "locator": "Tracking Plan / row 1 / method",
@@ -106,6 +108,35 @@ class ConfigurationContractSchemaTest(unittest.TestCase):
         del contract["requirements"][0]["parameters"]["method"]["provenance"]["locator"]
         with self.assertRaisesRegex(ContractValidationError, "locator"):
             validate_document(contract)
+
+    def test_field_shapes_are_required_before_mapping(self) -> None:
+        for missing in ("source_shape", "destination_shape"):
+            with self.subTest(missing=missing):
+                contract = valid_contract()
+                del contract["requirements"][0]["parameters"]["method"][missing]
+                with self.assertRaisesRegex(ContractValidationError, missing):
+                    validate_document(contract)
+
+    def test_media_source_needs_separate_approved_authority(self) -> None:
+        contract = valid_contract()
+        contract["route"] = "media"
+        field = contract["requirements"][0]["parameters"]["method"]
+        field["provenance"]["grade"] = "official-current"
+        with self.assertRaisesRegex(ContractValidationError, "source_authority"):
+            validate_document(contract)
+
+        field["source_authority"] = {
+            "grade": "approved-input",
+            "locator": "Media brief / method source",
+        }
+        self.assertEqual(validate_document(contract)["route"], "media")
+
+    def test_destination_field_can_remain_blocked_without_an_invented_source(self) -> None:
+        contract = valid_contract()
+        field = contract["requirements"][0]["parameters"]["method"]
+        del field["source"]
+        del field["source_shape"]
+        self.assertEqual(validate_document(contract)["schema_version"], "5.0")
 
     def test_high_impact_action_requires_explicit_authority(self) -> None:
         for object_type in (
@@ -311,7 +342,12 @@ class ConfigurationContractSchemaTest(unittest.TestCase):
         media = valid_contract()
         media["route"] = "combined"
         media["requirements"][0]["kind"] = "media"
-        media["requirements"][0]["parameters"]["method"]["provenance"]["grade"] = "official-current"
+        media_field = media["requirements"][0]["parameters"]["method"]
+        media_field["provenance"]["grade"] = "official-current"
+        media_field["source_authority"] = {
+            "grade": "approved-input",
+            "locator": "Media brief / method source",
+        }
         self.assertEqual(validate_document(media)["route"], "combined")
 
     def test_combined_route_requires_requirement_kind(self) -> None:
@@ -323,6 +359,9 @@ class ConfigurationContractSchemaTest(unittest.TestCase):
     def test_v4_contract_is_only_allowed_explicitly(self) -> None:
         legacy = valid_contract()
         legacy["schema_version"] = "4.0"
+        legacy_field = legacy["requirements"][0]["parameters"]["method"]
+        del legacy_field["source_shape"]
+        del legacy_field["destination_shape"]
         item = legacy["implementation"]["objects"][0]
         item["object_type"] = "Google tag"
         item["evidence"] = ["container-confirmed"]

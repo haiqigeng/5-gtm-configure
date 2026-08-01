@@ -131,7 +131,21 @@ def _validate_provenance(
         raise ContractValidationError(f"{path}.grade cannot authorize a media destination field")
 
 
-def _validate_requirement(raw: Any, *, index: int, route: str) -> str:
+def _validate_source_authority(value: Any, *, path: str) -> None:
+    authority = _require_object(value, path)
+    grade = _require_text(authority.get("grade"), f"{path}.grade")
+    if grade != "approved-input":
+        raise ContractValidationError(f"{path}.grade must be 'approved-input' for a source")
+    _require_text(authority.get("locator"), f"{path}.locator")
+
+
+def _validate_requirement(
+    raw: Any,
+    *,
+    index: int,
+    route: str,
+    require_field_shapes: bool,
+) -> str:
     path = f"$.requirements[{index}]"
     requirement = _require_object(raw, path)
     requirement_id = _require_text(requirement.get("id"), f"{path}.id")
@@ -175,6 +189,57 @@ def _validate_requirement(raw: Any, *, index: int, route: str) -> str:
                 path=f"{path}.{field_map_name}.{field_name}.provenance",
                 route=effective_route,
             )
+            if not require_field_shapes:
+                continue
+            _require_text(
+                field.get("destination_shape"),
+                f"{path}.{field_map_name}.{field_name}.destination_shape",
+            )
+            has_source = "source" in field
+            has_literal = "literal" in field
+            if has_source and has_literal:
+                raise ContractValidationError(
+                    f"{path}.{field_map_name}.{field_name} cannot define both source and literal"
+                )
+            if has_source:
+                _require_text(
+                    field["source"],
+                    f"{path}.{field_map_name}.{field_name}.source",
+                )
+            if has_literal and field["literal"] is None:
+                raise ContractValidationError(
+                    f"{path}.{field_map_name}.{field_name}.literal must not be null"
+                )
+            if has_source or has_literal:
+                _require_text(
+                    field.get("source_shape"),
+                    f"{path}.{field_map_name}.{field_name}.source_shape",
+                )
+                source_authority = field.get("source_authority")
+                if source_authority is None:
+                    provenance = _require_object(
+                        field["provenance"],
+                        f"{path}.{field_map_name}.{field_name}.provenance",
+                    )
+                    if provenance.get("grade") == "approved-input":
+                        source_authority = provenance
+                if source_authority is None:
+                    raise ContractValidationError(
+                        f"{path}.{field_map_name}.{field_name}.source_authority is required "
+                        "when destination provenance does not authorize the source"
+                    )
+                _validate_source_authority(
+                    source_authority,
+                    path=f"{path}.{field_map_name}.{field_name}.source_authority",
+                )
+            elif "source_authority" in field:
+                raise ContractValidationError(
+                    f"{path}.{field_map_name}.{field_name}.source_authority requires source or literal"
+                )
+            elif "source_shape" in field and field["source_shape"] is not None:
+                raise ContractValidationError(
+                    f"{path}.{field_map_name}.{field_name}.source_shape requires source or literal"
+                )
     return requirement_id
 
 
@@ -461,7 +526,12 @@ def validate_document(value: Any, *, allow_legacy: bool = False) -> dict[str, An
     requirements = _require_array(contract["requirements"], "$.requirements")
     requirement_ids: set[str] = set()
     for index, raw in enumerate(requirements):
-        requirement_id = _validate_requirement(raw, index=index, route=route)
+        requirement_id = _validate_requirement(
+            raw,
+            index=index,
+            route=route,
+            require_field_shapes=not is_legacy_v4,
+        )
         if requirement_id in requirement_ids:
             raise ContractValidationError(f"duplicate requirement id {requirement_id!r}")
         requirement_ids.add(requirement_id)

@@ -19,6 +19,11 @@ Unless the analyst explicitly requests and approves advanced/native consent beha
 
 Use the smallest reusable set of CMP blocking/exception triggers that expresses the complete approved predicate. One vendor/platform block is preferred when one native state represents the grant; use additional shared category/purpose, product-consent, or initialization blocks when those are independent required grants. Apply the complete set to the vendor's base/configuration and event tags in scope. Make unknown, undefined, uninitialized, and denied state block.
 
+Keep firing opportunity and consent eligibility separate. A verified CMP readiness/grant event may
+be the normal trigger that lets a base/configuration or page-view tag run on initial or later grant;
+it does not replace the reusable vendor block. Attaching both is intentional defense in depth and
+keeps the tag protected if its normal-trigger lifecycle later changes.
+
 Use a normal Custom Event trigger for the business action and a separate vendor block, for example:
 
 - `CE - purchase`
@@ -71,7 +76,7 @@ behalf, and do not add TCF machinery to a non-TCF consent implementation.
 
 ## Build a safe vendor block
 
-Define the exception's event scope before its consent-state condition. A shared block must be able to activate on every GTM event used by each consumer tag; a condition that reads the right CMP value is ineffective on an event the trigger does not match. In a Custom Event-first design, use a verified Custom Event regex that covers every relevant event name (often `.*` when the target container proves it matches the required events), rather than a CMP-only event name. If a consumer uses an event type the shared block cannot cover, stop and redesign the exception scope before claiming strict gating.
+Define the exception's event scope before its consent-state condition. A shared block must be able to activate on every GTM event used by each consumer tag; a condition that reads the right CMP value is ineffective on an event the trigger does not match. In a Custom Event-first design, default a vendor-wide block to a verified `.*` Custom Event regex rather than repeating the current event-name inventory or using a CMP-only event name. Use a narrower matcher only when the block intentionally serves a documented consumer subset, and record that reason. If a consumer uses an event type the shared block cannot cover, stop and redesign the exception scope before claiming strict gating.
 
 Inspect tag sequencing separately. GTM tags invoked as setup or cleanup tags ignore their own firing and blocking triggers. Do not rely on the sequenced tag's exception: make the initiating tag's complete predicate prevent the sequence under unknown or denied consent, and prove the expected static path from the configured references.
 

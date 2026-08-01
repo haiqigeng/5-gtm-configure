@@ -78,6 +78,12 @@ it stable across sorting, mutation, readback, and recette handoff. The packaged 
 ingests a validated configuration contract and preserves these IDs; it deliberately does not guess
 the layout or meaning of an arbitrary workbook.
 
+For a `ga4-tracking-plan` delivery, use
+`scripts/import_ga4_tracking_plan_handoff.py`. It accepts only an approved handoff, verifies the
+canonical plan and every inventoried artifact by SHA-256, and emits one normalized approved
+semantic requirement per event. That machine path is authoritative for configuration intake; the
+XLSX remains the human review surface and must not be reparsed into a competing interpretation.
+
 ## Classify official-documentation discrepancies
 
 Use exactly one class for each real difference:

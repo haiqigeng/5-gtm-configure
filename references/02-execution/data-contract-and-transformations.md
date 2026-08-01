@@ -40,6 +40,11 @@ Create a traceable map:
 
 Do not rename the source key to look official. Name the DLV after the actual key and map it to the correct official destination field.
 
+Before mutation, record the approved source authority and complete source/destination shapes beside
+the selected GTM method. A vendor brief or template field such as `PRODUCT_LIST`, `content_ids`, or
+`contents` identifies a terminal field, not an identically named dataLayer source. When no approved
+source path or literal exists, keep the row `blocked`; do not create a speculative DLV.
+
 ## Validate before transforming
 
 Require the approved source contract to place the value on the same GTM event that fires the tag, or to document its retained state and reset behavior. Check:
@@ -53,6 +58,11 @@ Require the approved source contract to place the value on the same GTM event th
 - SPA navigation timing.
 
 If a critical required value is unavailable or incompatible, block the affected tag design and specify the required dataLayer change. Do not develop the site within this skill.
+
+Use a direct DLV/template field only when the complete terminal shape is compatible. For example,
+a scalar currency string may map directly, while an analytics item-object array must be projected
+before a destination can receive an identifier array or vendor-specific object array. Record each
+different terminal shape separately even when the projections share one input.
 
 Do not assume that an analytics `item_id` is the identifier used by a media catalog or feed. Do not
 coerce a numeric string, derive a total, choose a default currency, or synthesize `content_type`

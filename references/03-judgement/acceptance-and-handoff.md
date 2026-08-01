@@ -61,7 +61,7 @@ it already saved current-run work; that state is `Partial`.
 | Authorized update/rename/pause/unpause | Capture consumers and exact pre-change state; read back the saved delta |
 | Same-identity migration cannot be updated | Use one authorized `replace` action with recovery, never remove plus create rows |
 | Compound CMP predicate | Use native trigger logic or OR-denial blocking triggers; prove unknown/denied block and later grant path |
-| CMP grant event is the normal page-load trigger | Do not add a redundant block to the same tag |
+| CMP readiness/grant event is the normal page-load trigger | Keep the strict/basic vendor block on the tag; the event supplies timing while the block supplies eligibility |
 | Template permission expansion | Surface the exact delta and require the applicable explicit authority |
 | Adapter timeout/ambiguous write, no decisive readback | `Partial` if earlier work saved; otherwise unresolved/blocked. Never retry blindly |
 | Adapter unavailable before mutation | `Blocked`; state the exact capability/access needed |
@@ -77,8 +77,8 @@ their dependent graph.
 For each product consent route, record:
 
 - normal trigger and its event scope;
-- strict/basic mechanism (`blocking-trigger` or CMP `grant-event`) or explicit advanced/native
-  mechanism;
+- strict/basic blocking mechanism plus its independent normal trigger, which may be a CMP
+  readiness/grant event, or an explicit advanced/native mechanism;
 - exact CMP state/identity and current official evidence;
 - unknown, uninitialized, denied, granted, later-grant, and revocation expectations;
 - shared execution-unit consumers and one consent owner where applicable.
@@ -102,7 +102,8 @@ For each requirement include:
 
 - approved source locator and business success moment;
 - object actions, names, stable IDs, dependencies, and saved comparison;
-- Payload map: source → GTM resolution → template field → destination field/status;
+- Payload map: approved source/shape → mapping method/GTM resolution → template field →
+  destination shape/field/status;
 - normal trigger, blocking/grant mechanism, firing option, template version/permission delta;
 - external owner/action and final status.
 

@@ -42,6 +42,26 @@ FINAL_OPERATION_STATES = {"verified", "failed", "skipped"}
 CONSENT_MODES = {"strict-basic", "advanced-native"}
 CONSENT_MECHANISMS = {"blocking-trigger", "grant-event", "native-advanced"}
 MAPPING_STATUSES = {"pending", "mapped", "intentionally-omitted", "external", "blocked"}
+MAPPING_METHODS = {
+    "constant",
+    "custom-javascript",
+    "direct-dlv",
+    "lookup-table",
+    "native-template",
+    "regex-table",
+    "settings-variable",
+}
+SHAPE_COMPATIBILITY = {"compatible", "conversion-required"}
+EXTENDED_MAPPING_KEYS = {
+    "source_authority_grade",
+    "source_authority_locator",
+    "source_shape",
+    "destination_shape",
+    "shape_compatibility",
+    "mapping_method",
+    "missing_behavior",
+}
+DEFAULT_VENDOR_BLOCK_SCOPE = "regex:.*"
 TOP_LEVEL_KEYS = {
     "schema_version",
     "run",
@@ -331,10 +351,74 @@ def _validate_payload_mappings(raw: Any, requirement_ids: set[str]) -> None:
         if status not in MAPPING_STATUSES:
             raise RunValidationError(f"{path}.status has unsupported value {status!r}")
         _text(item.get("provenance_locator"), f"{path}.provenance_locator")
+        extended_keys = set(item) & EXTENDED_MAPPING_KEYS
+        if extended_keys and extended_keys != EXTENDED_MAPPING_KEYS:
+            missing = ", ".join(sorted(EXTENDED_MAPPING_KEYS - extended_keys))
+            raise RunValidationError(f"{path} is missing extended mapping key(s): {missing}")
+        if extended_keys:
+            authority_grade = _optional_text(
+                item.get("source_authority_grade"),
+                f"{path}.source_authority_grade",
+            )
+            authority_locator = _optional_text(
+                item.get("source_authority_locator"),
+                f"{path}.source_authority_locator",
+            )
+            source_shape = _optional_text(item.get("source_shape"), f"{path}.source_shape")
+            destination_shape = _optional_text(
+                item.get("destination_shape"),
+                f"{path}.destination_shape",
+            )
+            compatibility = _optional_text(
+                item.get("shape_compatibility"),
+                f"{path}.shape_compatibility",
+            )
+            method = _optional_text(item.get("mapping_method"), f"{path}.mapping_method")
+            missing_behavior = _optional_text(
+                item.get("missing_behavior"),
+                f"{path}.missing_behavior",
+            )
+            if authority_grade is not None and authority_grade != "approved-input":
+                raise RunValidationError(f"{path}.source_authority_grade must be 'approved-input'")
+            if compatibility is not None and compatibility not in SHAPE_COMPATIBILITY:
+                raise RunValidationError(
+                    f"{path}.shape_compatibility has unsupported value {compatibility!r}"
+                )
+            if method is not None and method not in MAPPING_METHODS:
+                raise RunValidationError(f"{path}.mapping_method has unsupported value {method!r}")
         if status == "mapped":
             _text(item.get("source"), f"{path}.source")
             _text(item.get("gtm_resolution"), f"{path}.gtm_resolution")
             _text(item.get("template_field"), f"{path}.template_field")
+            if extended_keys:
+                if authority_grade != "approved-input":
+                    raise RunValidationError(
+                        f"{path}.source_authority_grade must be 'approved-input' when mapped"
+                    )
+                if not authority_locator:
+                    raise RunValidationError(
+                        f"{path}.source_authority_locator is required when mapped"
+                    )
+                if not source_shape or not destination_shape:
+                    raise RunValidationError(
+                        f"{path} needs source_shape and destination_shape when mapped"
+                    )
+                if not compatibility or not method or not missing_behavior:
+                    raise RunValidationError(
+                        f"{path} needs shape_compatibility, mapping_method, and missing_behavior "
+                        "when mapped"
+                    )
+                if method in {"direct-dlv", "native-template"} and compatibility != "compatible":
+                    raise RunValidationError(
+                        f"{path}.{method} requires compatible source and destination shapes"
+                    )
+                if method == "custom-javascript" and compatibility != "conversion-required":
+                    raise RunValidationError(
+                        f"{path}.custom-javascript requires a documented shape conversion"
+                    )
+        elif extended_keys and status in {"intentionally-omitted", "external", "blocked"}:
+            if not missing_behavior:
+                raise RunValidationError(f"{path}.missing_behavior is required for {status}")
 
 
 def _validate_consent_routes(raw: Any, requirement_ids: set[str]) -> None:
@@ -359,14 +443,37 @@ def _validate_consent_routes(raw: Any, requirement_ids: set[str]) -> None:
         blocking = _unique_texts(item.get("blocking_triggers"), f"{path}.blocking_triggers")
         _text(item.get("unknown_behavior"), f"{path}.unknown_behavior")
         _unique_texts(item.get("evidence"), f"{path}.evidence", allow_empty=False)
-        if mode == "strict-basic" and mechanism == "blocking-trigger" and not blocking:
-            raise RunValidationError(f"{path}.blocking_triggers must not be empty")
-        if mechanism == "grant-event" and blocking:
-            raise RunValidationError(
-                f"{path} cannot combine a grant-event normal trigger with blocking triggers"
-            )
+        block_scope = _optional_text(
+            item.get("blocking_event_scope"),
+            f"{path}.blocking_event_scope",
+        )
+        scope_reason = _optional_text(
+            item.get("scope_exception_reason"),
+            f"{path}.scope_exception_reason",
+        )
+        if mode == "strict-basic":
+            if not blocking:
+                raise RunValidationError(
+                    f"{path}.blocking_triggers must not be empty under strict-basic consent"
+                )
+            if not block_scope:
+                raise RunValidationError(
+                    f"{path}.blocking_event_scope is required under strict-basic consent"
+                )
+            if block_scope != DEFAULT_VENDOR_BLOCK_SCOPE and not scope_reason:
+                raise RunValidationError(
+                    f"{path}.scope_exception_reason is required when blocking_event_scope is not "
+                    f"{DEFAULT_VENDOR_BLOCK_SCOPE!r}"
+                )
         if mechanism == "native-advanced" and mode != "advanced-native":
             raise RunValidationError(f"{path}.native-advanced requires advanced-native mode")
+        if mode == "advanced-native":
+            if mechanism != "native-advanced":
+                raise RunValidationError(f"{path}.advanced-native requires native-advanced")
+            if blocking or block_scope:
+                raise RunValidationError(
+                    f"{path}.advanced-native must not carry a defeating blocking trigger"
+                )
         if not normal_trigger:
             raise RunValidationError(f"{path}.normal_trigger must be non-empty")
 
@@ -543,6 +650,16 @@ def validate_document(value: Any) -> dict[str, Any]:
             raise RunValidationError(
                 "Configured requires checked idempotency with no remaining actions"
             )
+        configured_requirement_ids = {
+            requirement_id
+            for requirement_id, item in requirements.items()
+            if item["status"] == "Configured"
+        }
+        preflight_issues = _preflight_issues(document, configured_requirement_ids)
+        if preflight_issues:
+            raise RunValidationError(
+                "Configured has unresolved preflight decisions: " + "; ".join(preflight_issues)
+            )
         if document["recovery_boundary"] is not None:
             raise RunValidationError("Configured requires a null recovery boundary")
     elif status == "Partial":
@@ -593,18 +710,62 @@ def _field_mappings(requirement: dict[str, Any]) -> list[dict[str, Any]]:
             source = field.get("source")
             if source is None and "literal" in field:
                 source = f"literal:{field['literal']}"
+            source_authority = field.get("source_authority")
+            if (
+                source is not None
+                and source_authority is None
+                and field["provenance"].get("grade") == "approved-input"
+            ):
+                source_authority = field["provenance"]
             mappings.append(
                 {
                     "requirement_id": requirement["id"],
                     "destination_field": field_name,
                     "source": source,
+                    "source_authority_grade": (
+                        source_authority.get("grade") if source_authority else None
+                    ),
+                    "source_authority_locator": (
+                        source_authority.get("locator") if source_authority else None
+                    ),
+                    "source_shape": field.get("source_shape"),
+                    "destination_shape": field.get("destination_shape"),
+                    "shape_compatibility": None,
+                    "mapping_method": None,
                     "gtm_resolution": None,
                     "template_field": None,
+                    "missing_behavior": None,
                     "status": "pending",
                     "provenance_locator": field["provenance"]["locator"],
                 }
             )
     return mappings
+
+
+def _preflight_issues(
+    document: dict[str, Any],
+    requirement_ids: set[str],
+) -> list[str]:
+    issues: list[str] = []
+    for mapping in document["payload_mappings"]:
+        if mapping["requirement_id"] not in requirement_ids:
+            continue
+        identity = f"{mapping['requirement_id']}::{mapping['destination_field']}"
+        if mapping["status"] == "pending":
+            issues.append(f"payload mapping {identity} is pending")
+        elif mapping["status"] == "blocked":
+            issues.append(f"payload mapping {identity} is blocked")
+
+    requirements = {
+        item["id"]: item for item in document["requirements"] if item["id"] in requirement_ids
+    }
+    consent_by_requirement = {item["requirement_id"]: item for item in document["consent_routes"]}
+    for requirement_id, requirement in requirements.items():
+        if requirement["kind"] == "consent" or requirement["status"] == "Deferred":
+            continue
+        if requirement_id not in consent_by_requirement:
+            issues.append(f"consent route {requirement_id} is missing")
+    return issues
 
 
 def create_from_contract(
@@ -766,6 +927,7 @@ def inspect_document(document: dict[str, Any]) -> dict[str, Any]:
     states = {item["operation_id"]: item["state"] for item in document["object_changes"]}
     ready = []
     waiting: dict[str, list[str]] = {}
+    preflight_blockers: dict[str, list[str]] = {}
     unsafe = []
     for item in document["object_changes"]:
         operation_id = item["operation_id"]
@@ -780,6 +942,12 @@ def inspect_document(document: dict[str, Any]) -> dict[str, Any]:
         ]
         if pending_dependencies:
             waiting[operation_id] = pending_dependencies
+        elif item["action"] in MUTATING_ACTIONS:
+            issues = _preflight_issues(document, set(item["requirement_ids"]))
+            if issues:
+                preflight_blockers[operation_id] = issues
+            else:
+                ready.append(operation_id)
         else:
             ready.append(operation_id)
     return {
@@ -787,6 +955,7 @@ def inspect_document(document: dict[str, Any]) -> dict[str, Any]:
         "resumable": not unsafe,
         "ready_operations": ready,
         "waiting_on_dependencies": waiting,
+        "preflight_blockers": preflight_blockers,
         "unsafe_operations": unsafe,
     }
 
@@ -813,6 +982,14 @@ def checkpoint_operation(
     current = operation["state"]
     if state not in ALLOWED_TRANSITIONS[current]:
         raise RunValidationError(f"invalid state transition {current!r} -> {state!r}")
+    if (
+        current == "planned"
+        and state in {"in_progress", "saved", "verified"}
+        and operation["action"] in MUTATING_ACTIONS
+    ):
+        issues = _preflight_issues(document, set(operation["requirement_ids"]))
+        if issues:
+            raise RunValidationError("preflight is incomplete: " + "; ".join(issues))
     at = timestamp or _utc_now()
     _timestamp(at, "timestamp")
     note = _text(note, "note")
@@ -943,6 +1120,7 @@ def render_markdown(document: dict[str, Any], *, embed_machine: bool = False) ->
         "- Publication: not performed; no GTM version created",
     ]
     if preview:
+        preflight_blockers = inspect_document(document)["preflight_blockers"]
         high_impact = [
             item
             for item in operations
@@ -960,9 +1138,14 @@ def render_markdown(document: dict[str, Any], *, embed_machine: bool = False) ->
         lines.append(
             "- Preflight decision: "
             + (
-                f"explicit authority required for {len(high_impact)} high-impact/destructive action(s)"
-                if high_impact
-                else "routine in-scope writes may proceed without a separate approval pause"
+                f"resolve mapping/consent blockers on {len(preflight_blockers)} operation(s)"
+                if preflight_blockers
+                else (
+                    f"explicit authority required for {len(high_impact)} "
+                    "high-impact/destructive action(s)"
+                    if high_impact
+                    else "routine in-scope writes may proceed without a separate approval pause"
+                )
             )
         )
 
@@ -1016,17 +1199,22 @@ def render_markdown(document: dict[str, Any], *, embed_machine: bool = False) ->
         if consent:
             lines.append(
                 f"- Consent: {consent['mode']} via {consent['mechanism']} "
-                f"on `{consent['normal_trigger']}`"
+                f"on `{consent['normal_trigger']}`; block scope "
+                f"`{consent.get('blocking_event_scope') or 'not applicable'}`"
             )
         else:
             lines.append("- Consent: not yet recorded")
         for mapping in mappings:
             lines.append(
-                "- Field `{field}`: `{source}` → `{resolution}` → `{template}` ({status})".format(
+                "- Field `{field}`: `{source}` [{source_shape}] → {method} "
+                "→ `{resolution}` → `{template}` [{destination_shape}] ({status})".format(
                     field=mapping["destination_field"],
                     source=mapping.get("source") or "unresolved",
+                    source_shape=mapping.get("source_shape") or "shape unresolved",
+                    method=mapping.get("mapping_method") or "method unresolved",
                     resolution=mapping.get("gtm_resolution") or "unresolved",
                     template=mapping.get("template_field") or "unresolved",
+                    destination_shape=mapping.get("destination_shape") or "shape unresolved",
                     status=mapping["status"],
                 )
             )

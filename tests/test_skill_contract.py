@@ -188,6 +188,18 @@ class SkillContractTest(unittest.TestCase):
         self.assertIn("Do not create `CJS - Meta - ... valid`", meta)
         self.assertIn("Do not create names such as `CJS - Ecommerce - AddToCart Eligible`", data)
 
+    def test_field_resolution_preflight_prevents_destination_source_inference(self) -> None:
+        skill = read("SKILL.md")
+        contract = read("references/02-execution/configuration-contract.md")
+        data = read("references/02-execution/data-contract-and-transformations.md")
+        run_script = read("scripts/configuration_run.py")
+        self.assertIn("approved actual source and source shape", skill)
+        self.assertIn("Never turn a destination or template field name", contract)
+        self.assertIn("identically named dataLayer source", data)
+        self.assertIn("source_authority_grade", run_script)
+        self.assertIn("shape_compatibility", run_script)
+        self.assertIn("preflight is incomplete", run_script)
+
     def test_compound_consent_predicates_use_native_or_denial_graph(self) -> None:
         skill = read("SKILL.md")
         consent = read("references/02-execution/cmp-consent.md")
@@ -201,7 +213,12 @@ class SkillContractTest(unittest.TestCase):
         self.assertIn("strict/basic CMP blocking", skill)
 
     def test_strict_consent_lifecycle_remains_complete(self) -> None:
+        skill = read("SKILL.md")
         consent = read("references/02-execution/cmp-consent.md")
+        triggers = read("references/02-execution/triggers-and-variables.md")
+        self.assertIn("every in-scope vendor base/configuration and event tag", skill)
+        self.assertIn("it does not replace the reusable vendor block", consent)
+        self.assertIn("default to a tested `.*` regex matcher", triggers)
         for term in (
             "Default to strict/basic gating",
             "unknown, undefined, uninitialized, and denied state block",

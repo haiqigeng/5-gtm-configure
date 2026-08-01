@@ -6,11 +6,14 @@ consent-controlled client-side Google Tag Manager workspaces.
 
 ## Current Release
 
-**v6.1.0** adds a versioned, adapter-neutral configuration-run artifact for preflight impact,
-durable mutation checkpoints, saved readback, recovery, idempotency, and machine-readable recette
-handoff. It also recognizes reserved built-in trigger IDs without synthetic records, adds one
-governed `replace` action, isolates legacy comparison input from mutation authority, and reduces the
-mandatory instruction load while preserving the utility-first north star.
+**v6.2.0** adds verified direct intake for approved `ga4-tracking-plan` deliveries and strengthens
+the pre-mutation decisions exposed by field testing. The importer preserves approved semantics and
+artifact identity without reparsing the human workbook. New run artifacts also stop writes until
+every outgoing field has approved source authority, explicit source/destination shapes, a compatible
+GTM method, and a non-blocked status, and until each analytics/media requirement has a consent route.
+Strict/basic consent keeps reusable vendor blocks on base/configuration and event tags even when a
+CMP readiness/grant event supplies the firing opportunity; vendor-wide Custom Event blocks default
+to a verified `regex:.*` scope.
 
 ## Who It Serves
 
@@ -65,6 +68,9 @@ Use these meanings:
 - Implement strict/basic CMP gating by default, including Google consent default/update ownership,
   and explicitly requested Google, Microsoft, or vendor-native advanced/cookieless/anonymous
   behavior.
+- Keep strict/basic vendor blocks on every in-scope base/configuration and event tag, independently
+  of CMP readiness/grant firing opportunities, with a verified `regex:.*` default for vendor-wide
+  Custom Event blocks.
 - Apply dedicated OneTrust, Didomi, or Axeptio guidance, while routing Cookiebot, Commanders
   Act/TrustCommander, Usercentrics, Quantcast, conditional TCF 2.3/Additional Consent, and other
   CMPs through current official discovery without borrowing signal semantics or making legal-policy
@@ -92,8 +98,8 @@ The skill discovers safe information before asking. Applicable inputs are:
 - Target GTM account and web container; a dedicated workspace name is optional.
 - Approved tracking-plan scope or exact direct analytics event/fields/source/timing.
 - Explicit media brief: platform, business action, destination use, and identity.
-- Exact dataLayer event and required paths; representative payloads only when a transformation or
-  ambiguous shape requires them.
+- Exact dataLayer event, approved source paths/literals, source and destination shapes, and
+  representative payloads when a transformation or ambiguous shape requires them.
 - Installed or named CMP and its documented grant state; basic blocking is the default.
 - Explicit advanced-consent or first-party-data request with the required policy/source details.
 - Conditional conversion labels, catalog/feed conventions, matching fields, or environment mapping.
@@ -109,8 +115,9 @@ A successful run returns:
 - a dedicated workspace containing the complete saved configuration;
 - created, updated, reused, and intentionally untouched in-scope GTM objects;
 - exact analytics approved-to-saved conformance or media brief/official-schema mapping;
-- saved source variables, native/supported-template fields, direct payload mappings, normal
-  triggers, consent route, firing settings, naming, and folders;
+- saved source variables, native/supported-template fields, source-authority and shape-resolved
+  payload mappings, normal triggers, vendor blocks, consent route, firing settings, naming, and
+  folders;
 - installed-template version and relevant permissions/defaults;
 - an official-source manifest plus approved-input and implementation-decision provenance;
 - authoritative object readback, resolved references, fingerprints, workspace conflict state, and
@@ -199,10 +206,11 @@ unavailable semantic operations. Discover exact adapter actions, pagination, lim
 and conflict behavior before writing.
 
 Resolve the dedicated workspace by stable ID, capture pre-existing changes and fingerprints, build
-the full object graph, initialize the configuration-run manifest, write in dependency order, and
-read each object back. Persist `in_progress` immediately before a write and its exact outcome after.
-On an uncertain write, read before retrying. On partial failure, stop dependent writes and preserve
-the exact saved recovery boundary. Do not publish to expose a mutation.
+the full object graph, and initialize the configuration-run manifest. Resolve every payload mapping
+and consent route before the controller exposes its dependent operation as ready, then write in
+dependency order and read each object back. Persist `in_progress` immediately before a write and its
+exact outcome after. On an uncertain write, read before retrying. On partial failure, stop dependent
+writes and preserve the exact saved recovery boundary. Do not publish to expose a mutation.
 
 ## Boundaries
 
@@ -226,7 +234,8 @@ analytics tag-configuration routes.
 - `references/03-judgement/`: saved-state acceptance and concise handoff.
 - `schemas/configuration-run.schema.json`: versioned execution/recovery/recette interchange shape.
 - `scripts/configuration_run.py`: contract ingestion, validation, canonical dependency resolution,
-  atomic checkpoints, explicit failed-operation reopen, resume inspection, and layered handoff.
+  field/consent preflight, atomic checkpoints, explicit failed-operation reopen, resume inspection,
+  and layered handoff.
 - `scripts/adapter_runtime.py`: tested adapter-neutral pagination and mutation safety state machine.
 - `scripts/validate_configuration_contract.py`: strict v5 authority and provenance validation with
   explicit v4 compatibility.
@@ -244,7 +253,7 @@ analytics tag-configuration routes.
 
 ## Install The Skill
 
-Install the release archive or copy `SKILL.md`, `agents/`, `references/`, `schemas/`, the five runtime
+Install the release archive or copy `SKILL.md`, `agents/`, `references/`, `schemas/`, the runtime
 scripts in `scripts/`, and `LICENSE` into the target skill directory. Repository tests, README, and
 release tooling are not runtime files.
 
@@ -256,10 +265,10 @@ Run:
 python -m pip install -e ".[dev]"
 python -m ruff format --no-cache --check scripts tests
 python -m ruff check --no-cache scripts tests
-python scripts/check_release.py --tag v6.1.0 --release-notes CHANGELOG.md
+python scripts/check_release.py --tag v6.2.0 --release-notes CHANGELOG.md
 python -m unittest discover -s tests -v
 python -m compileall -q scripts
-python scripts/build_skill_package.py --output dist/configure-gtm-v6.1.0.zip
+python scripts/build_skill_package.py --output dist/configure-gtm-v6.2.0.zip
 git diff --check
 ~~~
 

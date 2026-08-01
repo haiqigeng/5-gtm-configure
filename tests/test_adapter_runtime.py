@@ -78,12 +78,27 @@ def configuration_contract(object_count: int = 1) -> dict:
 
 
 def configuration_run(object_count: int = 1) -> dict:
-    return create_from_contract(
+    document = create_from_contract(
         configuration_contract(object_count),
         run_id="RUN-ADAPTER",
         source_locator="Plan / Events",
         timestamp="2026-08-01T10:00:00Z",
     )
+    document["consent_routes"] = [
+        {
+            "requirement_id": "TP::Events::12::purchase",
+            "product": "GA4",
+            "mode": "strict-basic",
+            "mechanism": "blocking-trigger",
+            "normal_trigger": "CE - purchase",
+            "blocking_triggers": ["Block - CMP - GA4 denied"],
+            "blocking_event_scope": "regex:.*",
+            "scope_exception_reason": None,
+            "unknown_behavior": "block",
+            "evidence": ["official-current", "container-confirmed"],
+        }
+    ]
+    return document
 
 
 class FakeAdapter:

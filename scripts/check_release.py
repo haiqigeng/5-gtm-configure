@@ -12,7 +12,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SEMVER = re.compile(r"^v(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)$")
-CURRENT_RELEASE = "6.1.0"
+CURRENT_RELEASE = "6.2.0"
 REFERENCE_LAYERS = {
     "01-orientation": {
         "official-source-policy.md",
@@ -80,6 +80,7 @@ REQUIRED_FILES = (
     "scripts/adapter_runtime.py",
     "scripts/configuration_run.py",
     "scripts/diff_object_graph.py",
+    "scripts/import_ga4_tracking_plan_handoff.py",
     "scripts/validate_configuration_contract.py",
     "scripts/validate_contract_conformance.py",
     "schemas/configuration-run.schema.json",
@@ -481,10 +482,16 @@ def check_content() -> list[str]:
         ("configuration schema validator", 'SCHEMA_VERSION = "5.0"', schema_validator),
         ("configuration schema validator", "validate_document", schema_validator),
         ("configuration schema validator", "approved-input", schema_validator),
+        ("configuration schema validator", "destination_shape", schema_validator),
+        ("configuration schema validator", "_validate_source_authority", schema_validator),
         ("configuration-run controller", 'SCHEMA_VERSION = "1.0"', run_controller),
         ("configuration-run controller", "checkpoint_operation", run_controller),
         ("configuration-run controller", "reopen_failed_operation", run_controller),
         ("configuration-run controller", "render_markdown", run_controller),
+        ("configuration-run controller", "source_authority_grade", run_controller),
+        ("configuration-run controller", "shape_compatibility", run_controller),
+        ("configuration-run controller", "DEFAULT_VENDOR_BLOCK_SCOPE", run_controller),
+        ("configuration-run controller", "_preflight_issues", run_controller),
         ("adapter state machine", "collect_paginated", adapter_runtime),
         ("adapter state machine", "AmbiguousWriteError", adapter_runtime),
         ("object graph comparator", "normalize_graph", graph_diff),
@@ -541,6 +548,8 @@ def check_content() -> list[str]:
         "does not unload a vendor script",
         "Select advanced/native consent only explicitly",
         "documented CMP state variable directly",
+        "it does not replace the reusable vendor block",
+        "default a vendor-wide block to a verified `.*` Custom Event regex",
     )
     errors.extend(
         f"consent reference missing contract: {term}"
@@ -637,6 +646,7 @@ def check_content() -> list[str]:
         "filter rows within one trigger are cumulative",
         "any matching blocking/exception trigger prevents",
         "Version 1 literal-dot",
+        "default to a tested `.*` regex matcher",
         "Version 2 nested-path",
         "priority",
         "custom schedule",

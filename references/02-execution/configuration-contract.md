@@ -81,9 +81,20 @@ or mutation target. Store exact official URL/title/access date only for material
 
 ## Map fields and runtime data behavior
 
-For every outgoing field, keep source, GTM resolution, installed-template field, official
-destination field, and browser-versus-server delivery surface distinct. Use `mapped`,
-`intentionally omitted`, `external`, or `blocked`; preserve valid zero and `false`.
+For every outgoing field, complete one resolution row before mutation:
+
+| Decision | Required content |
+| --- | --- |
+| Source | Approved actual source path or literal, its authority, event lifetime, and complete type/shape. |
+| Destination | Installed-template field, official destination field, browser surface, and complete type/shape. |
+| Resolution | Direct DLV/template, constant, settings variable, LUT, RLT, or narrow CJS, plus missing behavior. |
+| Status | `mapped`, `intentionally omitted`, `external`, or `blocked`. |
+
+Never turn a destination or template field name into an identically named DLV unless approved input
+establishes that exact source path. Matching names are allowed only as evidenced source contracts.
+Use a direct DLV/template mapping only when the complete source and terminal destination shapes are
+compatible. Use LUT/RLT for deterministic scalar routing and CJS only for a required shape
+conversion that native variables cannot express. Preserve valid zero and `false`.
 
 A missing design-time source, incompatible type/shape, or unsupported required template field
 blocks. A valid source that may be missing at runtime remains directly mapped and becomes a
@@ -133,9 +144,12 @@ blocks the affected write or `Configured` result.
 
 ## Record consent and external dependencies
 
-For each browser product, record normal trigger plus strict/basic block or grant-event mechanism,
-including unknown/denied behavior and later grant. A grant-event normal trigger must not also carry
-a redundant block. Advanced/native behavior needs explicit request and exact current evidence.
+For each browser product, record the normal trigger independently from its consent gate. Under
+strict/basic consent, attach the complete reusable block set to every vendor base/configuration and
+event tag, including when the normal trigger is a CMP readiness/grant event. Record unknown/denied
+behavior, later grant, and the blocking event scope. Prefer verified `regex:.*` for a vendor-wide
+Custom Event block; a narrower scope needs an explicit consumer-boundary reason. Advanced/native
+behavior needs explicit request and exact current evidence and must not receive a defeating block.
 
 Record site/dataLayer, CMP, GA4-property, media-platform, catalog/feed, publication, and server-side
 work separately. A GTM save never proves an external task completed.

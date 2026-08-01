@@ -10,6 +10,12 @@ implementation brief in a client-side GTM workspace. Create, update, or reuse ev
 object, verify saved state, and never publish. Treat the saved, verified GTM object graph as the unit
 of success; a plan or specification is not configuration.
 
+When the input is a `ga4-tracking-plan` delivery directory, run
+`python scripts/import_ga4_tracking_plan_handoff.py DELIVERY -o approved-semantics.json` first.
+The importer verifies approval and every artifact hash, preserves stable event and opportunity
+identity, and supplies approved semantics to the configuration map without reinterpreting the
+workbook.
+
 ## 01 - Orientation
 
 Read [utility-contract.md](references/01-orientation/utility-contract.md) at the start. Read
@@ -85,13 +91,17 @@ after authoritative readback; otherwise use the narrowest accurate `Partial`, `B
   practice or authority for general audit.
 - Classify the request as greenfield or a delta. Trace shared consumers, capture fingerprints and
   pre-change state, and use one governed `replace` action only when authorized update is impossible.
-- Default every product to strict/basic CMP blocking. A CMP grant event can be the normal page-load
-  trigger without a redundant second gate. Advanced/native behavior requires an explicit request
-  and exact current product proof.
+- Default every product to strict/basic CMP blocking. Attach the complete reusable vendor block set
+  to every in-scope vendor base/configuration and event tag. Select a verified CMP readiness/grant
+  event independently when it supplies the initial or later-grant firing opportunity; it does not
+  replace the block. Advanced/native behavior requires an explicit request and exact current proof.
 - Build the smallest understandable object graph. Follow the default naming convention, use a
   shallow folder when helpful, prefer direct DLV/template mappings, use settings variables only for
   real sharing, LUT/RLT for deterministic routing, and narrow Custom JavaScript only for required
   shape conversion.
+- Resolve every outgoing field before writing: approved actual source and source shape, destination
+  shape, GTM method, template field, and missing behavior. Never infer a dataLayer source from a
+  destination field name; use a direct mapping only when the complete shapes are compatible.
 - Preserve every required ecommerce item and destination shape. Never invent IDs/fields, drop
   items, or create payload-eligibility variables or validity triggers merely because runtime data
   can be absent.

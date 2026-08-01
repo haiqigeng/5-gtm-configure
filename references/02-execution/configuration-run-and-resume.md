@@ -25,6 +25,13 @@ It complements the v5 configuration contract:
 - neither artifact authorizes publication, runtime recette, a site change, or external-platform
   administration.
 
+Before the first mutation, resolve every generated payload-mapping row from approved source
+authority and source shape through one named GTM method to the template and destination shape.
+`direct-dlv` and `native-template` require compatible terminal shapes; `custom-javascript` requires
+a documented shape conversion. A `pending` or `blocked` mapping keeps its requirement's writes out
+of the ready-operation set. The controller also requires a consent route for each non-deferred
+analytics/media requirement before its first write.
+
 When a writable file is unavailable, preserve the same structure in the response. Do not downgrade
 the evidence or status rules merely because the artifact cannot be saved locally.
 
@@ -51,6 +58,12 @@ Require an explicit decision only where the existing authority model already req
 replacement, new or expanded template permissions, Default Workspace use, unresolved shared-
 consumer impact, or high-impact template, Zone, environment, destination, Google tag configuration,
 or container-setting change.
+
+For strict/basic consent, record the reusable blocking trigger set even when a CMP readiness/grant
+event is the normal trigger; new routes use `mechanism: "blocking-trigger"` and keep the CMP event
+in `normal_trigger`. Use `blocking_event_scope: "regex:.*"` for a verified vendor-wide
+Custom Event block; a narrower scope requires `scope_exception_reason`. Advanced/native routes must
+not carry a block that defeats their approved denied-state behavior.
 
 ## Checkpoint every write boundary
 

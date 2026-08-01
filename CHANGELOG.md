@@ -1,5 +1,59 @@
 # Changelog
 
+## 6.2.0
+
+### Why This Release Matters
+
+- Makes an approved GA4 tracking-plan delivery a directly consumable configuration authority
+  instead of requiring another interpretation of the human workbook.
+- Turns two field-test failure modes into pre-mutation controls: destination fields can no longer
+  stand in for unapproved dataLayer sources, and a CMP firing opportunity no longer replaces the
+  strict/basic vendor block.
+
+### What Changed
+
+- Add `import_ga4_tracking_plan_handoff.py` to verify approval, canonical-plan identity, safe
+  artifact paths, and every SHA-256 before emitting normalized approved semantics.
+- Preserve canonical event order, journey IDs, measurement-opportunity IDs, exact dataLayer paths,
+  parameter scope, type, requiredness, conditions, destinations, and source locators.
+- Route the machine intake from the skill and tracking-plan fidelity contract and include it in the
+  deterministic runtime package.
+- Require outgoing fields to retain approved source authority plus explicit source and destination
+  shapes. Keep a field without an approved source blocked instead of creating a destination-named
+  DLV.
+- Extend new configuration-run payload rows with shape compatibility, selected GTM mapping method,
+  and missing-data behavior. Prevent dependent writes while a row is pending/blocked, uses an
+  incompatible direct mapping, or lacks the required transformation decision.
+- Require a consent route before each non-deferred analytics/media write. Under strict/basic
+  consent, require reusable vendor blocks on base/configuration and event tags even when a CMP
+  readiness/grant event is the normal trigger.
+- Default vendor-wide Custom Event blocks to verified `regex:.*`; require a recorded consumer-scope
+  reason for a narrower matcher. Keep advanced/native routes free of defeating blocks.
+
+### What Users Should Do
+
+- Pass a complete approved `ga4-tracking-plan` delivery directory to the importer, then use its
+  output as the approved semantic input to the schema-v5 configuration map.
+- Continue using the XLSX for human review; do not parse it again when the verified machine
+  artifacts are available.
+- Complete every generated payload-mapping row and product consent route before mutation. Treat CMP
+  events as normal-trigger lifecycle opportunities and shared vendor blocks as the strict/basic
+  eligibility policy.
+
+### Validation
+
+- Add regression coverage for exact semantic preservation, stable IDs, tampered-artifact rejection,
+  source authority, source/destination shapes, direct-versus-CJS selection, mapping/consent
+  preflight blockers, CMP-event-plus-blocking-trigger behavior, and wildcard block scope.
+- Run the complete unit, release, lint, compile, and deterministic package checks for `v6.2.0`.
+
+### Known Limits
+
+- Workspace, destination, template, consent, and current-container facts still belong to the GTM
+  configuration stage; the upstream tracking plan cannot supply or authorize them.
+- Static source/shape and consent preflight proves configuration intent only; runtime dataLayer,
+  CMP-event, resolved-variable, and browser-send behavior remains recette scope.
+
 ## 6.1.0
 
 ### Why This Release Matters

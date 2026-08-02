@@ -8,6 +8,9 @@ from pathlib import Path
 from zipfile import ZipFile
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "scripts"))
+
+from check_release import assigned_string_constant  # noqa: E402
 
 
 class ReleaseChecksTest(unittest.TestCase):
@@ -17,7 +20,7 @@ class ReleaseChecksTest(unittest.TestCase):
                 sys.executable,
                 str(ROOT / "scripts" / "check_release.py"),
                 "--tag",
-                "v6.2.0",
+                "v7.0.0",
                 "--release-notes",
                 str(ROOT / "CHANGELOG.md"),
             ],
@@ -62,7 +65,7 @@ class ReleaseChecksTest(unittest.TestCase):
             notes = Path(temporary) / "CHANGELOG.md"
             notes.write_text(
                 "# Changelog\n\n"
-                "## 6.2.0\n\n"
+                "## 7.0.0\n\n"
                 "### Why This Release Matters\n\n"
                 "### What Changed\n\n"
                 "### What Users Should Do\n\n"
@@ -100,8 +103,18 @@ class ReleaseChecksTest(unittest.TestCase):
         self.assertNotEqual(missing_tag.returncode, 0)
         self.assertIn("--require-git-tag requires --tag", missing_tag.stderr)
 
+    def test_release_version_checks_use_exact_top_level_assignments(self) -> None:
+        source = 'SCHEMA_VERSION = "9.9"\nVERIFICATION_SCHEMA_VERSION = "1.1"\n'
+        self.assertEqual(assigned_string_constant(source, "SCHEMA_VERSION"), "9.9")
+        self.assertEqual(
+            assigned_string_constant(source, "VERIFICATION_SCHEMA_VERSION"),
+            "1.1",
+        )
+        self.assertIsNone(assigned_string_constant(source, "MISSING"))
+
     def test_runtime_package_contains_only_runtime_files(self) -> None:
         expected_sources = [
+            ROOT / "VERSION",
             ROOT / "SKILL.md",
             ROOT / "agents" / "openai.yaml",
             ROOT / "LICENSE",
@@ -109,6 +122,7 @@ class ReleaseChecksTest(unittest.TestCase):
             ROOT / "scripts" / "configuration_run.py",
             ROOT / "scripts" / "diff_object_graph.py",
             ROOT / "scripts" / "import_ga4_tracking_plan_handoff.py",
+            ROOT / "scripts" / "strict_json.py",
             ROOT / "scripts" / "validate_configuration_contract.py",
             ROOT / "scripts" / "validate_contract_conformance.py",
         ]

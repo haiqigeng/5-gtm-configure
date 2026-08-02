@@ -8,12 +8,14 @@ import hashlib
 import json
 import os
 import sys
-import tempfile
+from contextlib import contextmanager
+from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
+from strict_json import StrictJsonError, load_json, write_json_atomic
 from validate_configuration_contract import (
     ACTIONS,
     DELTA_ACTIONS,
@@ -25,7 +27,8 @@ from validate_configuration_contract import (
     validate_document as validate_configuration_contract,
 )
 
-SCHEMA_VERSION = "1.0"
+SCHEMA_VERSION = "1.1"
+VERIFICATION_SCHEMA_VERSION = "1.0"
 RUN_PHASES = {"preflight", "mutation", "readback", "complete"}
 RUN_STATUSES = {"In progress", "Configured", "Partial", "Blocked", "Deferred"}
 REQUIREMENT_STATUSES = {"In progress", "Configured", "Partial", "Blocked", "Deferred"}
@@ -38,7 +41,6 @@ OPERATION_STATES = {
     "uncertain",
     "skipped",
 }
-FINAL_OPERATION_STATES = {"verified", "failed", "skipped"}
 CONSENT_MODES = {"strict-basic", "advanced-native"}
 CONSENT_MECHANISMS = {"blocking-trigger", "grant-event", "native-advanced"}
 MAPPING_STATUSES = {"pending", "mapped", "intentionally-omitted", "external", "blocked"}
@@ -90,6 +92,14 @@ ALLOWED_TRANSITIONS = {
 class RunValidationError(ValueError):
     """Raised when a configuration-run manifest violates the operational contract."""
 
+    def __init__(self, message: str, *, error_code: str = "invalid_run") -> None:
+        super().__init__(message)
+        self.error_code = error_code
+
+
+class RunConflictError(RunValidationError):
+    """Raised when another controller owns the same run artifact."""
+
 
 def _object(value: Any, path: str) -> dict[str, Any]:
     if not isinstance(value, dict):
@@ -113,6 +123,148 @@ def _optional_text(value: Any, path: str) -> str | None:
     if value is None:
         return None
     return _text(value, path)
+
+
+def canonical_sha256(value: Any) -> str:
+    """Hash one JSON-compatible value with one stable Unicode representation."""
+    try:
+        encoded = json.dumps(
+            value,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+            allow_nan=False,
+        ).encode("utf-8")
+    except (TypeError, ValueError, RecursionError) as exc:
+        raise RunValidationError(f"value cannot be fingerprinted safely: {exc}") from exc
+    return f"sha256:{hashlib.sha256(encoded).hexdigest()}"
+
+
+def _verification_target(operation: dict[str, Any]) -> Any:
+    if operation.get("action") == "remove":
+        return {
+            "action": "remove",
+            "object_key": operation.get("object_key"),
+            "expected_saved_state": None,
+        }
+    if isinstance(operation.get("intended"), dict):
+        return operation["intended"]
+    return {
+        "action": operation.get("action"),
+        "object_id": operation.get("object_id"),
+        "object_key": operation.get("object_key"),
+    }
+
+
+def _required_comparison_fields(operation: dict[str, Any]) -> set[str]:
+    target = _verification_target(operation)
+    if not isinstance(target, dict) or not target:
+        raise RunValidationError("verification target must be a non-empty object")
+    return set(target)
+
+
+def build_verification_comparison(
+    operation: dict[str, Any],
+    saved: Any,
+    *,
+    comparator: str,
+    compared_fields: list[str],
+    differences: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Build auditable adapter evidence without persisting the complete saved object."""
+    normalized_fields = _unique_texts(
+        compared_fields,
+        "compared_fields",
+        allow_empty=False,
+    )
+    missing_fields = sorted(_required_comparison_fields(operation) - set(normalized_fields))
+    if missing_fields:
+        raise RunValidationError(
+            "compared_fields does not cover intended field(s): " + ", ".join(missing_fields)
+        )
+    return {
+        "schema_version": VERIFICATION_SCHEMA_VERSION,
+        "comparator": _text(comparator, "comparator"),
+        "pass": not differences,
+        "intended_sha256": canonical_sha256(_verification_target(operation)),
+        "saved_sha256": canonical_sha256(saved),
+        "compared_fields": normalized_fields,
+        "differences": deepcopy(differences),
+    }
+
+
+_UNSET = object()
+
+
+def validate_verification_comparison(
+    value: Any,
+    *,
+    operation: dict[str, Any],
+    saved: Any = _UNSET,
+    require_pass: bool = False,
+) -> dict[str, Any]:
+    """Validate structured equality evidence and bind it to the immutable intention."""
+    path = "comparison"
+    comparison = _object(value, path)
+    required = {
+        "schema_version",
+        "comparator",
+        "pass",
+        "intended_sha256",
+        "saved_sha256",
+        "compared_fields",
+        "differences",
+    }
+    unexpected = sorted(set(comparison) - required)
+    missing = sorted(required - set(comparison))
+    if unexpected:
+        raise RunValidationError(f"{path} contains unexpected key(s): {', '.join(unexpected)}")
+    if missing:
+        raise RunValidationError(f"{path} is missing key(s): {', '.join(missing)}")
+    if comparison.get("schema_version") != VERIFICATION_SCHEMA_VERSION:
+        raise RunValidationError(f"{path}.schema_version must be {VERIFICATION_SCHEMA_VERSION!r}")
+    _text(comparison.get("comparator"), f"{path}.comparator")
+    passed = comparison.get("pass")
+    if not isinstance(passed, bool):
+        raise RunValidationError(f"{path}.pass must be a boolean")
+    intended_sha256 = _text(comparison.get("intended_sha256"), f"{path}.intended_sha256")
+    saved_sha256 = _text(comparison.get("saved_sha256"), f"{path}.saved_sha256")
+    for field_path, fingerprint in (
+        (f"{path}.intended_sha256", intended_sha256),
+        (f"{path}.saved_sha256", saved_sha256),
+    ):
+        if len(fingerprint) != 71 or not fingerprint.startswith("sha256:"):
+            raise RunValidationError(f"{field_path} must be a sha256 fingerprint")
+        try:
+            int(fingerprint.removeprefix("sha256:"), 16)
+        except ValueError as exc:
+            raise RunValidationError(f"{field_path} must be a sha256 fingerprint") from exc
+    expected_intended = canonical_sha256(_verification_target(operation))
+    if intended_sha256 != expected_intended:
+        raise RunValidationError(f"{path}.intended_sha256 does not match the operation")
+    if saved is not _UNSET and saved_sha256 != canonical_sha256(saved):
+        raise RunValidationError(f"{path}.saved_sha256 does not match adapter readback")
+    compared_fields = _unique_texts(
+        comparison.get("compared_fields"),
+        f"{path}.compared_fields",
+        allow_empty=False,
+    )
+    missing_fields = sorted(_required_comparison_fields(operation) - set(compared_fields))
+    if missing_fields:
+        raise RunValidationError(
+            f"{path}.compared_fields does not cover intended field(s): " + ", ".join(missing_fields)
+        )
+    differences = _array(comparison.get("differences"), f"{path}.differences")
+    for index, difference in enumerate(differences):
+        if not isinstance(difference, dict) or not difference:
+            raise RunValidationError(f"{path}.differences[{index}] must be a non-empty object")
+    if passed and differences:
+        raise RunValidationError(f"{path}.differences must be empty when pass is true")
+    if not passed and not differences:
+        raise RunValidationError(f"{path}.differences must explain a failed comparison")
+    if require_pass and not passed:
+        raise RunValidationError("verified requires a passing saved-readback comparison")
+    return comparison
 
 
 def _unique_texts(value: Any, path: str, *, allow_empty: bool = True) -> list[str]:
@@ -300,6 +452,12 @@ def _validate_object_changes(
             raise RunValidationError(f"{path}.journal final state must equal {path}.state")
         if state in {"saved", "verified"}:
             _object(item.get("result"), f"{path}.result")
+        if state == "verified":
+            validate_verification_comparison(
+                item.get("comparison"),
+                operation=item,
+                require_pass=True,
+            )
         if state in {"failed", "uncertain"}:
             _text(item.get("error"), f"{path}.error")
         operations[operation_id] = item
@@ -312,22 +470,28 @@ def _validate_object_changes(
                 f"operation {operation_id!r} has unknown dependencies: {', '.join(unknown)}"
             )
 
-    visiting: set[str] = set()
-    visited: set[str] = set()
-
-    def visit(operation_id: str) -> None:
-        if operation_id in visiting:
-            raise RunValidationError(f"operation dependency cycle includes {operation_id!r}")
-        if operation_id in visited:
-            return
-        visiting.add(operation_id)
-        for dependency in dependency_map[operation_id]:
-            visit(dependency)
-        visiting.remove(operation_id)
-        visited.add(operation_id)
-
-    for operation_id in operations:
-        visit(operation_id)
+    state: dict[str, int] = {}
+    for root in operations:
+        if state.get(root) == 2:
+            continue
+        stack: list[tuple[str, bool]] = [(root, False)]
+        while stack:
+            operation_id, exiting = stack.pop()
+            if exiting:
+                state[operation_id] = 2
+                continue
+            current = state.get(operation_id, 0)
+            if current == 2:
+                continue
+            if current == 1:
+                raise RunValidationError(f"operation dependency cycle includes {operation_id!r}")
+            state[operation_id] = 1
+            stack.append((operation_id, True))
+            for dependency in reversed(dependency_map[operation_id]):
+                if state.get(dependency) == 1:
+                    raise RunValidationError(f"operation dependency cycle includes {dependency!r}")
+                if state.get(dependency) != 2:
+                    stack.append((dependency, False))
     return operations, object_claims
 
 
@@ -505,6 +669,13 @@ def _validate_readback(
         _optional_text(item.get("object_id"), f"{path}.object_id")
         _optional_text(item.get("fingerprint"), f"{path}.fingerprint")
         _timestamp(item.get("verified_at"), f"{path}.verified_at")
+        comparison = validate_verification_comparison(
+            item.get("comparison"),
+            operation=operations[operation_id],
+            require_pass=True,
+        )
+        if comparison != operations[operation_id].get("comparison"):
+            raise RunValidationError(f"{path}.comparison does not match its verified operation")
         records[operation_id] = item
     return records
 
@@ -686,11 +857,9 @@ def validate_document(value: Any) -> dict[str, Any]:
 
 def load_document(path: Path) -> dict[str, Any]:
     try:
-        value = json.loads(path.read_text(encoding="utf-8"))
-    except OSError as exc:
-        raise RunValidationError(f"cannot read {path}: {exc}") from exc
-    except json.JSONDecodeError as exc:
-        raise RunValidationError(f"invalid JSON in {path}: {exc}") from exc
+        value = load_json(path)
+    except StrictJsonError as exc:
+        raise RunValidationError(str(exc), error_code=exc.error_code) from exc
     return validate_document(value)
 
 
@@ -699,8 +868,7 @@ def _utc_now() -> str:
 
 
 def _contract_fingerprint(contract: dict[str, Any]) -> str:
-    encoded = json.dumps(contract, sort_keys=True, separators=(",", ":")).encode("utf-8")
-    return f"sha256:{hashlib.sha256(encoded).hexdigest()}"
+    return canonical_sha256(contract)
 
 
 def _field_mappings(requirement: dict[str, Any]) -> list[dict[str, Any]]:
@@ -779,7 +947,7 @@ def create_from_contract(
     try:
         contract = validate_configuration_contract(contract)
     except ContractValidationError as exc:
-        raise RunValidationError(str(exc)) from exc
+        raise RunValidationError(str(exc), error_code=exc.error_code) from exc
     now = timestamp or _utc_now()
     _timestamp(now, "timestamp")
     contract_ids = [item["id"] for item in contract["requirements"]]
@@ -929,10 +1097,13 @@ def inspect_document(document: dict[str, Any]) -> dict[str, Any]:
     waiting: dict[str, list[str]] = {}
     preflight_blockers: dict[str, list[str]] = {}
     unsafe = []
+    failed = []
     for item in document["object_changes"]:
         operation_id = item["operation_id"]
         if item["state"] in {"in_progress", "uncertain"}:
             unsafe.append(operation_id)
+        if item["state"] == "failed":
+            failed.append(operation_id)
         if item["state"] != "planned":
             continue
         pending_dependencies = [
@@ -950,13 +1121,48 @@ def inspect_document(document: dict[str, Any]) -> dict[str, Any]:
                 ready.append(operation_id)
         else:
             ready.append(operation_id)
+    safe_to_resume = not unsafe and not failed
+    status = document["run"]["status"]
+    if failed:
+        suggested_status = (
+            "Partial"
+            if any(state in {"saved", "verified"} for state in states.values())
+            else "Blocked"
+        )
+    elif unsafe:
+        suggested_status = "Partial"
+    elif all(state in {"verified", "skipped"} for state in states.values()):
+        remaining = document["idempotency"]["remaining_actions"]
+        suggested_status = (
+            "Configured" if document["idempotency"]["checked"] and not remaining else "In progress"
+        )
+    else:
+        suggested_status = "In progress"
+    successful = status == "Configured"
+    if failed:
+        error_code = "failed_operations"
+    elif unsafe:
+        error_code = "unsafe_operations"
+    elif preflight_blockers:
+        error_code = "preflight_incomplete"
+    elif all(state in {"verified", "skipped"} for state in states.values()) and not successful:
+        error_code = "finalization_required"
+    else:
+        error_code = None
     return {
-        "pass": not unsafe,
-        "resumable": not unsafe,
+        "pass": successful,
+        "valid": True,
+        "successful": successful,
+        "completed": document["run"]["phase"] == "complete",
+        "resumable": safe_to_resume,
+        "safe_to_resume": safe_to_resume,
+        "error_code": error_code,
+        "suggested_status": suggested_status,
         "ready_operations": ready,
         "waiting_on_dependencies": waiting,
         "preflight_blockers": preflight_blockers,
         "unsafe_operations": unsafe,
+        "failed_operations": failed,
     }
 
 
@@ -969,6 +1175,7 @@ def checkpoint_operation(
     timestamp: str | None = None,
     result: dict[str, Any] | None = None,
     comparison: dict[str, Any] | None = None,
+    saved: Any = _UNSET,
     error: str | None = None,
 ) -> dict[str, Any]:
     """Apply one validated state transition; callers persist only the returned document."""
@@ -996,15 +1203,28 @@ def checkpoint_operation(
     if state in {"saved", "verified"} and result is None:
         raise RunValidationError(f"{state} requires a saved result")
     if state == "verified":
-        if not isinstance(comparison, dict) or comparison.get("pass") is not True:
-            raise RunValidationError("verified requires a passing saved-readback comparison")
+        if saved is _UNSET:
+            raise RunValidationError("verified requires authoritative saved readback")
+        comparison = validate_verification_comparison(
+            comparison,
+            operation=operation,
+            saved=saved,
+            require_pass=True,
+        )
+    else:
+        if comparison is not None:
+            raise RunValidationError("comparison is accepted only for a verified checkpoint")
+        if saved is not _UNSET:
+            raise RunValidationError("saved readback is accepted only for a verified checkpoint")
     if state in {"failed", "uncertain"}:
         error = _text(error, "error")
 
     operation["state"] = state
     operation.setdefault("journal", []).append({"state": state, "at": at, "note": note})
     if result is not None:
-        operation["result"] = result
+        operation["result"] = deepcopy(result)
+    if comparison is not None:
+        operation["comparison"] = deepcopy(comparison)
     if error is not None:
         operation["error"] = error
     if state == "verified":
@@ -1020,6 +1240,7 @@ def checkpoint_operation(
                 "verified": True,
                 "differences": [],
                 "verified_at": at,
+                "comparison": deepcopy(comparison),
             }
         )
     document["run"]["updated_at"] = at
@@ -1053,6 +1274,7 @@ def reopen_failed_operation(
     operation.setdefault("journal", []).append({"state": "planned", "at": at, "note": note})
     operation.pop("error", None)
     operation.pop("result", None)
+    operation.pop("comparison", None)
     document["saved_readback"] = [
         item for item in document["saved_readback"] if item["operation_id"] != operation_id
     ]
@@ -1067,30 +1289,73 @@ def reopen_failed_operation(
     return validate_document(document)
 
 
-def atomic_write(path: Path, value: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    handle, temporary_name = tempfile.mkstemp(
-        prefix=f".{path.name}.", suffix=".tmp", dir=path.parent
-    )
-    temporary = Path(temporary_name)
+@contextmanager
+def run_file_lock(path: Path):
+    """Acquire a non-blocking cross-process lock for one run artifact."""
+    lock_path = path.with_name(f".{path.name}.lock")
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    stream = lock_path.open("a+b")
     try:
-        with os.fdopen(handle, "w", encoding="utf-8", newline="\n") as stream:
-            json.dump(value, stream, indent=2, sort_keys=True, ensure_ascii=False)
-            stream.write("\n")
+        stream.seek(0, os.SEEK_END)
+        if stream.tell() == 0:
+            stream.write(b"\0")
             stream.flush()
-            os.fsync(stream.fileno())
-        os.replace(temporary, path)
+        stream.seek(0)
+        try:
+            if os.name == "nt":
+                import msvcrt
+
+                msvcrt.locking(stream.fileno(), msvcrt.LK_NBLCK, 1)
+            else:
+                import fcntl
+
+                fcntl.flock(stream.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError as exc:
+            raise RunConflictError(
+                f"run artifact is already controlled by another process: {path}"
+            ) from exc
+        try:
+            yield
+        finally:
+            stream.seek(0)
+            if os.name == "nt":
+                import msvcrt
+
+                msvcrt.locking(stream.fileno(), msvcrt.LK_UNLCK, 1)
+            else:
+                import fcntl
+
+                fcntl.flock(stream.fileno(), fcntl.LOCK_UN)
     finally:
-        if temporary.exists():
-            temporary.unlink()
+        stream.close()
+
+
+def _replaceable_planned_run(path: Path) -> bool:
+    document = load_document(path)
+    return (
+        document["run"]["status"] == "In progress"
+        and not document["saved_readback"]
+        and all(item["state"] == "planned" for item in document["object_changes"])
+    )
+
+
+def atomic_write(path: Path, value: dict[str, Any]) -> None:
+    """Preserve the public helper while sharing the strict atomic writer."""
+    write_json_atomic(path, value)
+
+
+def _json_value_file(path: Path, label: str) -> Any:
+    try:
+        return load_json(path)
+    except StrictJsonError as exc:
+        raise RunValidationError(
+            f"cannot load {label} {path}: {exc}",
+            error_code=exc.error_code,
+        ) from exc
 
 
 def _json_file(path: Path, label: str) -> dict[str, Any]:
-    try:
-        value = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        raise RunValidationError(f"cannot load {label} {path}: {exc}") from exc
-    return _object(value, label)
+    return _object(_json_value_file(path, label), label)
 
 
 def render_markdown(document: dict[str, Any], *, embed_machine: bool = False) -> str:
@@ -1250,7 +1515,7 @@ def render_markdown(document: dict[str, Any], *, embed_machine: bool = False) ->
 
 
 def _emit_json(value: Any) -> None:
-    print(json.dumps(value, indent=2, sort_keys=True))
+    print(json.dumps(value, indent=2, sort_keys=True, allow_nan=False))
 
 
 def main() -> int:
@@ -1266,6 +1531,11 @@ def main() -> int:
     init_parser.add_argument("--source-locator", required=True)
     init_parser.add_argument("--timestamp")
     init_parser.add_argument("--output", type=Path, required=True)
+    init_parser.add_argument(
+        "--replace-planned",
+        action="store_true",
+        help="Replace only an existing untouched planned run; never replace saved history.",
+    )
 
     inspect_parser = subparsers.add_parser("inspect")
     inspect_parser.add_argument("--run", type=Path, required=True)
@@ -1278,6 +1548,7 @@ def main() -> int:
     checkpoint_parser.add_argument("--timestamp")
     checkpoint_parser.add_argument("--result", type=Path)
     checkpoint_parser.add_argument("--comparison", type=Path)
+    checkpoint_parser.add_argument("--saved-readback", type=Path)
     checkpoint_parser.add_argument("--error")
 
     reopen_parser = subparsers.add_parser("reopen")
@@ -1304,33 +1575,52 @@ def main() -> int:
                 source_locator=args.source_locator,
                 timestamp=args.timestamp,
             )
-            atomic_write(args.output, document)
+            with run_file_lock(args.output):
+                if args.output.exists():
+                    if not args.replace_planned:
+                        raise RunValidationError(
+                            f"output already exists; use a new path or --replace-planned: "
+                            f"{args.output}"
+                        )
+                    if not _replaceable_planned_run(args.output):
+                        raise RunValidationError(
+                            "--replace-planned refuses an artifact with non-planned or saved state"
+                        )
+                atomic_write(args.output, document)
             _emit_json({"pass": True, "output": str(args.output.resolve())})
         elif args.command == "inspect":
             _emit_json(inspect_document(load_document(args.run)))
         elif args.command == "checkpoint":
             result = _json_file(args.result, "result") if args.result else None
             comparison = _json_file(args.comparison, "comparison") if args.comparison else None
-            document = checkpoint_operation(
-                load_document(args.run),
-                operation_id=args.operation,
-                state=args.state,
-                note=args.note,
-                timestamp=args.timestamp,
-                result=result,
-                comparison=comparison,
-                error=args.error,
+            saved = (
+                _json_value_file(args.saved_readback, "saved readback")
+                if args.saved_readback
+                else _UNSET
             )
-            atomic_write(args.run, document)
+            with run_file_lock(args.run):
+                document = checkpoint_operation(
+                    load_document(args.run),
+                    operation_id=args.operation,
+                    state=args.state,
+                    note=args.note,
+                    timestamp=args.timestamp,
+                    result=result,
+                    comparison=comparison,
+                    saved=saved,
+                    error=args.error,
+                )
+                atomic_write(args.run, document)
             _emit_json({"pass": True, "operation": args.operation, "state": args.state})
         elif args.command == "reopen":
-            document = reopen_failed_operation(
-                load_document(args.run),
-                operation_id=args.operation,
-                note=args.note,
-                timestamp=args.timestamp,
-            )
-            atomic_write(args.run, document)
+            with run_file_lock(args.run):
+                document = reopen_failed_operation(
+                    load_document(args.run),
+                    operation_id=args.operation,
+                    note=args.note,
+                    timestamp=args.timestamp,
+                )
+                atomic_write(args.run, document)
             _emit_json({"pass": True, "operation": args.operation, "state": "planned"})
         else:
             rendered = render_markdown(
@@ -1344,8 +1634,14 @@ def main() -> int:
             else:
                 sys.stdout.reconfigure(encoding="utf-8", errors="backslashreplace")
                 print(rendered, end="")
+    except RunConflictError as exc:
+        _emit_json({"pass": False, "error_code": "run_conflict", "error": str(exc)})
+        return 2
     except RunValidationError as exc:
-        _emit_json({"pass": False, "error": str(exc)})
+        _emit_json({"pass": False, "error_code": exc.error_code, "error": str(exc)})
+        return 2
+    except (OSError, UnicodeError) as exc:
+        _emit_json({"pass": False, "error_code": "io_error", "error": str(exc)})
         return 2
     return 0
 

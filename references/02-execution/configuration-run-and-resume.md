@@ -14,7 +14,7 @@
 
 ## Use one durable run artifact
 
-For an operational mutation, maintain one `configuration-run@1.0` JSON artifact from preflight
+For an operational mutation, maintain one `configuration-run@1.1` JSON artifact from preflight
 through saved readback. Its schema is
 [`../../schemas/configuration-run.schema.json`](../../schemas/configuration-run.schema.json).
 It complements the v5 configuration contract:
@@ -35,13 +35,18 @@ analytics/media requirement before its first write.
 When a writable file is unavailable, preserve the same structure in the response. Do not downgrade
 the evidence or status rules merely because the artifact cannot be saved locally.
 
+Treat a durable file as strongly preferred, not as authority to block an otherwise executable tool
+run. When a file is used, permit one writer for that artifact at a time. The controller uses an
+exclusive per-artifact writer lock so two sessions cannot overwrite each other's checkpoints; it
+does not claim a global GTM workspace lease. `init` refuses an existing path unless
+`--replace-planned` is explicit and the existing artifact contains only untouched `planned` state.
+
 ## Preserve stable requirement identity
 
 Use a source-supplied immutable requirement ID when one exists. Otherwise create a deterministic ID
-from the approved source locator and business action, for example
-`TP::Events::12::generate_lead`. Persist that ID for the run; do not renumber it because rows were
-sorted or filtered. Record the exact workbook/sheet/row, document section, or direct-message locator
-separately.
+from a unique stable business identity, for example `GA4::generate_lead`; do not include mutable row
+order when event identity is already unique. Persist that ID for the run and record workbook/sheet/
+row order, document section, or direct-message location separately.
 
 In a multi-requirement contract, every object action declares `requirement_ids`. Shared objects list
 all consumers. This makes plan-to-object and Config-to-Recette chaining exact without pretending to
@@ -78,9 +83,13 @@ After the adapter returns, persist one accurate state:
 | `uncertain` | The response cannot prove whether the write saved; no retry is permitted yet. |
 | `skipped` | The action is intentionally not executed under the approved graph. |
 
-Record returned stable IDs and fingerprints when exposed. `verified` requires a passing comparison;
-an adapter success response alone is insufficient. Write checkpoints atomically so a process or
-session interruption cannot leave a half-written journal.
+Record returned stable IDs and fingerprints when exposed. `verified` requires structured comparison
+evidence containing the comparator identity, intended and saved SHA-256 fingerprints, every
+top-level intended field, and structured differences. A bare `pass: true` or adapter success
+response is insufficient. Supply the authoritative saved payload so the controller recomputes and
+binds its fingerprint to the immutable intended operation. Persist the proof on both the operation
+and saved-readback record. Write checkpoints atomically so an interruption cannot leave a
+half-written journal.
 
 ## Resume only from proved state
 
@@ -94,13 +103,22 @@ On restart, load and validate the run artifact before calling the adapter:
 5. preserve verified work and stop downstream consumers on authentication failure, fingerprint
    conflict, schema drift, or unresolved readback.
 
+Interpret inspection fields literally: `valid` means the artifact satisfies its schema,
+`resumable` means no failed/in-progress/uncertain operation permits an automatic next write, and
+`successful`/`pass` become true only for a validated `Configured` run. `completed`,
+`suggested_status`, and `error_code` remain separate so a valid or resumable run cannot appear
+successfully configured by accident. The controller never auto-finalizes idempotency or status.
+
 A `failed` operation is known not to have completed and is not retried automatically. After its
 blocker is resolved and the target account/container/workspace is revalidated, explicitly run the
 controller's `reopen` command with a durable reason. This moves only that proved no-write operation
 back to `planned`; an `uncertain` operation must first be resolved by authoritative readback.
 
 The packaged adapter state machine supplies executable regressions for cursor pagination, bounded
-rate-limit retries, authentication expiry, ambiguous writes, partial saves, and idempotent reruns.
+rate-limit retries with an in-bound documented `Retry-After` or exponential backoff and jitter,
+authentication expiry, ambiguous writes, partial saves, and idempotent reruns. When `Retry-After`
+exceeds the configured window, stop instead of retrying early. The helper reads the exact operation
+before mutation; it does not perform a redundant whole-container inventory sweep on every write run.
 For an MCP or UI that cannot call the helper directly, follow the same state transitions and keep
 the run artifact as the durable checkpoint.
 
@@ -135,7 +153,7 @@ Generate every layer from the same validated run artifact:
    recovery boundary, and explicit no-publication statement.
 2. **Analyst/developer:** requirement-to-object changes, exact payload mappings, normal and blocking
    triggers, template fields/permissions, saved IDs/readback, and external owners.
-3. **Machine/recette:** the complete `configuration-run@1.0` JSON with one recette record per stable
+3. **Machine/recette:** the complete `configuration-run@1.1` JSON with one recette record per stable
    requirement ID and explicit `runtime_validation_performed: false`.
 
 The machine layer is a handoff, not proof of runtime behavior. The recette skill remains responsible
@@ -148,9 +166,12 @@ python scripts/configuration_run.py init --contract contract.json --run-id RUN-0
 python scripts/configuration_run.py validate --run configuration-run.json
 python scripts/configuration_run.py inspect --run configuration-run.json
 python scripts/configuration_run.py checkpoint --run configuration-run.json --operation OP-001 --state in_progress --note "Read-before-write passed"
+python scripts/configuration_run.py checkpoint --run configuration-run.json --operation OP-001 --state verified --note "Saved readback matched" --result saved-result.json --saved-readback saved-object.json --comparison comparison.json
 python scripts/configuration_run.py reopen --run configuration-run.json --operation OP-003 --note "Authentication renewed; target identity revalidated."
 python scripts/configuration_run.py render --run configuration-run.json --output handoff.md
 ~~~
 
-Use `checkpoint --state verified` only with `--result` and a `--comparison` file whose `pass` value
-is true. The script rejects unsafe transitions and writes the updated artifact atomically.
+Use `checkpoint --state verified` only with `--result`, the authoritative `--saved-readback`, and a
+structured `--comparison` file that passes the v1 verification schema and covers every top-level
+intended field. The script recomputes the saved fingerprint, rejects unsafe transitions, duplicate
+JSON keys, non-finite values, excessive nesting, and unsafe overwrite, and writes atomically.

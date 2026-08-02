@@ -72,9 +72,9 @@ Translate each included requirement into the concise operational configuration m
 source sheet/cell or row reference needed to prove exact conformance; do not require a universal
 spreadsheet parser or create a large secondary plan.
 
-Prefer an immutable requirement ID supplied by the approved plan. Otherwise derive one once from
-the exact source locator and business action, for example `TP::Events::12::generate_lead`, and keep
-it stable across sorting, mutation, readback, and recette handoff. The packaged run initializer
+Prefer an immutable requirement ID supplied by the approved plan. Otherwise derive one from a
+unique stable business identity, for example `GA4::generate_lead`, and keep mutable row order only
+in the separate source locator. Keep the ID stable across sorting, mutation, readback, and recette handoff. The packaged run initializer
 ingests a validated configuration contract and preserves these IDs; it deliberately does not guess
 the layout or meaning of an arbitrary workbook.
 

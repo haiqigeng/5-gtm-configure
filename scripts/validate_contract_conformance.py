@@ -8,11 +8,16 @@ import json
 from pathlib import Path
 from typing import Any
 
+from strict_json import StrictJsonError, load_json
 from validate_configuration_contract import ContractValidationError, validate_document
 
 
 class ContractError(ValueError):
     """Raised when a normalized contract does not satisfy the comparison schema."""
+
+    def __init__(self, message: str, *, error_code: str = "invalid_contract") -> None:
+        super().__init__(message)
+        self.error_code = error_code
 
 
 def _validate_unversioned_comparison(value: Any) -> None:
@@ -29,18 +34,16 @@ def _validate_unversioned_comparison(value: Any) -> None:
 
 def load_contract(path: Path) -> dict[str, Any]:
     try:
-        value = json.loads(path.read_text(encoding="utf-8"))
-    except OSError as exc:
-        raise ContractError(f"cannot read {path}: {exc}") from exc
-    except json.JSONDecodeError as exc:
-        raise ContractError(f"invalid JSON in {path}: {exc}") from exc
+        value = load_json(path)
+    except StrictJsonError as exc:
+        raise ContractError(str(exc), error_code=exc.error_code) from exc
     if isinstance(value, dict) and "schema_version" not in value:
         _validate_unversioned_comparison(value)
     else:
         try:
             validate_document(value, allow_legacy=True)
         except ContractValidationError as exc:
-            raise ContractError(f"{path}: {exc}") from exc
+            raise ContractError(f"{path}: {exc}", error_code=exc.error_code) from exc
     return value
 
 
@@ -183,7 +186,7 @@ def main() -> int:
     try:
         report = compare(load_contract(args.approved), load_contract(args.candidate))
     except ContractError as exc:
-        print(json.dumps({"pass": False, "error": str(exc)}))
+        print(json.dumps({"pass": False, "error_code": exc.error_code, "error": str(exc)}))
         return 2
 
     print(json.dumps(report, indent=2, sort_keys=True))

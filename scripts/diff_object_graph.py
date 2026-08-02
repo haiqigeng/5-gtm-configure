@@ -8,6 +8,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+from strict_json import StrictJsonError, load_json
+
 ROOT_METADATA_KEYS = {
     "accountId",
     "containerId",
@@ -83,6 +85,10 @@ STANDALONE_PARAMETER_FIELDS = frozenset(
 
 class GraphError(ValueError):
     """Raised when an object graph cannot be normalized safely."""
+
+    def __init__(self, message: str, *, error_code: str = "invalid_graph") -> None:
+        super().__init__(message)
+        self.error_code = error_code
 
 
 def _canonical(
@@ -211,15 +217,28 @@ def _semantic_reference(
     identities: set[str],
     semantic_type: str,
     path: str,
+    allow_name: bool = False,
 ) -> Any:
     if isinstance(value, str):
-        translated = mapping.get(value, value)
-        if translated not in identities:
+        candidates: set[str] = set()
+        if value in mapping:
+            candidates.add(mapping[value])
+        if value in identities:
+            candidates.add(value)
+        named = f"{semantic_type}::{value}"
+        if allow_name and named in identities:
+            candidates.add(named)
+        if not candidates:
             raise GraphError(
                 f"{path} contains unresolved {semantic_type} reference {value!r}; "
                 "include the referenced object in the graph"
             )
-        return translated
+        if len(candidates) > 1:
+            raise GraphError(
+                f"{path} contains ambiguous {semantic_type} reference {value!r}: "
+                + ", ".join(sorted(candidates))
+            )
+        return candidates.pop()
     if isinstance(value, list):
         return [
             _semantic_reference(
@@ -228,6 +247,7 @@ def _semantic_reference(
                 identities=identities,
                 semantic_type=semantic_type,
                 path=f"{path}[{index}]",
+                allow_name=allow_name,
             )
             for index, item in enumerate(value)
         ]
@@ -263,6 +283,7 @@ def _translate_references(
                     identities=identities["tag"],
                     semantic_type="tag",
                     path=f"{path}.{key}",
+                    allow_name=True,
                 )
             else:
                 translated[key] = _translate_references(
@@ -287,7 +308,7 @@ def _translate_references(
     return value
 
 
-def normalize_graph(value: Any) -> dict[str, dict[str, Any]]:
+def _normalize_graph(value: Any) -> dict[str, dict[str, Any]]:
     """Return semantic objects with server IDs translated in cross-object references."""
     if isinstance(value, dict):
         objects = value.get("objects")
@@ -325,6 +346,14 @@ def normalize_graph(value: Any) -> dict[str, dict[str, Any]]:
             path=path,
         )
     return {key: normalized[key] for key in sorted(normalized)}
+
+
+def normalize_graph(value: Any) -> dict[str, dict[str, Any]]:
+    """Normalize one graph and turn excessive nesting into an explicit graph error."""
+    try:
+        return _normalize_graph(value)
+    except RecursionError as exc:
+        raise GraphError("graph nesting exceeds the supported safety limit") from exc
 
 
 def differences(expected: Any, actual: Any, path: str = "$") -> list[dict[str, Any]]:
@@ -376,11 +405,9 @@ def compare_graphs(expected: Any, saved: Any) -> dict[str, Any]:
 
 def _load(path: Path) -> Any:
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except OSError as exc:
-        raise GraphError(f"cannot read {path}: {exc}") from exc
-    except json.JSONDecodeError as exc:
-        raise GraphError(f"invalid JSON in {path}: {exc}") from exc
+        return load_json(path)
+    except StrictJsonError as exc:
+        raise GraphError(str(exc), error_code=exc.error_code) from exc
 
 
 def main() -> int:
@@ -391,7 +418,7 @@ def main() -> int:
     try:
         report = compare_graphs(_load(args.expected), _load(args.saved))
     except GraphError as exc:
-        print(json.dumps({"pass": False, "error": str(exc)}))
+        print(json.dumps({"pass": False, "error_code": exc.error_code, "error": str(exc)}))
         return 2
     print(json.dumps(report, indent=2, sort_keys=True))
     return 0 if report["pass"] else 1

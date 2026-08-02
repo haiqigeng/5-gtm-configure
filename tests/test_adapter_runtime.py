@@ -18,7 +18,12 @@ from adapter_runtime import (  # noqa: E402
     collect_paginated,
     execute_ready_operations,
 )
-from configuration_run import atomic_write, create_from_contract, load_document  # noqa: E402
+from configuration_run import (  # noqa: E402
+    atomic_write,
+    build_verification_comparison,
+    create_from_contract,
+    load_document,
+)
 
 
 def configuration_contract(object_count: int = 1) -> dict:
@@ -117,8 +122,24 @@ class FakeAdapter:
     def read(self, operation: dict) -> dict | None:
         return self.saved.get(operation["object_key"])
 
-    def matches(self, operation: dict, saved: dict | None) -> bool:
-        return saved is not None and saved.get("intended") == operation.get("intended")
+    def compare(self, operation: dict, saved: dict | None) -> dict:
+        matches = saved is not None and saved.get("intended") == operation.get("intended")
+        differences = []
+        if not matches:
+            differences.append(
+                {
+                    "path": "intended",
+                    "expected": deepcopy(operation.get("intended")),
+                    "actual": deepcopy(saved.get("intended")) if saved else None,
+                }
+            )
+        return build_verification_comparison(
+            operation,
+            saved,
+            comparator="fake-semantic-v1",
+            compared_fields=sorted(operation.get("intended", {})),
+            differences=differences,
+        )
 
     def mutate(self, operation: dict) -> dict | None:
         operation_id = operation["operation_id"]
@@ -160,11 +181,52 @@ class AdapterRuntimeTest(unittest.TestCase):
                 return {"items": [{"id": "1"}], "next_cursor": "next"}
             return {"items": [{"id": "2"}], "next_cursor": None}
 
-        self.assertEqual([item["id"] for item in collect_paginated(fetch)], ["1", "2"])
+        delays = []
+        self.assertEqual(
+            [
+                item["id"]
+                for item in collect_paginated(
+                    fetch,
+                    sleep=delays.append,
+                    random_value=lambda: 0.5,
+                )
+            ],
+            ["1", "2"],
+        )
         self.assertEqual(calls, [None, None, "next"])
+        self.assertEqual(delays, [0.25])
 
         with self.assertRaises(RateLimitError):
-            collect_paginated(lambda _: (_ for _ in ()).throw(RateLimitError("stop")))
+            collect_paginated(
+                lambda _: (_ for _ in ()).throw(RateLimitError("stop")),
+                sleep=lambda _: None,
+            )
+
+        retry_after_delays = []
+        attempts = 0
+
+        def retry_after(_: str | None) -> dict:
+            nonlocal attempts
+            attempts += 1
+            if attempts == 1:
+                raise RateLimitError("wait", retry_after_seconds=2)
+            return {"items": [], "next_cursor": None}
+
+        collect_paginated(
+            retry_after,
+            max_retry_delay_seconds=3,
+            sleep=retry_after_delays.append,
+        )
+        self.assertEqual(retry_after_delays, [2])
+
+        with self.assertRaises(RateLimitError):
+            collect_paginated(
+                lambda _: (_ for _ in ()).throw(
+                    RateLimitError("wait too long", retry_after_seconds=30)
+                ),
+                max_retry_delay_seconds=3,
+                sleep=retry_after_delays.append,
+            )
 
     def test_rate_limit_then_success_is_verified_and_checkpointed(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -174,12 +236,13 @@ class AdapterRuntimeTest(unittest.TestCase):
                 path,
                 adapter,
                 timestamp=lambda: "2026-08-01T10:01:00Z",
+                sleep=lambda _: None,
             )
             saved = load_document(path)
         self.assertTrue(result["resumable"])
         self.assertEqual(saved["object_changes"][0]["state"], "verified")
         self.assertEqual(adapter.mutate_calls["OP-001"], 2)
-        self.assertEqual(adapter.page_calls, [None, "page-2"])
+        self.assertEqual(adapter.page_calls, [])
 
     def test_auth_expiry_stops_dependents_and_preserves_partial_state(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -244,8 +307,56 @@ class AdapterRuntimeTest(unittest.TestCase):
                 adapter,
                 timestamp=lambda: "2026-08-01T10:01:00Z",
             )
-            with self.assertRaisesRegex(AdapterExecutionError, "resolve them by readback"):
+            with self.assertRaisesRegex(AdapterExecutionError, "explicitly reopen"):
                 execute_ready_operations(path, adapter)
+
+    def test_adapter_cannot_verify_with_a_bare_boolean(self) -> None:
+        class LiarAdapter(FakeAdapter):
+            def compare(self, operation: dict, saved: dict | None) -> dict:
+                return {"pass": True}
+
+        with tempfile.TemporaryDirectory() as temporary:
+            path = self.run_path(Path(temporary))
+            execute_ready_operations(path, LiarAdapter())
+            saved = load_document(path)
+        self.assertEqual(saved["object_changes"][0]["state"], "failed")
+        self.assertIn("comparison evidence is invalid", saved["object_changes"][0]["error"])
+
+    def test_adapter_cannot_mutate_the_persisted_operation_input(self) -> None:
+        class MutatingAdapter(FakeAdapter):
+            def mutate(self, operation: dict) -> dict | None:
+                operation["intended"]["value"] = 999
+                return super().mutate(operation)
+
+        with tempfile.TemporaryDirectory() as temporary:
+            path = self.run_path(Path(temporary))
+            adapter = MutatingAdapter()
+            execute_ready_operations(
+                path,
+                adapter,
+                timestamp=lambda: "2026-08-01T10:01:00Z",
+            )
+            saved = load_document(path)
+        self.assertEqual(saved["object_changes"][0]["intended"]["value"], 1)
+        self.assertEqual(saved["object_changes"][0]["state"], "uncertain")
+
+    def test_invalid_mutation_response_is_checkpointed_as_uncertain(self) -> None:
+        class InvalidResponseAdapter(FakeAdapter):
+            def mutate(self, operation: dict) -> dict | None:
+                self.mutate_calls[operation["operation_id"]] += 1
+                return []  # type: ignore[return-value]
+
+        with tempfile.TemporaryDirectory() as temporary:
+            path = self.run_path(Path(temporary))
+            execute_ready_operations(
+                path,
+                InvalidResponseAdapter(),
+                timestamp=lambda: "2026-08-01T10:01:00Z",
+            )
+            saved = load_document(path)
+        operation = saved["object_changes"][0]
+        self.assertEqual(operation["state"], "uncertain")
+        self.assertIn("adapter_schema_error", operation["error"])
 
 
 if __name__ == "__main__":

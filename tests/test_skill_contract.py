@@ -417,7 +417,7 @@ class SkillContractTest(unittest.TestCase):
             "Hand off in three layers",
         ):
             self.assertIn(term, run_reference)
-        self.assertIn('SCHEMA_VERSION = "1.0"', run_script)
+        self.assertRegex(run_script, r'(?m)^SCHEMA_VERSION = "1\.1"$')
         self.assertIn("reopen_failed_operation", run_script)
         self.assertIn("collect_paginated", adapter_runtime)
         mandatory = (

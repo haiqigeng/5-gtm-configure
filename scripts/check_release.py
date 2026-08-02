@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import ast
 import json
 import re
 import subprocess
@@ -12,7 +13,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SEMVER = re.compile(r"^v(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)$")
-CURRENT_RELEASE = "6.2.0"
+CURRENT_RELEASE = "7.0.0"
 REFERENCE_LAYERS = {
     "01-orientation": {
         "official-source-policy.md",
@@ -63,6 +64,7 @@ REQUIRED_REFERENCE_FILES = tuple(
     for filename in sorted(filenames)
 )
 REQUIRED_FILES = (
+    "VERSION",
     "SKILL.md",
     "agents/openai.yaml",
     "README.md",
@@ -83,12 +85,14 @@ REQUIRED_FILES = (
     "scripts/import_ga4_tracking_plan_handoff.py",
     "scripts/validate_configuration_contract.py",
     "scripts/validate_contract_conformance.py",
+    "scripts/strict_json.py",
     "schemas/configuration-run.schema.json",
     "tests/test_adapter_runtime.py",
     "tests/test_configuration_run.py",
     "tests/test_configuration_contract_schema.py",
     "tests/test_cli_json_output.py",
     "tests/test_release.py",
+    "tests/test_runtime_hardening.py",
     "tests/test_forward_test_cases.py",
     "tests/test_object_graph_diff.py",
     "tests/test_skill_contract.py",
@@ -127,6 +131,29 @@ SCAN_EXCLUDED_NAMES = {
 
 def read(relative: str) -> str:
     return (ROOT / relative).read_text(encoding="utf-8")
+
+
+def assigned_string_constant(source: str, name: str) -> str | None:
+    """Return one exact top-level string assignment without substring matching."""
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return None
+    for node in tree.body:
+        value = None
+        if isinstance(node, ast.Assign) and any(
+            isinstance(target, ast.Name) and target.id == name for target in node.targets
+        ):
+            value = node.value
+        elif (
+            isinstance(node, ast.AnnAssign)
+            and isinstance(node.target, ast.Name)
+            and node.target.id == name
+        ):
+            value = node.value
+        if isinstance(value, ast.Constant) and isinstance(value.value, str):
+            return value.value
+    return None
 
 
 def parse_frontmatter() -> tuple[str, str]:
@@ -271,11 +298,13 @@ def check_content() -> list[str]:
     contributing = read("CONTRIBUTING.md")
     agent_metadata = read("agents/openai.yaml")
     pyproject = read("pyproject.toml")
+    runtime_version = read("VERSION").strip()
     ci_workflow = read(".github/workflows/ci.yml")
     release_workflow = read(".github/workflows/release.yml")
     schema_validator = read("scripts/validate_configuration_contract.py")
     run_controller = read("scripts/configuration_run.py")
     adapter_runtime = read("scripts/adapter_runtime.py")
+    strict_json = read("scripts/strict_json.py")
     graph_diff = read("scripts/diff_object_graph.py")
     run_schema = read("schemas/configuration-run.schema.json")
     compact_skill = " ".join(skill.split())
@@ -363,7 +392,11 @@ def check_content() -> list[str]:
         "Use replace as one governed action",
         "Summarize template permission changes",
         "Hand off in three layers",
-        "configuration-run@1.0",
+        "configuration-run@1.1",
+        "exclusive per-artifact writer lock",
+        "structured comparison",
+        "--saved-readback",
+        "top-level intended field",
     )
     errors.extend(
         f"configuration-run reference missing requirement: {term}"
@@ -479,12 +512,10 @@ def check_content() -> list[str]:
             f"{label} reference missing contract: {term}" for term in terms if term not in text
         )
     deterministic_contracts = (
-        ("configuration schema validator", 'SCHEMA_VERSION = "5.0"', schema_validator),
         ("configuration schema validator", "validate_document", schema_validator),
         ("configuration schema validator", "approved-input", schema_validator),
         ("configuration schema validator", "destination_shape", schema_validator),
         ("configuration schema validator", "_validate_source_authority", schema_validator),
-        ("configuration-run controller", 'SCHEMA_VERSION = "1.0"', run_controller),
         ("configuration-run controller", "checkpoint_operation", run_controller),
         ("configuration-run controller", "reopen_failed_operation", run_controller),
         ("configuration-run controller", "render_markdown", run_controller),
@@ -505,6 +536,20 @@ def check_content() -> list[str]:
     for label, term, text in deterministic_contracts:
         if term not in text:
             errors.append(f"{label} missing contract: {term}")
+    exact_version_constants = (
+        ("configuration schema validator", schema_validator, "SCHEMA_VERSION", "5.0"),
+        ("configuration-run controller", run_controller, "SCHEMA_VERSION", "1.1"),
+        (
+            "configuration-run verification",
+            run_controller,
+            "VERIFICATION_SCHEMA_VERSION",
+            "1.0",
+        ),
+    )
+    for label, source, name, expected in exact_version_constants:
+        actual = assigned_string_constant(source, name)
+        if actual != expected:
+            errors.append(f"{label} {name} must be {expected!r}, got {actual!r}")
     analytics_terms = (
         "GA4 - Config",
         "GA4 - Event Setting",
@@ -743,6 +788,8 @@ def check_content() -> list[str]:
     if not re.search(rf"^## {re.escape(CURRENT_RELEASE)}\s*$", changelog, re.M):
         errors.append("CHANGELOG is missing the current release section")
     expected_tag = f"v{CURRENT_RELEASE}"
+    if runtime_version != CURRENT_RELEASE:
+        errors.append("VERSION does not match CURRENT_RELEASE")
     if not re.search(rf'^version = "{re.escape(CURRENT_RELEASE)}"$', pyproject, re.M):
         errors.append("pyproject version does not match CURRENT_RELEASE")
     version_contracts = (
@@ -807,10 +854,41 @@ def check_content() -> list[str]:
     except json.JSONDecodeError as exc:
         errors.append(f"configuration-run schema is invalid JSON: {exc}")
     else:
-        if parsed_run_schema.get("properties", {}).get("schema_version", {}).get("const") != "1.0":
-            errors.append("configuration-run schema does not declare version 1.0")
+        if parsed_run_schema.get("properties", {}).get("schema_version", {}).get("const") != "1.1":
+            errors.append("configuration-run schema does not declare version 1.1")
         if parsed_run_schema.get("additionalProperties") is not False:
             errors.append("configuration-run schema must reject unknown top-level fields")
+        verification = parsed_run_schema.get("$defs", {}).get("verificationComparison", {})
+        verification_required = {
+            "schema_version",
+            "comparator",
+            "pass",
+            "intended_sha256",
+            "saved_sha256",
+            "compared_fields",
+            "differences",
+        }
+        if not verification_required <= set(verification.get("required", [])):
+            errors.append("configuration-run schema lacks structured verification evidence")
+
+    strict_json_terms = ("object_pairs_hook", "parse_constant", "utf-8-sig", "MAX_JSON_DEPTH")
+    errors.extend(
+        f"strict JSON loader missing safety control: {term}"
+        for term in strict_json_terms
+        if term not in strict_json
+    )
+    adapter_terms = (
+        "def compare(",
+        "validate_verification_comparison",
+        "deepcopy",
+        "run_file_lock",
+        "retry_after_seconds",
+    )
+    errors.extend(
+        f"adapter runtime missing safety control: {term}"
+        for term in adapter_terms
+        if term not in adapter_runtime
+    )
 
     if "unversioned comparison inputs cannot authorize mutation" not in schema_validator:
         errors.append("mutation validator does not isolate unversioned comparison input")

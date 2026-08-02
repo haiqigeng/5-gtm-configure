@@ -1,5 +1,80 @@
 # Changelog
 
+## 7.0.0
+
+### Why This Release Matters
+
+- Prevents three false-safety paths in the operational runtime: a bare adapter boolean can no
+  longer prove a saved object, concurrent controllers can no longer silently overwrite the same
+  run journal, and malformed machine intake can no longer be skipped as if it were approved scope.
+- Keeps the hardening proportional to configuration utility: it adds per-artifact protection and
+  exact validation without introducing a global workspace scheduler, automatic rollback engine, or
+  runtime recette responsibility.
+- Uses a major release because the `configuration-run` proof and programmatic adapter contracts are
+  intentionally incompatible with v6.2.
+
+### What Changed
+
+- Add packaged `VERSION` identity and move the execution artifact to `configuration-run@1.1`.
+- Require structured verification evidence with comparator identity, intended/saved SHA-256,
+  complete intended-field coverage, and differences. Bind it to the immutable operation and the
+  supplied authoritative saved payload; reject bare `pass: true`, unbound readback claims, and
+  incomplete comparison scope, and copy adapter inputs/outputs defensively.
+- Refuse accidental `init` overwrite, serialize writers for one run artifact, atomically checkpoint
+  every transition, and report explicit validity, success, completion, resumability, failed,
+  unsafe, and suggested-status fields without auto-finalizing the run.
+- Validate adapter read/mutation response types. Journal schema failures before a write as `failed`
+  and after a mutation call as `uncertain`; keep authentication, documented rate limits, and
+  ambiguous writes distinct.
+- Honor an in-bound documented `Retry-After`, stop when it exceeds the configured window, or use
+  bounded exponential backoff with jitter. Remove the
+  redundant whole-inventory sweep from per-operation execution while retaining the standalone
+  complete-pagination utility for relevant discovery.
+- Add one strict BOM-tolerant JSON path for runtime inputs and atomic outputs. Reject duplicate
+  keys, NaN/Infinity, invalid UTF-8, oversize files, and excessive nesting with targeted error
+  codes.
+- Make the approved GA4 handoff importer reject duplicate artifact roles/paths, wrong byte counts,
+  malformed event/parameter/dataLayer records, and duplicate semantic identities while accepting
+  harmless extra metadata. Prefer a source-supplied immutable requirement ID and otherwise use the
+  unique GA4 event name, keeping source order separate so reordering does not rename requirements.
+- Resolve setup/teardown `tagName` from an exact official name form as well as returned IDs and
+  semantic identities, reject ambiguity, and validate long dependency graphs iteratively.
+- Parse runtime schema constants exactly in release validation so another similarly named constant
+  cannot satisfy a stale version assertion.
+
+### What Users Should Do
+
+- Start new operational runs with `configuration-run@1.1`. Programmatic adapters must implement the
+  structured `compare` contract; a boolean `matches` response is no longer sufficient.
+- Supply the authoritative saved object with every verified checkpoint. The controller recomputes
+  its fingerprint and requires the comparison to cover every top-level intended field.
+- Keep using a durable run file when available and one controller per artifact. Use
+  `--replace-planned` only to replace an untouched planned artifact; choose a new path for any run
+  that contains history.
+- Continue exhausting every relevant inventory page during discovery. The execution helper now
+  performs exact per-operation reads instead of relisting the whole container before every batch.
+
+### Validation
+
+- Add regressions for malicious/bare/unbound comparison claims, incomplete comparison scope, stable
+  requirement identity across event reordering, exact release constants, adapter input mutation, invalid response
+  shapes, retry timing, competing writers, accidental overwrite, false-green status, 1,200-object
+  dependency chains, setup-tag names/ambiguity, BOM/duplicate/non-finite/deep JSON, malformed
+  upstream records, artifact byte counts, and packaged version identity.
+- Run the complete unit, release, Ruff, compile, deterministic-package, and whitespace checks for
+  `v7.0.0`.
+
+### Known Limits
+
+- Existing `configuration-run@1.0` artifacts do not contain the proof required by v1.1. Finish them
+  with their original runtime or create a new v1.1 run and re-read the saved workspace; the skill
+  does not fabricate verification evidence during migration.
+- The per-artifact lock prevents lost local checkpoints but is not a distributed GTM workspace
+  lease. Cross-agent workspace conflict detection still relies on stable target identity,
+  fingerprints, synchronization state, and read-before-write.
+- Automated rollback, hash-chain ledgers, circuit breakers, persistent pagination cursors,
+  publication, runtime recette, and server-side GTM remain outside this release.
+
 ## 6.2.0
 
 ### Why This Release Matters

@@ -13,11 +13,14 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 from configuration_run import (  # noqa: E402
     RunValidationError,
+    atomic_write,
+    build_verification_comparison,
     checkpoint_operation,
     create_from_contract,
     inspect_document,
     render_markdown,
     reopen_failed_operation,
+    run_file_lock,
     validate_document,
 )
 
@@ -132,6 +135,23 @@ def ready_run_document() -> dict:
     return validate_document(document)
 
 
+def saved_object(document: dict) -> dict:
+    operation = document["object_changes"][0]
+    return {"object_id": "9", "fingerprint": "abc", **operation["intended"]}
+
+
+def verification(document: dict, saved: dict | None = None) -> dict:
+    operation = document["object_changes"][0]
+    value = saved if saved is not None else saved_object(document)
+    return build_verification_comparison(
+        operation,
+        value,
+        comparator="test-semantic-v1",
+        compared_fields=sorted(operation["intended"]),
+        differences=[],
+    )
+
+
 class ConfigurationRunTest(unittest.TestCase):
     def test_contract_ingestion_preserves_stable_requirement_identity(self) -> None:
         document = run_document()
@@ -201,7 +221,7 @@ class ConfigurationRunTest(unittest.TestCase):
         )
         self.assertFalse(inspect_document(document)["resumable"])
 
-        with self.assertRaisesRegex(RunValidationError, "passing saved-readback"):
+        with self.assertRaisesRegex(RunValidationError, "comparison must be an object"):
             checkpoint_operation(
                 document,
                 operation_id="OP-001",
@@ -209,8 +229,21 @@ class ConfigurationRunTest(unittest.TestCase):
                 note="Unproven claim.",
                 timestamp="2026-08-01T10:02:00Z",
                 result={"object_id": "9", "fingerprint": "abc"},
+                saved=saved_object(document),
             )
 
+        with self.assertRaisesRegex(RunValidationError, "authoritative saved readback"):
+            checkpoint_operation(
+                document,
+                operation_id="OP-001",
+                state="verified",
+                note="Comparison is not bound to readback.",
+                timestamp="2026-08-01T10:02:00Z",
+                result={"object_id": "9", "fingerprint": "abc"},
+                comparison=verification(document),
+            )
+
+        saved = saved_object(document)
         document = checkpoint_operation(
             document,
             operation_id="OP-001",
@@ -218,10 +251,41 @@ class ConfigurationRunTest(unittest.TestCase):
             note="Authoritative readback matched.",
             timestamp="2026-08-01T10:02:00Z",
             result={"object_id": "9", "fingerprint": "abc"},
-            comparison={"pass": True},
+            comparison=verification(document, saved),
+            saved=saved,
         )
         self.assertTrue(inspect_document(document)["resumable"])
+        self.assertFalse(inspect_document(document)["pass"])
+        self.assertEqual(inspect_document(document)["error_code"], "finalization_required")
         self.assertEqual(document["saved_readback"][0]["operation_id"], "OP-001")
+
+    def test_verified_checkpoint_binds_complete_comparison_to_saved_payload(self) -> None:
+        document = ready_run_document()
+        operation = document["object_changes"][0]
+        saved = saved_object(document)
+
+        with self.assertRaisesRegex(RunValidationError, "does not cover intended field"):
+            build_verification_comparison(
+                operation,
+                saved,
+                comparator="incomplete-comparator",
+                compared_fields=["name"],
+                differences=[],
+            )
+
+        different_readback = deepcopy(saved)
+        different_readback["type"] = "wrong"
+        with self.assertRaisesRegex(RunValidationError, "saved_sha256 does not match"):
+            checkpoint_operation(
+                document,
+                operation_id="OP-001",
+                state="verified",
+                note="The proof belongs to another readback.",
+                timestamp="2026-08-01T10:02:00Z",
+                result={"object_id": "9", "fingerprint": "abc"},
+                comparison=verification(document, saved),
+                saved=different_readback,
+            )
 
     def test_known_failed_operation_requires_explicit_reopen_before_retry(self) -> None:
         document = checkpoint_operation(
@@ -232,7 +296,11 @@ class ConfigurationRunTest(unittest.TestCase):
             timestamp="2026-08-01T10:01:00Z",
             error="authentication expired",
         )
-        self.assertEqual(inspect_document(document)["ready_operations"], [])
+        failed_inspection = inspect_document(document)
+        self.assertEqual(failed_inspection["ready_operations"], [])
+        self.assertFalse(failed_inspection["pass"])
+        self.assertFalse(failed_inspection["successful"])
+        self.assertEqual(failed_inspection["suggested_status"], "Blocked")
         document = reopen_failed_operation(
             document,
             operation_id="OP-001",
@@ -252,6 +320,7 @@ class ConfigurationRunTest(unittest.TestCase):
 
     def test_configured_requires_complete_readback_and_idempotency(self) -> None:
         document = ready_run_document()
+        saved = saved_object(document)
         document = checkpoint_operation(
             document,
             operation_id="OP-001",
@@ -259,13 +328,18 @@ class ConfigurationRunTest(unittest.TestCase):
             note="Existing state matched exactly.",
             timestamp="2026-08-01T10:02:00Z",
             result={"object_id": "9", "fingerprint": "abc"},
-            comparison={"pass": True},
+            comparison=verification(document, saved),
+            saved=saved,
         )
         document["run"]["phase"] = "complete"
         document["run"]["status"] = "Configured"
         document["requirements"][0]["status"] = "Configured"
         document["idempotency"] = {"checked": True, "remaining_actions": []}
         self.assertEqual(validate_document(document)["run"]["status"], "Configured")
+        configured = inspect_document(document)
+        self.assertTrue(configured["pass"])
+        self.assertTrue(configured["successful"])
+        self.assertIsNone(configured["error_code"])
 
         invalid = deepcopy(document)
         invalid["saved_readback"] = []
@@ -379,7 +453,34 @@ class ConfigurationRunTest(unittest.TestCase):
             "removed": [],
             "evidence_locator": "Installed template permission diff",
         }
-        self.assertEqual(validate_document(document)["schema_version"], "1.0")
+        self.assertEqual(validate_document(document)["schema_version"], "1.1")
+
+    def test_long_dependency_chain_is_validated_iteratively(self) -> None:
+        value = contract()
+        requirement_id = "TP::Events::12::generate_lead"
+        objects = []
+        for index in range(1200):
+            name = f"Variable {index:04d}"
+            item = {
+                "action": "create",
+                "object_type": "variable",
+                "name": name,
+                "requirement_ids": [requirement_id],
+                "justification": "Implements the approved dependency graph.",
+                "evidence": ["approved-input", "container-confirmed"],
+                "intended": {"object_type": "variable", "name": name},
+            }
+            if index:
+                item["dependencies"] = [f"variable::Variable {index - 1:04d}"]
+            objects.append(item)
+        value["implementation"]["objects"] = objects
+        document = create_from_contract(
+            value,
+            run_id="RUN-LONG-CHAIN",
+            source_locator="Tracking Plan / Events",
+            timestamp="2026-08-01T10:00:00Z",
+        )
+        self.assertEqual(len(document["object_changes"]), 1200)
 
     def test_renderer_has_preflight_human_and_machine_layers(self) -> None:
         rendered = render_markdown(run_document(), embed_machine=True)
@@ -387,7 +488,7 @@ class ConfigurationRunTest(unittest.TestCase):
         self.assertIn("## Executive summary", rendered)
         self.assertIn("## Analyst and developer change log", rendered)
         self.assertIn("## Machine handoff", rendered)
-        self.assertIn('"schema_version": "1.0"', rendered)
+        self.assertIn('"schema_version": "1.1"', rendered)
         self.assertIn("resolve mapping/consent blockers", rendered)
 
     def test_cli_init_validate_inspect_and_render(self) -> None:
@@ -424,8 +525,63 @@ class ConfigurationRunTest(unittest.TestCase):
                     check=False,
                 )
                 self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+            duplicate_init = subprocess.run(
+                [
+                    sys.executable,
+                    str(ROOT / "scripts" / "configuration_run.py"),
+                    *commands[0],
+                ],
+                cwd=ROOT,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(duplicate_init.returncode, 2)
+            self.assertEqual(json.loads(duplicate_init.stdout)["error_code"], "invalid_run")
+
+            replacement = subprocess.run(
+                [
+                    sys.executable,
+                    str(ROOT / "scripts" / "configuration_run.py"),
+                    *commands[0],
+                    "--replace-planned",
+                ],
+                cwd=ROOT,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(replacement.returncode, 0, replacement.stdout + replacement.stderr)
             self.assertTrue(handoff_path.exists())
             self.assertIn("Executive summary", handoff_path.read_text(encoding="utf-8"))
+
+    def test_run_file_lock_rejects_a_competing_checkpoint(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "run.json"
+            atomic_write(path, ready_run_document())
+            with run_file_lock(path):
+                result = subprocess.run(
+                    [
+                        sys.executable,
+                        str(ROOT / "scripts" / "configuration_run.py"),
+                        "checkpoint",
+                        "--run",
+                        str(path),
+                        "--operation",
+                        "OP-001",
+                        "--state",
+                        "in_progress",
+                        "--note",
+                        "Competing writer",
+                    ],
+                    cwd=ROOT,
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+        self.assertEqual(result.returncode, 2)
+        self.assertEqual(json.loads(result.stdout)["error_code"], "run_conflict")
 
 
 if __name__ == "__main__":

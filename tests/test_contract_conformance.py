@@ -162,6 +162,41 @@ class ContractConformanceTest(unittest.TestCase):
         self.assertFalse(report["pass"])
         self.assertIn("non-empty string id", report["error"])
 
+    def test_ga4_delivery_requirement_ids_survive_event_reordering(self) -> None:
+        def event(name: str, requirement_id: str | None = None) -> dict:
+            value = {
+                "event_name": name,
+                "classification": "custom",
+                "journey_ids": ["journey"],
+                "measurement_opportunity_ids": [f"measure_{name}"],
+                "trigger": f"Confirmed {name} action.",
+                "data_layer": {"clear": [], "push": {"event": name}},
+                "parameters": [],
+            }
+            if requirement_id:
+                value["requirement_id"] = requirement_id
+            return value
+
+        handoff = {
+            "skill": {"version": "2.5.0"},
+            "approval": {"state": "approved"},
+            "plan": {"canonical_sha256": "plan-hash"},
+        }
+        alpha = event("alpha_event", "TP::event::alpha")
+        beta = event("beta_event")
+        original = normalized_approved_semantics(handoff, {"events": [alpha, beta]})
+        reordered = normalized_approved_semantics(handoff, {"events": [beta, alpha]})
+
+        original_ids = {item["event_name"]: item["id"] for item in original["requirements"]}
+        reordered_ids = {item["event_name"]: item["id"] for item in reordered["requirements"]}
+        self.assertEqual(original_ids, reordered_ids)
+        self.assertEqual(original_ids["alpha_event"], "TP::event::alpha")
+        self.assertEqual(original_ids["beta_event"], "GA4::beta_event")
+        self.assertNotEqual(
+            original["requirements"][0]["source_order"],
+            reordered["requirements"][1]["source_order"],
+        )
+
     def test_ga4_delivery_import_preserves_approved_semantics_and_hashes(self) -> None:
         plan = {
             "events": [
@@ -171,7 +206,13 @@ class ContractConformanceTest(unittest.TestCase):
                     "journey_ids": ["lead_generation"],
                     "measurement_opportunity_ids": ["lead_success"],
                     "trigger": "Confirmed form success.",
-                    "data_layer": {"clear": ["event_data"]},
+                    "data_layer": {
+                        "clear": ["event_data"],
+                        "push": {
+                            "event": "generate_lead",
+                            "event_data": {"form_name": "{{string}}"},
+                        },
+                    },
                     "parameters": [
                         {
                             "name": "form_name",
@@ -199,6 +240,7 @@ class ContractConformanceTest(unittest.TestCase):
                     {
                         "path": "plan.json",
                         "role": "canonical_tracking_plan",
+                        "bytes": plan_path.stat().st_size,
                         "sha256": digest,
                     }
                 ],
@@ -206,8 +248,9 @@ class ContractConformanceTest(unittest.TestCase):
             (delivery / "handoff.json").write_text(json.dumps(handoff), encoding="utf-8")
             verified_handoff, verified_plan = verify_delivery(delivery)
             imported = normalized_approved_semantics(verified_handoff, verified_plan)
-            self.assertEqual(imported["scope"]["included"], ["GA4::001::generate_lead"])
+            self.assertEqual(imported["scope"]["included"], ["GA4::generate_lead"])
             requirement = imported["requirements"][0]
+            self.assertEqual(requirement["source_order"], 1)
             self.assertEqual(requirement["measurement_opportunity_ids"], ["lead_success"])
             self.assertEqual(
                 requirement["parameters"]["event::form_name"]["source"],
@@ -217,7 +260,14 @@ class ContractConformanceTest(unittest.TestCase):
             self.assertEqual(imported_field["source_shape"], "string")
             self.assertEqual(imported_field["destination_shape"], "string")
             self.assertEqual(imported_field["source_authority"]["grade"], "approved-input")
-            plan_path.write_text("{}", encoding="utf-8")
+            plan_path.write_text(
+                plan_path.read_text(encoding="utf-8").replace(
+                    "generate_lead",
+                    "generate_dead",
+                    1,
+                ),
+                encoding="utf-8",
+            )
             with self.assertRaisesRegex(HandoffError, "hash mismatch"):
                 verify_delivery(delivery)
 

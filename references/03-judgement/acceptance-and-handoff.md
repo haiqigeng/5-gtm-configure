@@ -87,7 +87,7 @@ This proves configured Boolean logic, not observed consent behavior.
 
 ## Three-layer handoff
 
-Generate all layers from the validated `configuration-run@1.0` artifact so human and machine views
+Generate all layers from the validated `configuration-run@1.1` artifact so human and machine views
 cannot drift.
 
 ### 1. Executive summary

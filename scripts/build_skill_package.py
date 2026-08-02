@@ -9,6 +9,7 @@ from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
 
 ROOT = Path(__file__).resolve().parents[1]
 INCLUDED = (
+    "VERSION",
     "SKILL.md",
     "agents/openai.yaml",
     "references",
@@ -17,6 +18,7 @@ INCLUDED = (
     "scripts/configuration_run.py",
     "scripts/diff_object_graph.py",
     "scripts/import_ga4_tracking_plan_handoff.py",
+    "scripts/strict_json.py",
     "scripts/validate_configuration_contract.py",
     "scripts/validate_contract_conformance.py",
     "LICENSE",

@@ -121,6 +121,34 @@ class ObjectGraphDiffTest(unittest.TestCase):
         self.assertEqual(normalized["firingTriggerId"], ["trigger::CE - purchase"])
         self.assertEqual(normalized["setupTag"][0]["tagName"], "tag::Base")
 
+    def test_sequencing_tag_name_accepts_the_official_name_form(self) -> None:
+        graph = {
+            "objects": [
+                {"object_type": "tag", "name": "Base"},
+                {
+                    "object_type": "tag",
+                    "name": "Purchase",
+                    "setupTag": [{"tagName": "Base", "stopOnSetupFailure": True}],
+                },
+            ]
+        }
+        normalized = normalize_graph(graph)["tag::Purchase"]
+        self.assertEqual(normalized["setupTag"][0]["tagName"], "tag::Base")
+
+        ambiguous = {
+            "objects": [
+                {"object_type": "tag", "name": "Other", "tagId": "Base"},
+                {"object_type": "tag", "name": "Base", "tagId": "8"},
+                {
+                    "object_type": "tag",
+                    "name": "Purchase",
+                    "setupTag": [{"tagName": "Base", "stopOnSetupFailure": True}],
+                },
+            ]
+        }
+        with self.assertRaisesRegex(GraphError, "ambiguous tag reference"):
+            normalize_graph(ambiguous)
+
     def test_unresolved_raw_or_semantic_reference_fails(self) -> None:
         for reference in ("17", "trigger::CE - purchase"):
             with self.subTest(reference=reference):

@@ -10,6 +10,8 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
+from strict_json import StrictJsonError, load_json
+
 SCHEMA_VERSION = "5.0"
 LEGACY_SCHEMA_VERSIONS = {"4.0"}
 ROUTES = {"analytics", "media", "consent", "combined"}
@@ -92,6 +94,10 @@ OBJECT_RESOURCE_FAMILIES = {
 
 class ContractValidationError(ValueError):
     """Raised when a configuration contract violates its declared authority boundary."""
+
+    def __init__(self, message: str, *, error_code: str = "invalid_contract") -> None:
+        super().__init__(message)
+        self.error_code = error_code
 
 
 def _require_object(value: Any, path: str) -> dict[str, Any]:
@@ -453,24 +459,32 @@ def _validate_object_dependencies(objects: list[Any]) -> None:
             )
         dependency_map[object_key] = normalized
 
-    visiting: set[str] = set()
-    visited: set[str] = set()
-
-    def visit(object_key: str) -> None:
-        if object_key in visiting:
-            raise ContractValidationError(
-                f"$.implementation.objects dependency cycle includes {object_key!r}"
-            )
-        if object_key in visited:
-            return
-        visiting.add(object_key)
-        for dependency in dependency_map[object_key]:
-            visit(dependency)
-        visiting.remove(object_key)
-        visited.add(object_key)
-
-    for object_key in keys:
-        visit(object_key)
+    state: dict[str, int] = {}
+    for root in keys:
+        if state.get(root) == 2:
+            continue
+        stack: list[tuple[str, bool]] = [(root, False)]
+        while stack:
+            object_key, exiting = stack.pop()
+            if exiting:
+                state[object_key] = 2
+                continue
+            current = state.get(object_key, 0)
+            if current == 2:
+                continue
+            if current == 1:
+                raise ContractValidationError(
+                    f"$.implementation.objects dependency cycle includes {object_key!r}"
+                )
+            state[object_key] = 1
+            stack.append((object_key, True))
+            for dependency in reversed(dependency_map[object_key]):
+                if state.get(dependency) == 1:
+                    raise ContractValidationError(
+                        f"$.implementation.objects dependency cycle includes {dependency!r}"
+                    )
+                if state.get(dependency) != 2:
+                    stack.append((dependency, False))
 
 
 def validate_document(value: Any, *, allow_legacy: bool = False) -> dict[str, Any]:
@@ -580,11 +594,9 @@ def validate_document(value: Any, *, allow_legacy: bool = False) -> dict[str, An
 
 def load_contract(path: Path, *, allow_legacy: bool = False) -> dict[str, Any]:
     try:
-        value = json.loads(path.read_text(encoding="utf-8"))
-    except OSError as exc:
-        raise ContractValidationError(f"cannot read {path}: {exc}") from exc
-    except json.JSONDecodeError as exc:
-        raise ContractValidationError(f"invalid JSON in {path}: {exc}") from exc
+        value = load_json(path)
+    except StrictJsonError as exc:
+        raise ContractValidationError(str(exc), error_code=exc.error_code) from exc
     return validate_document(value, allow_legacy=allow_legacy)
 
 
@@ -597,7 +609,7 @@ def main() -> int:
     try:
         value = load_contract(args.contract, allow_legacy=args.allow_legacy)
     except ContractValidationError as exc:
-        print(json.dumps({"pass": False, "error": str(exc)}))
+        print(json.dumps({"pass": False, "error_code": exc.error_code, "error": str(exc)}))
         return 2
 
     print(json.dumps({"pass": True, "schema_version": value.get("schema_version", "legacy")}))

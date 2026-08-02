@@ -13,8 +13,8 @@ of success; a plan or specification is not configuration.
 When the input is a `ga4-tracking-plan` delivery directory, run
 `python scripts/import_ga4_tracking_plan_handoff.py DELIVERY -o approved-semantics.json` first.
 The importer verifies approval and every artifact hash, preserves stable event and opportunity
-identity, and supplies approved semantics to the configuration map without reinterpreting the
-workbook.
+identity, rejects malformed machine records, and supplies approved semantics to the configuration
+map without reinterpreting the workbook.
 
 ## 01 - Orientation
 
@@ -107,9 +107,11 @@ after authoritative readback; otherwise use the narrowest accurate `Partial`, `B
   can be absent.
 - Reconcile automatic/manual page views, business events, destinations, environments, consent, and
   shared execution units before writing.
-- Maintain the versioned run artifact when possible. Checkpoint immediately before and after each
-  write; re-read every saved/reused object; never retry an ambiguous mutation without decisive
-  readback; make an identical rerun a no-op.
+- Maintain the versioned run artifact when possible. Never overwrite saved run history; serialize
+  writers for the same artifact; checkpoint immediately before and after each write; re-read every
+  saved/reused object; bind structured comparison evidence to the supplied authoritative saved
+  payload and every intended field; never retry an ambiguous mutation without decisive readback;
+  make an identical rerun a no-op.
 - Record site, CMP, GA4/media administration, catalog/feed, recette, publication, and server work as
   external. Never claim GTM completed another system or runtime validation.
 - Keep server-side GTM, CAPI, and deduplication as future extensions. Never generate a browser event

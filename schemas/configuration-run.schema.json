@@ -3,6 +3,46 @@
   "$id": "https://github.com/haiqigeng/gtm-configure/schemas/configuration-run.schema.json",
   "title": "configure-gtm configuration run",
   "description": "Adapter-neutral saved-state, recovery, and recette handoff contract for one client-side GTM configuration run.",
+  "$defs": {
+    "verificationComparison": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "comparator",
+        "pass",
+        "intended_sha256",
+        "saved_sha256",
+        "compared_fields",
+        "differences"
+      ],
+      "properties": {
+        "schema_version": {"const": "1.0"},
+        "comparator": {"type": "string", "minLength": 1},
+        "pass": {"type": "boolean"},
+        "intended_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "saved_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "compared_fields": {
+          "type": "array",
+          "description": "Every top-level intended field covered by the saved-state comparison.",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1}
+        },
+        "differences": {
+          "type": "array",
+          "items": {"type": "object", "minProperties": 1}
+        }
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"pass": {"const": true}}, "required": ["pass"]},
+          "then": {"properties": {"differences": {"maxItems": 0}}},
+          "else": {"properties": {"differences": {"minItems": 1}}}
+        }
+      ]
+    }
+  },
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -20,7 +60,7 @@
     "recette_handoff"
   ],
   "properties": {
-    "schema_version": {"const": "1.0"},
+    "schema_version": {"const": "1.1"},
     "run": {
       "type": "object",
       "required": [
@@ -220,8 +260,25 @@
             }
           },
           "result": {"type": "object"},
+          "comparison": {"$ref": "#/$defs/verificationComparison"},
           "error": {"type": "string", "minLength": 1}
-        }
+        },
+        "allOf": [
+          {
+            "if": {"properties": {"state": {"const": "verified"}}, "required": ["state"]},
+            "then": {
+              "required": ["result", "comparison"],
+              "properties": {
+                "comparison": {
+                  "allOf": [
+                    {"$ref": "#/$defs/verificationComparison"},
+                    {"properties": {"pass": {"const": true}}}
+                  ]
+                }
+              }
+            }
+          }
+        ]
       }
     },
     "payload_mappings": {
@@ -320,6 +377,7 @@
           "fingerprint",
           "verified",
           "differences",
+          "comparison",
           "verified_at"
         ],
         "properties": {
@@ -329,6 +387,7 @@
           "fingerprint": {"type": ["string", "null"]},
           "verified": {"const": true},
           "differences": {"type": "array", "maxItems": 0},
+          "comparison": {"$ref": "#/$defs/verificationComparison"},
           "verified_at": {"type": "string", "format": "date-time"}
         }
       }

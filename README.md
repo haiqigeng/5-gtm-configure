@@ -6,14 +6,15 @@ consent-controlled client-side Google Tag Manager workspaces.
 
 ## Current Release
 
-**v6.2.0** adds verified direct intake for approved `ga4-tracking-plan` deliveries and strengthens
-the pre-mutation decisions exposed by field testing. The importer preserves approved semantics and
-artifact identity without reparsing the human workbook. New run artifacts also stop writes until
-every outgoing field has approved source authority, explicit source/destination shapes, a compatible
-GTM method, and a non-blocked status, and until each analytics/media requirement has a consent route.
-Strict/basic consent keeps reusable vendor blocks on base/configuration and event tags even when a
-CMP readiness/grant event supplies the firing opportunity; vendor-wide Custom Event blocks default
-to a verified `regex:.*` scope.
+**v7.0.0** hardens the existing operational runtime without expanding the client-side GTM scope.
+Machine intake now rejects duplicate keys, non-finite values, excessive nesting, corrupt artifact
+inventories, and malformed tracking-plan records while retaining harmless future metadata. A
+`configuration-run@1.1` cannot be overwritten once it contains history, permits one writer per run
+artifact, and accepts `verified` only with structured proof bound to the intended object and supplied
+authoritative saved payload. Imported tracking-plan requirement IDs remain stable when event order
+changes.
+The adapter boundary also validates response shapes, protects inputs from mutation, uses bounded
+rate-limit backoff with jitter, and records accurate failed versus uncertain states.
 
 ## Who It Serves
 
@@ -87,9 +88,10 @@ Use these meanings:
   unpause—after tracing every affected consumer and preserving pre-change state.
 - Run same-identity migrations as one governed `replace` action when supported update cannot reach
   the approved target and destructive authority, recovery, and readback are explicit.
-- Persist a `configuration-run@1.0` manifest across MCP, API, export/import, or UI execution so a
+- Persist a `configuration-run@1.1` manifest across MCP, API, export/import, or UI execution so a
   session can resume safely after authentication expiry, throttling, timeout, or partial save;
-  failed no-write operations require an explicit reopen after their blocker is resolved.
+  failed no-write operations require an explicit reopen after their blocker is resolved. A durable
+  file is strongly preferred, not a new blocker when the active tool cannot write one.
 
 ## Inputs
 
@@ -122,13 +124,15 @@ A successful run returns:
 - an official-source manifest plus approved-input and implementation-decision provenance;
 - authoritative object readback, resolved references, fingerprints, workspace conflict state, and
   deterministic object-graph diff and idempotent rerun result;
-- a validated `configuration-run@1.0` machine manifest plus executive and analyst/developer views,
+- a validated `configuration-run@1.1` machine manifest plus executive and analyst/developer views,
   covering expected execution, payload/consent mappings, saved IDs, checkpoints, partial recovery,
-  blockers, external dependencies, and recette cues;
+  blockers, external dependencies, structured comparison evidence, and recette cues;
 - confirmation that runtime recette and publication did not occur.
 
 Use `Configured`, `Partial`, `Blocked`, or `Deferred`. If mutation access or a critical decision is
 missing, use `Blocked`; do not convert the run into a successful specification workflow.
+Run inspection reports validity, resumability, completion, suggested status, and success separately;
+`pass` is true only for a validated `Configured` run.
 
 ## Workflow Architecture
 
@@ -210,7 +214,9 @@ the full object graph, and initialize the configuration-run manifest. Resolve ev
 and consent route before the controller exposes its dependent operation as ready, then write in
 dependency order and read each object back. Persist `in_progress` immediately before a write and its
 exact outcome after. On an uncertain write, read before retrying. On partial failure, stop dependent
-writes and preserve the exact saved recovery boundary. Do not publish to expose a mutation.
+writes and preserve the exact saved recovery boundary. Serialize writers for the same run artifact,
+never overwrite recorded history, and require structured equality proof for `verified`. Do not
+publish to expose a mutation.
 
 ## Boundaries
 
@@ -233,6 +239,8 @@ analytics tag-configuration routes.
 - `references/02-execution/`: operational workflow and detailed configuration playbooks.
 - `references/03-judgement/`: saved-state acceptance and concise handoff.
 - `schemas/configuration-run.schema.json`: versioned execution/recovery/recette interchange shape.
+- `VERSION`: packaged runtime release identity.
+- `scripts/strict_json.py`: shared strict, BOM-tolerant JSON intake and atomic writer.
 - `scripts/configuration_run.py`: contract ingestion, validation, canonical dependency resolution,
   field/consent preflight, atomic checkpoints, explicit failed-operation reopen, resume inspection,
   and layered handoff.
@@ -253,9 +261,9 @@ analytics tag-configuration routes.
 
 ## Install The Skill
 
-Install the release archive or copy `SKILL.md`, `agents/`, `references/`, `schemas/`, the runtime
-scripts in `scripts/`, and `LICENSE` into the target skill directory. Repository tests, README, and
-release tooling are not runtime files.
+Install the release archive or copy `VERSION`, `SKILL.md`, `agents/`, `references/`, `schemas/`, the
+runtime scripts in `scripts/`, and `LICENSE` into the target skill directory. Repository tests,
+README, and release tooling are not runtime files.
 
 ## Release Checks
 
@@ -265,10 +273,10 @@ Run:
 python -m pip install -e ".[dev]"
 python -m ruff format --no-cache --check scripts tests
 python -m ruff check --no-cache scripts tests
-python scripts/check_release.py --tag v6.2.0 --release-notes CHANGELOG.md
+python scripts/check_release.py --tag v7.0.0 --release-notes CHANGELOG.md
 python -m unittest discover -s tests -v
 python -m compileall -q scripts
-python scripts/build_skill_package.py --output dist/configure-gtm-v6.2.0.zip
+python scripts/build_skill_package.py --output dist/configure-gtm-v7.0.0.zip
 git diff --check
 ~~~
 

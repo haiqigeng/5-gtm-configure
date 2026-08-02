@@ -121,6 +121,10 @@ recognizes GTM's three reserved web-container triggers (`2147479553`, `214747957
 records. Any other unresolved raw or semantic reference remains invalid comparison input rather
 than proof of equality.
 
+For setup and teardown sequencing, resolve the API `tagName` as an exact tag name when supplied in
+that documented form, or as a returned ID/semantic identity when that is the adapter representation.
+Reject unresolved or ambiguous matches rather than treating the raw string as comparable.
+
 Preserve the GTM API `parameter` shape. Top-level keyed parameters and nested `map` entries compare
 by their unique keys; nested `list` entries preserve order and ignore their own keys. Do not sort an
 ordered list or treat the `monitoringMetadata` Parameter object itself as a set.
@@ -135,6 +139,10 @@ existing workspace changes. For every write, record the requirement ID, action, 
 pre-change fingerprint and representation when applicable, returned fingerprint, saved result, and
 verification status. Persist `in_progress` immediately before the call and atomically checkpoint its
 outcome before starting a dependent operation.
+
+Use one exclusive writer for the same run artifact. This protects checkpoint history from stale
+concurrent processes without inventing a global workspace lock. Never replace an existing artifact
+that contains saved, verified, failed, or uncertain history.
 
 Report these separately:
 
@@ -161,7 +169,9 @@ Do not use names alone as idempotency keys. Compare stable IDs where present and
 - Stop immediately on wrong-account, wrong-container, expired-authentication, or permission errors;
   never fall back to another visible container or account.
 - Honor documented retry or quota guidance for throttling and transient server errors. Use bounded
-  retries and keep the user informed during a long retry window.
+  retries, honor a valid `Retry-After` when it is inside the configured window, stop rather than
+  retry early when it exceeds that window, otherwise apply bounded exponential backoff with jitter,
+  and keep the user informed during a long retry window.
 - Do not retry a create, update, import, or template operation blindly after a timeout or ambiguous
   response. First list/read back the exact parent workspace and compare stable identity, semantics,
   fingerprints, and saved fields to determine whether the write succeeded.
@@ -171,8 +181,11 @@ Do not use names alone as idempotency keys. Compare stable IDs where present and
   not remove an intended field merely to make the adapter accept the request.
 
 For a programmatic adapter, `scripts/adapter_runtime.py` provides the tested pagination, bounded
-retry, read-before-write, ambiguous-response, dependency-stop, and checkpoint state machine. MCP
-and UI runs must apply the same transitions even when they cannot call the helper directly.
+retry, read-before-write, ambiguous-response, dependency-stop, and checkpoint state machine. Its
+comparison method must return structured evidence covering every top-level intended field and bound
+to the intended and authoritative saved payloads; a boolean match claim is invalid. MCP and UI runs
+must supply equivalent saved readback and apply the same transitions even when they cannot call the
+helper directly.
 
 ## Handle partial failure
 

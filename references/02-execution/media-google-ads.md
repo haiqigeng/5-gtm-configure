@@ -111,9 +111,17 @@ If a linker is needed, configure only the documented options required by the sit
 
 ## Configure enhanced conversions only explicitly
 
-Require an explicit enhanced-conversions request, an approved first-party data source, appropriate policy/terms confirmation by the analyst, and the correct Google Ads/Google tag setting.
+Require an explicit enhanced-conversions request, an approved first-party data source, appropriate
+policy/terms confirmation by the analyst, and the correct Google Ads/Google tag setting. Follow
+`first-party-data.md` and `google-field-ownership.md` as the authoritative data, timing, and field-
+ownership contracts.
 
-Follow the first-party-data reference. Prefer deliberate dataLayer/JavaScript variables over automatic DOM collection when the analyst wants controlled, auditable data. Verify whether the template or Google tag performs hashing; do not double-hash.
+When the data exists on the conversion event, use the conversion tag's current native enhanced-
+conversion field or documented event override. When it exists only on an earlier page, use the
+native User-Provided Data Event tag on that exact earlier event. Use tag-wide data only when that
+wider consumer scope is explicit. Prefer deliberate dataLayer/controlled sources over automatic
+DOM collection. Use native raw-data hashing when supported, omit invalid/empty fields, require
+`ad_user_data`, and never double-hash or put the data in GA4 parameters.
 
 ## Apply consent
 

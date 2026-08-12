@@ -15,7 +15,9 @@ from adapter_runtime import (  # noqa: E402
     AmbiguousWriteError,
     AuthenticationError,
     RateLimitError,
+    build_container_baseline,
     collect_paginated,
+    collect_resource_baseline,
     execute_ready_operations,
 )
 from configuration_run import (  # noqa: E402
@@ -89,17 +91,76 @@ def configuration_run(object_count: int = 1) -> dict:
         source_locator="Plan / Events",
         timestamp="2026-08-01T10:00:00Z",
     )
+    tag_target = document["object_changes"][-1]["intended"]
+    tag_target.update(
+        {
+            "type": "gaawe",
+            "firingTriggerId": ["trigger::CE - purchase"],
+            "blockingTriggerId": ["trigger::Block - CMP - GA4 denied"],
+        }
+    )
     document["consent_routes"] = [
         {
             "requirement_id": "TP::Events::12::purchase",
             "product": "GA4",
             "mode": "strict-basic",
             "mechanism": "blocking-trigger",
-            "normal_trigger": "CE - purchase",
-            "blocking_triggers": ["Block - CMP - GA4 denied"],
+            "normal_trigger": "trigger::CE - purchase",
+            "blocking_triggers": ["trigger::Block - CMP - GA4 denied"],
+            "built_in_consent_checks": ["analytics_storage"],
+            "additional_consent_checks": [],
             "blocking_event_scope": "regex:.*",
             "scope_exception_reason": None,
             "unknown_behavior": "block",
+            "evidence": ["official-current", "container-confirmed"],
+        }
+    ]
+    document["container_baseline"] = {
+        "strategy": "relevant-families",
+        "captured_at": "2026-08-01T10:00:30Z",
+        "complete": True,
+        "resource_families": ["tag", "trigger", "variable"],
+        "family_counts": {"tag": 0, "trigger": 2, "variable": 0},
+        "in_scope_tag_keys": [],
+        "trigger_index": [
+            {
+                "object_key": "trigger::CE - purchase",
+                "type": "customEvent",
+                "fingerprint": None,
+            },
+            {
+                "object_key": "trigger::Block - CMP - GA4 denied",
+                "type": "customEvent",
+                "fingerprint": None,
+            },
+        ],
+        "preexisting_workspace_changes": 0,
+        "fingerprint": "sha256:" + "2" * 64,
+    }
+    document["execution_topologies"] = [
+        {
+            "tag_object_key": f"tag::Object {object_count}",
+            "requirement_ids": ["TP::Events::12::purchase"],
+            "lifecycle_role": "event-driven",
+            "normal_triggers": [
+                {
+                    "trigger_object_key": "trigger::CE - purchase",
+                    "role": "source-event",
+                    "type": "custom-event",
+                }
+            ],
+            "consent_mode": "strict-basic",
+            "blocking_trigger_keys": ["trigger::Block - CMP - GA4 denied"],
+            "blocking_event_scope": "regex:.*",
+            "built_in_consent_checks": ["analytics_storage"],
+            "additional_consent_checks": [],
+            "firing_option": "once-per-event",
+            "may_precede_cmp": False,
+            "pre_cmp_policy": "not-applicable",
+            "page_view_capable": False,
+            "page_view_destinations": [],
+            "ecommerce_route": "not-applicable",
+            "manual_ecommerce_fields": [],
             "evidence": ["official-current", "container-confirmed"],
         }
     ]
@@ -165,6 +226,55 @@ class FakeAdapter:
 
 
 class AdapterRuntimeTest(unittest.TestCase):
+    def test_resource_baseline_collects_each_family_once_through_pagination(self) -> None:
+        calls: list[tuple[str, str | None]] = []
+
+        def fetch_page(family: str, cursor: str | None) -> dict:
+            calls.append((family, cursor))
+            if cursor is None:
+                return {"items": [{"family": family, "page": 1}], "next_cursor": "next"}
+            return {"items": [{"family": family, "page": 2}], "next_cursor": None}
+
+        baseline = collect_resource_baseline(fetch_page, ["tag", "trigger"])
+        self.assertEqual(
+            calls,
+            [("tag", None), ("tag", "next"), ("trigger", None), ("trigger", "next")],
+        )
+        self.assertEqual([item["page"] for item in baseline["tag"]], [1, 2])
+        self.assertEqual([item["page"] for item in baseline["trigger"]], [1, 2])
+        with self.assertRaisesRegex(ValueError, "duplicates"):
+            collect_resource_baseline(fetch_page, ["tag", "tag"])
+
+    def test_collected_resources_build_a_bound_run_baseline(self) -> None:
+        resources = {
+            "tag": [{"name": "GA4 - Event - purchase"}],
+            "trigger": [
+                {
+                    "name": "CE - purchase",
+                    "type": "customEvent",
+                    "fingerprint": "sha256:" + "4" * 64,
+                }
+            ],
+            "variable": [],
+        }
+        baseline = build_container_baseline(
+            resources,
+            strategy="full-paginated",
+            captured_at="2026-08-01T10:00:30Z",
+            in_scope_tag_keys=["tag::GA4 - Event - purchase"],
+            preexisting_workspace_changes=0,
+        )
+        self.assertEqual(baseline["family_counts"], {"tag": 1, "trigger": 1, "variable": 0})
+        self.assertEqual(
+            baseline["trigger_index"][0],
+            {
+                "object_key": "trigger::CE - purchase",
+                "type": "customEvent",
+                "fingerprint": "sha256:" + "4" * 64,
+            },
+        )
+        self.assertTrue(baseline["fingerprint"].startswith("sha256:"))
+
     def run_path(self, root: Path, count: int = 1) -> Path:
         path = root / "run.json"
         atomic_write(path, configuration_run(count))

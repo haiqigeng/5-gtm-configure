@@ -47,6 +47,12 @@ Use Microsoft's current supported UET GTM template and its saved fields. If it i
 follow the authorized supported-template install path; do not replace it with Custom HTML. Block
 when template install/update authority is unavailable.
 
+Never implement Microsoft Advertising consent defaults, updates, base code, or events with
+`gtag(...)`. Google Consent Mode commands do not configure UET. Use Microsoft's current UET
+template/API fields and the CMP's verified lifecycle; do not invent a
+`microsoft_ads_consent_granted` dataLayer event unless the approved site contract explicitly
+defines that exact event.
+
 ## Design the UET object graph
 
 Use a verified constant such as `CST - Microsoft Ads uet_tag_id` when the UET ID is reused.
@@ -84,10 +90,12 @@ invent fallback values. Runtime missing data remains a site/dataLayer and recett
 Default to basic UET Consent Mode/strict gating:
 
 - block the UET base and event tags until the required vendor consent is granted;
+- fire a page-load/base tag from the verified CMP readiness/grant event and a business tag from its
+  approved Custom Event;
 - use `Block - <CMP> - Microsoft Ads denied`;
 - prove from the static trigger graph that unknown and denied states are expected to keep UET tags blocked.
 
-Use advanced UET Consent Mode only when explicitly requested and approved. Verify the current official `ad_storage` behavior and official GTM template options, set the documented denied default before events, send updates from the CMP, and remove/avoid a blocking trigger that would defeat approved anonymized denied-state collection.
+Use advanced UET Consent Mode only when explicitly requested and approved. Verify the current official `ad_storage` behavior and official GTM template options, set the documented denied default before events, send updates from the CMP, and remove/avoid a blocking trigger or Additional Consent Check that would defeat approved anonymized denied-state collection.
 
 Do not infer Google Consent Mode's full consent-type set or behavior for UET. Follow Microsoft's current documentation.
 

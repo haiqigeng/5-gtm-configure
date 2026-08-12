@@ -2,7 +2,7 @@
 
 ## Contents
 
-- [Use one durable run artifact](#use-one-durable-run-artifact)
+- [Use proportionate proof and one durable run artifact](#use-proportionate-proof-and-one-durable-run-artifact)
 - [Preserve stable requirement identity](#preserve-stable-requirement-identity)
 - [Render impact without adding a routine approval gate](#render-impact-without-adding-a-routine-approval-gate)
 - [Checkpoint every write boundary](#checkpoint-every-write-boundary)
@@ -12,9 +12,11 @@
 - [Hand off in three layers](#hand-off-in-three-layers)
 - [Commands](#commands)
 
-## Use one durable run artifact
+## Use proportionate proof and one durable run artifact
 
-For an operational mutation, maintain one `configuration-run@1.1` JSON artifact from preflight
+For a refonte, destructive/replace action, shared-consumer update, template permission change,
+multi-product consent decision, multi-destination graph, or resumable multi-write operation,
+maintain one `configuration-run@2.0` JSON artifact from preflight
 through saved readback. Its schema is
 [`../../schemas/configuration-run.schema.json`](../../schemas/configuration-run.schema.json).
 It complements the v5 configuration contract:
@@ -30,13 +32,19 @@ authority and source shape through one named GTM method to the template and dest
 `direct-dlv` and `native-template` require compatible terminal shapes; `custom-javascript` requires
 a documented shape conversion. A `pending` or `blocked` mapping keeps its requirement's writes out
 of the ready-operation set. The controller also requires a consent route for each non-deferred
-analytics/media requirement before its first write.
+analytics/media requirement that has an executing target tag before its first write. A removal
+does not need a fictional target consent route or firing topology.
 
 When a writable file is unavailable, preserve the same structure in the response. Do not downgrade
 the evidence or status rules merely because the artifact cannot be saved locally.
 
-Treat a durable file as strongly preferred, not as authority to block an otherwise executable tool
-run. When a file is used, permit one writer for that artifact at a time. The controller uses an
+For an isolated low-risk change, a lightweight in-memory map may carry the same required target,
+field, topology, consent, and readback proof. It must not weaken the completion rules. Promote it to
+the durable artifact before the first write when preflight discovers sharing, destructive scope,
+multiple products/destinations, template permissions, or recovery risk.
+
+Treat a durable file as required for those risk triggers, not as an approval gate. When a file is
+used, permit one writer for that artifact at a time. The controller uses an
 exclusive per-artifact writer lock so two sessions cannot overwrite each other's checkpoints; it
 does not claim a global GTM workspace lease. `init` refuses an existing path unless
 `--replace-planned` is explicit and the existing artifact contains only untouched `planned` state.
@@ -69,6 +77,24 @@ event is the normal trigger; new routes use `mechanism: "blocking-trigger"` and 
 in `normal_trigger`. Use `blocking_event_scope: "regex:.*"` for a verified vendor-wide
 Custom Event block; a narrower scope requires `scope_exception_reason`. Advanced/native routes must
 not carry a block that defeats their approved denied-state behavior.
+
+The v2 artifact also records one completed adapter baseline, per-active-tag execution topology, page-view
+ownership decisions, first-party-data routes, and refonte inventory dispositions when applicable.
+Preflight prevents a tag write when its topology, relevant consent route, page-view decision, or
+required first-party-data route is unresolved.
+
+The baseline records counts for every captured resource family and a semantic trigger index with
+object key, real GTM type, and optional fingerprint. Every active tag topology lists one or more
+typed semantic normal-trigger references and semantic block references. Those sets must equal the
+tag target's `firingTriggerId` and `blockingTriggerId` arrays; a declared Custom Event cannot mask a
+saved Click, Form, Visibility, Scroll, YouTube, History, Timer, or other native trigger. Removed and
+paused tags carry exact `pre_change` evidence instead of target topology.
+
+Page-view records reference the real Google tag and, when separate, the real GA4 `page_view` tag;
+the controller verifies their tag types and effective `send_page_view` values. First-party-data
+records bind feature, mapped destination field, correct product consumer, configured target field,
+timing, consent, and external administration dependency. Refonte inventory rows bind their stated
+disposition to exactly one compatible tag operation and its before/after names.
 
 ## Checkpoint every write boundary
 
@@ -153,8 +179,9 @@ Generate every layer from the same validated run artifact:
    recovery boundary, and explicit no-publication statement.
 2. **Analyst/developer:** requirement-to-object changes, exact payload mappings, normal and blocking
    triggers, template fields/permissions, saved IDs/readback, and external owners.
-3. **Machine/recette:** the complete `configuration-run@1.1` JSON with one recette record per stable
-   requirement ID and explicit `runtime_validation_performed: false`.
+3. **Machine/recette:** the complete `configuration-run@2.0` JSON with one recette record per stable
+   requirement ID, exact normal/blocking triggers, expected user-data keys/network cues, and
+   explicit `runtime_validation_performed: false`.
 
 The machine layer is a handoff, not proof of runtime behavior. The recette skill remains responsible
 for Preview, dataLayer, resolved-variable, browser-send, and consent-journey validation.

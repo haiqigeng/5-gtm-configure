@@ -33,6 +33,13 @@ Before designing objects:
 Never route a web requirement through server-container clients or Transformation resources merely
 because an API exposes those endpoints.
 
+A web Google tag that sets `server_container_url` remains a client-side object in scope: inspect
+and preserve its browser transport field, measurement/destination identity, consumers, page-view
+owner, and consent topology. The setting routes the browser request to the supplied endpoint; it
+does not by itself create a second independent client request to the normal Google endpoint. The
+receiving server container's clients, transformations, tags, routing, and deduplication remain
+external to this skill.
+
 ## Cover the complete applicable web surface
 
 Use this inventory as a routing checklist, not as permission to mutate every family:

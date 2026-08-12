@@ -6,6 +6,7 @@
 - [Configure Custom Event triggers precisely](#configure-custom-event-triggers-precisely)
 - [Model trigger Boolean logic](#model-trigger-boolean-logic)
 - [Handle initial page views and SPA navigation separately](#handle-initial-page-views-and-spa-navigation-separately)
+- [Handle business events before CMP readiness](#handle-business-events-before-cmp-readiness)
 - [Use blocking triggers as vendor policy objects](#use-blocking-triggers-as-vendor-policy-objects)
 - [Cover every applicable web trigger](#cover-every-applicable-web-trigger)
 - [Select variables by purpose](#select-variables-by-purpose)
@@ -69,6 +70,17 @@ For an SPA:
 3. Use History Change only as an approved fallback when no reliable application event exists.
 4. Update configuration fields before the separate page-view event when the destination requires it.
 5. Prevent initial-load, browser-history, router, and manual duplicate page views.
+
+## Handle business events before CMP readiness
+
+For a business event, use the approved Custom Event as the normal trigger and a separate vendor
+block. If the event can happen before the CMP has a usable state, do not assume the block will
+replay it later. Require a site event after readiness, a later fresh equivalent event, or an
+explicitly approved one-time replay with retained payload and duplicate prevention. Otherwise keep
+the tag configuration honest and record the lost-opportunity risk as a site/dataLayer dependency.
+
+A Trigger Group is not a consent replay queue: it does not preserve event-scoped variables or
+provide an exactly-once guarantee.
 
 ## Use blocking triggers as vendor policy objects
 
@@ -160,7 +172,29 @@ Apply this judgement to analytics and media alike. Do not force a table into a d
 
 ## Inspect advanced tag execution settings
 
-For every created or updated tag, inspect priority, custom schedule, live-only behavior, pause state, firing option, setup/cleanup references, and consent settings. Preserve defaults unless a current requirement or documented template/vendor constraint justifies a non-default value.
+For every created, updated, unpaused, reused, or untouched active tag in scope, record its execution
+topology: lifecycle role (baseline/page-load or event-driven), every semantic normal-trigger object
+key with its verified GTM trigger type and role, blocking-trigger object keys, Additional Consent
+Checks, template-owned built-in checks, firing option, and any pre-CMP policy. The normal and block
+sets must equal the tag target's `firingTriggerId` and `blockingTriggerId` arrays. A Click, Form,
+Element Visibility, Scroll Depth, YouTube, History Change, Timer, JavaScript Error, or Trigger Group
+must retain its real type; never relabel it as a Custom Event to satisfy the artifact.
+
+Do not assign a target execution topology to a removed or paused tag. Preserve its exact
+`pre_change` trigger/consent state and authorized disposition instead.
+
+Classify Page View, DOM Ready, Window Loaded, Initialization, and Consent Initialization as
+page-load lifecycle triggers, never as event-driven source triggers. Under strict/basic consent,
+an automatic Google-tag page-view owner must therefore use baseline/page-load topology with the
+verified CMP readiness/grant trigger plus its vendor block. Keep an approved virtual-page Custom
+Event or History Change route event-driven when it represents a later SPA navigation.
+Inspect priority, custom schedule, live-only behavior, pause state, setup/cleanup references, and
+all other advanced settings while doing so.
+
+Under strict/basic consent, an event-driven tag uses its approved source trigger plus the vendor block; a
+baseline/page-load tag uses a verified CMP readiness/grant event plus the vendor block. Additional
+Consent Checks stay unset when that block owns eligibility. Under explicitly approved advanced
+consent, do not attach a defeating block or Additional Consent Check.
 
 Record the selected firing option, normally once per event unless the approved lifecycle requires once per page or unlimited execution. A higher priority changes asynchronous start order but does not create a completion dependency; use sequencing when a documented dependency must finish first.
 

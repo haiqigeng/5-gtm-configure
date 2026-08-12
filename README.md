@@ -6,15 +6,18 @@ consent-controlled client-side Google Tag Manager workspaces.
 
 ## Current Release
 
-**v7.0.0** hardens the existing operational runtime without expanding the client-side GTM scope.
-Machine intake now rejects duplicate keys, non-finite values, excessive nesting, corrupt artifact
-inventories, and malformed tracking-plan records while retaining harmless future metadata. A
-`configuration-run@1.1` cannot be overwritten once it contains history, permits one writer per run
-artifact, and accepts `verified` only with structured proof bound to the intended object and supplied
-authoritative saved payload. Imported tracking-plan requirement IDs remain stable when event order
-changes.
-The adapter boundary also validates response shapes, protects inputs from mutation, uses bounded
-rate-limit backoff with jitter, and records accurate failed versus uncertain states.
+**v8.0.0** makes the configuration decisions that repeatedly failed in field runs explicit and
+machine-checkable. It assigns exactly one page-view owner, binds each active tag's typed semantic
+normal/blocking trigger graph to the exact target object, prevents redundant strict/basic Additional
+Consent Checks, distinguishes pre-CMP business events from replay, enforces one GA4 ecommerce
+route, and adds a complete tracking-refonte workflow with action-bound inventory change logs. It
+also binds GA4 `user_id`, GA4 user-provided data, and Google Ads enhanced-conversion routes to the
+correct mapped field and product consumer while strengthening normalization, hashing, consent,
+activation, and PII controls.
+
+The existing controller remains the one execution mechanism. `configuration-run@2.0` extends it
+with one adapter baseline, tag topology, page-view decisions, first-party-data routes, and inventory
+dispositions; it does not add automatic rollback, runtime recette, or publication.
 
 ## Who It Serves
 
@@ -77,6 +80,9 @@ Use these meanings:
   CMPs through current official discovery without borrowing signal semantics or making legal-policy
   decisions.
 - Configure explicitly requested first-party user-data features with controlled sources and consent.
+- Execute an explicitly authorized tracking refonte from one complete paginated baseline, reconcile
+  every client-inventory tag, rebuild analytics from the new plan, and remap retained media
+  consumers without unrelated cleanup.
 - Handle ecommerce arrays, catalog/feed identifiers, and source-to-destination shape conversion
   without speculative eligibility helpers; runtime missing data remains a site/dataLayer and
   recette dependency.
@@ -88,7 +94,7 @@ Use these meanings:
   unpause—after tracing every affected consumer and preserving pre-change state.
 - Run same-identity migrations as one governed `replace` action when supported update cannot reach
   the approved target and destructive authority, recovery, and readback are explicit.
-- Persist a `configuration-run@1.1` manifest across MCP, API, export/import, or UI execution so a
+- Persist a `configuration-run@2.0` manifest across MCP, API, export/import, or UI execution so a
   session can resume safely after authentication expiry, throttling, timeout, or partial save;
   failed no-write operations require an explicit reopen after their blocker is resolved. A durable
   file is strongly preferred, not a new blocker when the active tool cannot write one.
@@ -124,7 +130,7 @@ A successful run returns:
 - an official-source manifest plus approved-input and implementation-decision provenance;
 - authoritative object readback, resolved references, fingerprints, workspace conflict state, and
   deterministic object-graph diff and idempotent rerun result;
-- a validated `configuration-run@1.1` machine manifest plus executive and analyst/developer views,
+- a validated `configuration-run@2.0` machine manifest plus executive and analyst/developer views,
   covering expected execution, payload/consent mappings, saved IDs, checkpoints, partial recovery,
   blockers, external dependencies, structured comparison evidence, and recette cues;
 - confirmation that runtime recette and publication did not occur.
@@ -168,8 +174,9 @@ versioned run artifact carries execution state so prose does not become the reco
   shared fields, LUT/RLT for real deterministic mappings, and CJS only for required shape changes.
 - Follow the default naming convention and group several related objects in a shallow folder. Keep a
   coherent existing convention only as presentation.
-- Keep base/config tags from sending page views by default and reconcile all known automatic/manual,
-  Enhanced Measurement, Event Builder, SPA, plugin, partner, and hard-coded paths.
+- Assign exactly one page-view owner—automatic Google tag, dedicated event, proven external owner,
+  or intentionally none—after reconciling Enhanced Measurement, SPA, plugin, partner, and
+  hard-coded paths.
 - Preserve every required ecommerce item. Do not assume analytics IDs match media catalogs, silently
   drop invalid items, coerce unapproved types, or invent content/value/currency fields.
 - Treat a transform returning empty/undefined as runtime data quality, not as a firing gate. Map the
@@ -273,10 +280,10 @@ Run:
 python -m pip install -e ".[dev]"
 python -m ruff format --no-cache --check scripts tests
 python -m ruff check --no-cache scripts tests
-python scripts/check_release.py --tag v7.0.0 --release-notes CHANGELOG.md
+python scripts/check_release.py --tag v8.0.0 --release-notes CHANGELOG.md
 python -m unittest discover -s tests -v
 python -m compileall -q scripts
-python scripts/build_skill_package.py --output dist/configure-gtm-v7.0.0.zip
+python scripts/build_skill_package.py --output dist/configure-gtm-v8.0.0.zip
 git diff --check
 ~~~
 

@@ -269,7 +269,7 @@ class SkillContractTest(unittest.TestCase):
             "firing option",
         ):
             self.assertIn(term, triggers)
-        self.assertIn("Keep page view separate by default", analytics)
+        self.assertIn("Assign exactly one page-view owner", analytics)
         self.assertIn("Do not make a base/configuration tag send a page view by default", media)
 
     def test_every_new_object_requires_a_current_justification(self) -> None:
@@ -410,14 +410,14 @@ class SkillContractTest(unittest.TestCase):
         self.assertIn("configuration-run-and-resume.md", skill)
         self.assertIn("configuration-run schema", skill)
         for term in (
-            "Use one durable run artifact",
+            "Use proportionate proof and one durable run artifact",
             "Checkpoint every write boundary",
             "Resume only from proved state",
             "not retried automatically",
             "Hand off in three layers",
         ):
             self.assertIn(term, run_reference)
-        self.assertRegex(run_script, r'(?m)^SCHEMA_VERSION = "1\.1"$')
+        self.assertRegex(run_script, r'(?m)^SCHEMA_VERSION = "2\.0"$')
         self.assertIn("reopen_failed_operation", run_script)
         self.assertIn("collect_paginated", adapter_runtime)
         mandatory = (
@@ -426,20 +426,24 @@ class SkillContractTest(unittest.TestCase):
             "references/01-orientation/official-source-policy.md",
             "references/02-execution/implementation-workflow.md",
             "references/02-execution/configuration-contract.md",
-            "references/02-execution/configuration-run-and-resume.md",
             "references/03-judgement/acceptance-and-handoff.md",
         )
         word_count = sum(len(read(path).split()) for path in mandatory)
         self.assertLessEqual(word_count, 7500)
+        durable_word_count = word_count + len(run_reference.split())
+        self.assertLessEqual(durable_word_count, 8500)
 
     def test_user_data_runtime_and_future_boundaries_remain_guarded(self) -> None:
         user_data = read("references/02-execution/first-party-data.md")
         data = read("references/02-execution/data-contract-and-transformations.md")
         utility = read("references/01-orientation/utility-contract.md")
         self.assertIn("Do not enable automatic or manual collection by default", user_data)
-        self.assertIn("does not authorize attaching it to every event", user_data)
+        self.assertIn(
+            "does not authorize attaching `user_data` to every analytics event",
+            compact(user_data),
+        )
         self.assertIn("Configure it directly on that Google tag", user_data)
-        self.assertIn("unrelated tags and events do not inherit", user_data)
+        self.assertIn("unrelated events and tags do not inherit", user_data)
         self.assertIn("Never generate a browser/server event ID", data)
         self.assertIn("execute GTM Preview", utility)
         self.assertIn("never publish", utility.lower())

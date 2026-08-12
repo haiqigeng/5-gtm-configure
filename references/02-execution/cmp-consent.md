@@ -10,6 +10,7 @@
 - [Build a safe vendor block](#build-a-safe-vendor-block)
 - [Select advanced/native consent only explicitly](#select-advancednative-consent-only-explicitly)
 - [Handle page-view timing](#handle-page-view-timing)
+- [Handle business events that precede CMP readiness](#handle-business-events-that-precede-cmp-readiness)
 - [Handle revocation without overclaiming](#handle-revocation-without-overclaiming)
 - [Validate the final decision](#validate-the-final-decision)
 
@@ -30,6 +31,12 @@ Use a normal Custom Event trigger for the business action and a separate vendor 
 - `Block - Didomi - Meta denied`
 
 Do not repeat consent conditions inside every business trigger when a shared vendor block expresses the approved policy safely.
+
+Under this strict/basic topology, leave Additional Consent Checks unset rather than adding a second
+copy of the same consent predicate. Template-owned built-in consent checks remain visible and are
+recorded separately; do not claim that they were removed. For explicitly approved advanced/native
+behavior, use the documented consent defaults/updates and built-in behavior without a defeating
+block or Additional Consent Check.
 
 Design the normal-trigger lifecycle separately from the block. A page-load trigger that is blocked while consent is unknown or denied does not retry automatically. When a base/configuration tag must initialize after consent, use verified CMP readiness/grant events and an appropriate once-per-page control so both an initial grant and a later grant have a valid firing opportunity. Keep any page-view event and late-consent page-view policy separate from initialization.
 
@@ -121,6 +128,23 @@ Page-view source events often occur before CMP state is initialized. Under stric
 6. Prevent duplicate initial and consent-change page views.
 
 Do not attach a page-view tag to a generic repeatable consent-change event without an explicit state and duplicate policy.
+
+## Handle business events that precede CMP readiness
+
+A blocking trigger or Additional Consent Check evaluates only on the current GTM event; it does not
+queue or replay a business event after consent becomes ready. Before configuring any business event
+that can occur first, select the first authorized feasible route:
+
+1. the site emits the business event only after CMP readiness, with its complete fresh payload;
+2. the application emits a later semantically equivalent event with a fresh complete payload;
+3. an explicitly approved one-time replay retains the exact payload, proves consent at replay,
+   prevents duplicates, and preserves the original business occurrence semantics;
+4. otherwise, record a site/dataLayer external dependency and do not claim the event will be
+   recovered.
+
+Do not use a Trigger Group as a replay queue. It records that member triggers have fired during its
+lifecycle; it does not retain the original event payload, restore its event model, or establish a
+safe exactly-once conversion.
 
 ## Handle revocation without overclaiming
 

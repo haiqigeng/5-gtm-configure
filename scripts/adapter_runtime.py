@@ -13,6 +13,7 @@ from typing import Any, Protocol
 from configuration_run import (
     RunConflictError,
     atomic_write,
+    canonical_sha256,
     checkpoint_operation,
     inspect_document,
     load_document,
@@ -140,6 +141,115 @@ def collect_paginated(
         seen_cursors.add(next_cursor)
         cursor = next_cursor
     raise AdapterExecutionError(f"pagination exceeded the {max_pages}-page safety limit")
+
+
+def collect_resource_baseline(
+    fetch_page: Callable[[str, str | None], dict[str, Any]],
+    resource_families: list[str],
+    *,
+    max_pages_per_family: int = 1000,
+    max_rate_limit_retries: int = 2,
+    base_retry_delay_seconds: float = 0.5,
+    max_retry_delay_seconds: float = 8.0,
+    sleep: Callable[[float], None] = time.sleep,
+    random_value: Callable[[], float] = random.random,
+) -> dict[str, list[dict[str, Any]]]:
+    """Collect each requested resource family exactly once through complete pagination."""
+    normalized = []
+    for index, family in enumerate(resource_families):
+        if not isinstance(family, str) or not family.strip():
+            raise ValueError(f"resource_families[{index}] must be a non-empty string")
+        normalized.append(family.strip())
+    if not normalized:
+        raise ValueError("resource_families must not be empty")
+    if len(set(normalized)) != len(normalized):
+        raise ValueError("resource_families must not contain duplicates")
+
+    baseline: dict[str, list[dict[str, Any]]] = {}
+    for family in normalized:
+        baseline[family] = collect_paginated(
+            lambda cursor, selected=family: fetch_page(selected, cursor),
+            max_pages=max_pages_per_family,
+            max_rate_limit_retries=max_rate_limit_retries,
+            base_retry_delay_seconds=base_retry_delay_seconds,
+            max_retry_delay_seconds=max_retry_delay_seconds,
+            sleep=sleep,
+            random_value=random_value,
+        )
+    return baseline
+
+
+def build_container_baseline(
+    resources: dict[str, list[dict[str, Any]]],
+    *,
+    strategy: str,
+    captured_at: str,
+    in_scope_tag_keys: list[str],
+    preexisting_workspace_changes: int,
+) -> dict[str, Any]:
+    """Build the bound run-baseline record from one completed paginated collection."""
+    if strategy not in {"relevant-families", "full-paginated"}:
+        raise ValueError("strategy must be relevant-families or full-paginated")
+    if not isinstance(resources, dict) or not resources:
+        raise ValueError("resources must contain at least one collected family")
+    for family, items in resources.items():
+        if not isinstance(family, str) or not family.strip() or not isinstance(items, list):
+            raise ValueError("resources must map non-empty family names to item arrays")
+        if any(not isinstance(item, dict) for item in items):
+            raise ValueError(f"resources.{family} contains a non-object item")
+    trigger_index = []
+    for index, trigger in enumerate(resources.get("trigger", [])):
+        if not isinstance(trigger, dict):
+            raise ValueError(f"resources.trigger[{index}] must be an object")
+        trigger_id = trigger.get("triggerId")
+        object_key = trigger.get("object_key")
+        if isinstance(trigger_id, str) and trigger_id in {
+            "2147479553",
+            "2147479572",
+            "2147479573",
+        }:
+            continue
+        if not isinstance(object_key, str) or not object_key.startswith("trigger::"):
+            name = trigger.get("name")
+            if isinstance(name, str) and name.strip():
+                object_key = f"trigger::{name.strip()}"
+            else:
+                raise ValueError(f"resources.trigger[{index}] needs a semantic object key or name")
+        trigger_type = trigger.get("type")
+        if not isinstance(trigger_type, str) or not trigger_type.strip():
+            raise ValueError(f"resources.trigger[{index}].type must be a non-empty string")
+        fingerprint = trigger.get("fingerprint")
+        if fingerprint is not None and not isinstance(fingerprint, str):
+            raise ValueError(f"resources.trigger[{index}].fingerprint must be a string or null")
+        if isinstance(fingerprint, str):
+            if len(fingerprint) != 71 or not fingerprint.startswith("sha256:"):
+                raise ValueError(
+                    f"resources.trigger[{index}].fingerprint must be a sha256 fingerprint"
+                )
+            try:
+                int(fingerprint.removeprefix("sha256:"), 16)
+            except ValueError as exc:
+                raise ValueError(
+                    f"resources.trigger[{index}].fingerprint must be a sha256 fingerprint"
+                ) from exc
+        trigger_index.append(
+            {
+                "object_key": object_key,
+                "type": trigger_type,
+                "fingerprint": fingerprint,
+            }
+        )
+    return {
+        "strategy": strategy,
+        "captured_at": captured_at,
+        "complete": True,
+        "resource_families": list(resources),
+        "family_counts": {family: len(items) for family, items in resources.items()},
+        "in_scope_tag_keys": list(in_scope_tag_keys),
+        "trigger_index": trigger_index,
+        "preexisting_workspace_changes": preexisting_workspace_changes,
+        "fingerprint": canonical_sha256(resources),
+    }
 
 
 def _result(saved: dict[str, Any] | None, response: dict[str, Any] | None) -> dict[str, Any]:

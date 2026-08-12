@@ -2,190 +2,224 @@
 
 ## Contents
 
-- [Treat matching features as opt-in scope](#treat-matching-features-as-opt-in-scope)
-- [Authorize collection and consumer scope](#authorize-collection-and-consumer-scope)
-- [Prefer controlled sources](#prefer-controlled-sources)
-- [Follow the vendor's field contract](#follow-the-vendors-field-contract)
-- [Resolve feature ownership per destination](#resolve-feature-ownership-per-destination)
-- [Configure Google first-party data natively](#configure-google-first-party-data-natively)
-- [Separate analytics identifiers from advertising matching](#separate-analytics-identifiers-from-advertising-matching)
-- [Design safe GTM objects](#design-safe-gtm-objects)
-- [Apply consent before collection and transmission](#apply-consent-before-collection-and-transmission)
-- [Validate without leaking data](#validate-without-leaking-data)
-- [Current client-side boundary](#current-client-side-boundary)
+- [Classify the feature before mapping data](#classify-the-feature-before-mapping-data)
+- [Require explicit authority and activation](#require-explicit-authority-and-activation)
+- [Use exact Google ownership and timing](#use-exact-google-ownership-and-timing)
+- [Choose a controlled source](#choose-a-controlled-source)
+- [Normalize, hash, and omit correctly](#normalize-hash-and-omit-correctly)
+- [Apply the PII firewall](#apply-the-pii-firewall)
+- [Govern the GA4 user ID lifecycle](#govern-the-ga4-user-id-lifecycle)
+- [Apply consent independently](#apply-consent-independently)
+- [Validate and hand off without leaking data](#validate-and-hand-off-without-leaking-data)
+- [Keep the client-side boundary](#keep-the-client-side-boundary)
+- [Official Google entry points](#official-google-entry-points)
 
-## Treat matching features as opt-in scope
+## Classify the feature before mapping data
 
-Apply this reference to Google Ads enhanced conversions, Meta Advanced Matching, TikTok Advanced
-Matching, Snap matching, Microsoft user-data features, Pinterest enhanced match, X user parameters,
-LinkedIn/Reddit/Criteo matching, or another vendor feature that uses email, phone, name, address,
-external/customer ID, or similar identifiers.
+Do not use “first-party data,” `user_data`, “enhanced matching,” and `user_id` as synonyms. Assign
+the request to one exact browser feature before creating any variable:
 
-Do not enable automatic or manual collection by default. Require:
+| Feature | Purpose | Default GTM owner |
+| --- | --- | --- |
+| GA4 `user_id` | Signed-in, cross-session identity using an approved stable non-PII identifier | Google tag configuration with explicit set/omit/reset lifecycle |
+| GA4 user-provided-data collection | GA4's separately activated collection of consented first-party identifiers | Native User-Provided Data variable selected in `user_data` on only the authorized GA4 Event tag(s) |
+| Google Ads enhanced conversions for web | Improve a specific web conversion with consented first-party identifiers | Current native Google tag / Google Ads conversion field; event override when the conversion event owns the data |
+| Google Ads tag-wide user-provided data | Make a documented user-data value available to compatible Google Ads conversions | Current documented Google tag route, only after explicit tag-wide authorization |
+| Google Ads User-Provided Data Event | Capture user data on an earlier page when it is unavailable at the later conversion event | Native User-Provided Data Event tag on the exact earlier event; the conversion remains a separate tag |
+| Media-vendor advanced matching | Vendor-specific browser matching such as Meta or TikTok | That vendor's supported installed template field and consent route |
 
-- an explicit implementation request and authorization;
-- the client-approved purpose and consent policy;
-- confirmation that required vendor terms/settings are completed outside GTM where applicable;
-- current official browser documentation for supported fields and handling;
-- an approved source contract, evidence grade, and representative non-production test data.
+The same email source can therefore require different GTM variables or consumers. Never copy the
+GA4 `user_data` implementation into Google Ads or another media template by analogy. Follow
+[google-field-ownership.md](google-field-ownership.md) for the authoritative Google placement
+matrix.
 
-Do not make the legal decision. Stop when the analyst cannot establish approved data use.
+## Require explicit authority and activation
 
-## Authorize collection and consumer scope
+Do not enable automatic or manual collection by default. Require an explicit feature request,
+approved purpose and consumer scope, current official product support, an approved source
+contract, and representative synthetic test data. Do not make the legal or sensitive-category
+eligibility decision.
 
-Approval of an identifier or matching feature does not authorize attaching it to every event. Before
-configuration, record:
+Record every authorized consuming tag, page, and event. Approval of one lead event does not
+authorize attaching `user_data` to every analytics event or placing it in a shared Event Settings
+variable. Tag-wide collection needs separate explicit authority and proof that every consumer,
+destination, consent route, and page scope is compatible.
 
-- the exact destination product and feature;
-- its approved collection mode: tag-wide automatic, tag-wide manual, event-specific, or
-  conversion-specific;
-- every authorized consuming tag, page, event, or tag family;
-- source availability, resolution timing, and lifetime at each authorized consumer;
-- the applicable consent state and any account-side activation or terms;
-- the GTM object that will own the setting.
+In the durable run, bind each feature route to one exact mapped destination field and every
+authorized consumer object. Read the consumer target back and prove that field is configured on
+the correct product surface: GA4 `user_id` on a Google configuration tag, GA4 `user_data` on the
+authorized GA4 Event tag, Google Ads enhanced conversion on its Ads consumer, tag-wide Google Ads
+`user_data` on the authorized Google tag, and prior-page collection on the User-Provided Data Event
+tag. A route label, field mapping, or consumer name alone is insufficient, and cross-product
+analogy is invalid.
 
-Use tag-wide collection only when it is explicitly requested, current official documentation
-supports it for the selected feature, and its wider collection scope is compatible with every
-destination and consent route involved. When consumer scope cannot be established, block only the
-affected first-party-data feature. Do not attach the data to all events as a fallback for
-uncertainty.
+Before considering the browser graph complete, record the applicable external or account-side activation:
 
-## Prefer controlled sources
+- **GA4 user-provided data:** eligible property, accepted terms/feature activation, compatible
+  Google tag capability, Google Ads link where required by the intended use, and any current
+  industry restriction;
+- **Google Ads enhanced conversions:** account and conversion-action enablement, customer-data
+  terms and policies, supported conversion source/category, destination/linking state, and the
+  current unified enhanced-conversion setting;
+- **Other media matching:** vendor account/pixel activation, terms, destination identity, and
+  template-specific enablement.
 
-Use this source priority unless the approved implementation requires otherwise:
+A saved GTM field cannot prove an account-side switch, eligibility, link, diagnostic, or policy
+review. Keep each as an external dependency with an owner and status.
 
-1. a deliberate dataLayer field available at the correct event;
-2. an existing controlled JavaScript variable or first-party source;
-3. a stable DOM element or selector only when documented and approved;
-4. automatic DOM scanning only when explicitly enabled and its collection scope is understood.
+## Use exact Google ownership and timing
 
-Do not enable automatic collection merely because a template recommends it. Document every page and field type the feature can inspect.
+Choose the Google implementation by when the approved value exists:
 
-Never send placeholder values, test identities, authentication secrets, or sensitive-category data.
-
-## Follow the vendor's field contract
-
-For every identifier, record:
-
-- official vendor field and browser support;
-- raw or pre-hashed input requirement;
-- required normalization steps;
-- hashing algorithm and whether the vendor/template performs it;
-- accepted array/single-value shape;
-- null, empty, invalid, and multiple-value behavior;
-- GTM source variable and consent requirement.
-
-Normalize and hash only as current official documentation requires. Do not double-hash a value when the selected template performs hashing. Do not send a raw value where pre-hashing is required.
-
-## Resolve feature ownership per destination
-
-Treat every destination feature independently even when it reads the same source:
-
-| Decision | Required proof |
+| Availability and scope | Implementation |
 | --- | --- |
-| Google enhanced conversions | Exact conversion product, current Google tag/template field, raw/pre-hashed mode, account-side activation, and applicable Google consent types. |
-| Meta advanced matching | Exact Pixel/template capability, accepted browser fields, automatic/manual mode, normalization/hash ownership, and Meta consent route. |
-| Microsoft user-data feature | Exact UET product/template, current accepted fields and mode, account dependency, and Microsoft consent route. |
-| Other media matching | Current official browser documentation, installed template, explicit accepted field set, source approval, and product-specific consent. |
+| GA4 `user_id` lifecycle on one Google tag | Configure it directly on that Google tag. |
+| Same GA4 `user_id` lifecycle across several enumerated compatible Google tags | A Configuration Settings variable is allowed only when source, set/reset behavior, consumers, destination, and consent are identical. |
+| GA4 user-provided data exists on a selected event | Native User-Provided Data variable in the `user_data` field of that GA4 Event tag only. |
+| Google Ads enhanced-conversion data exists on the conversion event | Current native enhanced-conversion field on the exact conversion tag, or its documented event override. |
+| Google Ads enhanced-conversion data exists only on an earlier page/event | Native User-Provided Data Event tag on that earlier event, using the same approved feature and exact timing documented by Google. Do not delay or fabricate the later conversion payload. |
+| Google Ads data is explicitly authorized tag-wide | Current native Google tag route; enumerate every conversion consumer before saving. |
 
-Do not create one shared `hashed user data` object for several vendors unless current schemas,
-normalization, hash representation, consent, lifetime, consumers, and ownership are all proven
-identical. Prefer vendor-owned variables so a later policy or schema change cannot silently affect
-another destination.
+Do not put GA4 `user_data` in a shared Event Settings variable. Do not transport advertising user
+data through GA4 event parameters, user properties, or `user_id`. Do not attach one event's user
+data to unrelated events to compensate for uncertain timing.
 
-## Configure Google first-party data natively
+## Choose a controlled source
 
-For an explicitly authorized browser-side Google feature, inspect the current native Google Ads or
-Google tag fields before creating transformations:
+Use this source priority, recording the exact lifecycle and pages for every field:
 
-1. Identify whether the requested feature is Google Ads enhanced conversions, GA4
-   user-provided-data collection, or another exact Google product. They are not interchangeable.
-2. Prefer GTM's native User-Provided Data variable when the selected tag field accepts it. Select
-   manual fields, a controlled dataLayer variable, or current automatic collection only as the
-   approved feature and documentation permit.
-3. Map only supported identifiers required by the approved feature. Keep raw source,
-   normalization, and hash ownership explicit.
-4. When the native tag/template hashes normalized raw data, provide the accepted raw form and do
-   not pre-hash it. When a documented pre-hashed mode is selected, supply only the required
-   SHA-256 representation and mark the saved mode so it cannot be hashed again.
-5. Apply the exact Google consent types, especially `ad_user_data` for advertising transmission,
-   plus the selected basic or advanced route.
-6. Record Google Ads/GA4 account-side activation, diagnostics, and terms as external dependencies;
-   a saved GTM variable does not complete them.
+1. a deliberate dataLayer field available on the required event;
+2. an existing controlled first-party JavaScript value with a documented global path and timing;
+3. a stable DOM element or selector only when explicitly approved and documented;
+4. automatic collection or DOM scanning only when explicitly requested and its full page/field
+   collection scope is understood.
 
-Select the narrowest native owner that matches the approved scope:
+Direct DLV mapping is correct only when the complete source shape matches the installed native
+field. Use a narrow synchronous formatter when the approved raw source needs documented
+normalization or object assembly. Do not use Custom HTML hashing, an imported hashing library, an
+unverified asynchronous Custom JavaScript promise, or a payload-eligibility variable.
 
-| Approved use | Default GTM owner |
-| --- | --- |
-| GA4 `user_id` consumed by one Google tag | Configure it directly on that Google tag. |
-| The same `user_id` contract reused by multiple compatible Google tags | Use a Google tag Configuration Settings variable only when the shared source, lifecycle, reset behavior, consent, and consumers are all identical. |
-| GA4 user-provided-data collection on specific customer-data events | Use the native User-Provided Data variable through the `user_data` field on each authorized GA4 Event tag. |
-| Google Ads tag-wide user-provided data | Use the current documented Google tag or Google Ads route only when tag-wide collection was explicitly authorized. |
-| Google Ads event-specific enhanced conversions | Configure the exact conversion tag and its current native user-data field. |
-| Another vendor's browser matching feature | Use the supported installed template field owned by that vendor and approved consumer scope. |
+Never persist personal data in a GTM Constant, Lookup Table, Regex Table, cookie, local storage,
+object note, variable/tag/trigger name, mutation journal, run artifact, change log, or debug output.
+The configuration stores source paths and field names, never resolved real values.
 
-A Configuration Settings or Event Settings variable is a reuse mechanism, not a default layer.
-Follow the general direct-versus-shared decision rules in
-[analytics-tags.md](analytics-tags.md). Do not put GA4 user-provided data in a shared Event Settings
-variable merely to make it reach more events, and do not create a Configuration Settings variable
-for a value consumed by only one Google tag.
+## Normalize, hash, and omit correctly
 
-Do not use GA4 `user_id`, event parameters, or user properties to transport advertising
-user-provided data. Do not add a Custom HTML hashing library when the native variable/template owns
-normalization and hashing.
+Prefer the native User-Provided Data variable/template with raw input when current documentation
+says Google normalizes and hashes it. Record `native-raw` ownership and do not pre-hash it. Use
+pre-hashed input only when the selected native field explicitly supports it and the source is a
+lowercase hexadecimal SHA-256 value produced by a controlled process. Never hash an existing hash.
 
-## Separate analytics identifiers from advertising matching
+Apply the exact current product rules to each field. At minimum:
 
-Do not send email, phone, name, postal address, or other personally identifiable information to GA4 event parameters, user properties, URLs, titles, or debug fields.
+- trim leading/trailing whitespace;
+- lowercase email and other fields where Google requires it;
+- normalize a phone to E.164 before hashing; a French local value such as `0101010101` needs an
+  approved country context before it can become `+33101010101`—never infer a country from the
+  browser locale or site host without authority;
+- use a two-letter ISO country code where required;
+- meet the product's address completeness rules rather than sending an arbitrary partial object;
+- apply Google Ads' documented Gmail address normalization only for the Google Ads feature where
+  the current rule requires it;
+- remove null, empty, whitespace-only, invalid, literal `null`, and literal `undefined` fields from
+  the user-data object instead of hashing or transmitting them;
+- preserve only supported single/array shapes and never invent a fallback identifier.
 
-Do not reuse an advertising matching variable in an analytics tag without independently validating that the analytics destination permits that value.
+For every field, record source mode, raw/pre-hashed mode, normalization owner, hashing owner,
+missing behavior, and exact consumer. A native template that accepts raw data owns the hash; a
+documented pre-hashed source owns the hash; GTM must not own both.
 
-Keep these Google concepts separate:
+## Apply the PII firewall
 
-| Concept | Purpose and owner |
-| --- | --- |
-| GA4 `user_id` | An approved stable, non-PII identifier for signed-in user-state stitching. It is a Google tag configuration contract with explicit set, omit, and reset behavior. |
-| GA4 user-provided data | A separately activated matching feature for supported customer identifiers. Its native User-Provided Data variable is consumed only by the authorized collection events or pages. |
-| GA4 user properties | Approved analysis attributes with their own scope and lifecycle. They are not a transport for `user_id` or user-provided data. |
-| Advertising matching data | A destination-specific Google Ads or other media feature owned by its conversion/base tag and browser schema, not by GA4 event parameters. |
+Google Analytics prohibits sending personally identifiable information except through a
+specifically permitted user-provided-data feature. Hashing ordinary analytics PII does not make it
+an acceptable custom dimension.
 
-## Design safe GTM objects
+Block any design that can place raw or hashed email, phone, name, postal address, or another direct
+identifier in:
 
-- Give each user-data variable a clear vendor/purpose owner.
-- Keep normalization transformations narrow and null-safe.
-- Do not persist user data in a GTM constant, lookup table, cookie, local storage, or debug log.
-- Avoid exposing resolved personal data in handoff screenshots or reports.
-- Do not broaden an existing shared variable's consumers without checking its data-handling contract.
-- Use template-native user-data variables when current official documentation requires them.
-- Record whether the template receives raw values, normalized values, or final hashes and verify the
-  saved mode explicitly.
+- ordinary GA4 event parameters, user properties, custom dimensions, or custom metrics;
+- GA4 `user_id`;
+- page URLs, titles, search terms, form fields, campaign parameters, or ecommerce descriptive
+  fields;
+- GTM constants, tables, names, notes, run artifacts, logs, screenshots, or human change logs;
+- an unrelated media tag or consumer outside the explicitly sanctioned native matching feature.
 
-## Apply consent before collection and transmission
+Treat GA4 data redaction and unwanted-referral/query-parameter controls as external safety nets,
+not permission to send PII and not proof that the source is safe. Record the property-side redaction
+review as an external dependency when URLs or form/search sources could expose identifiers.
 
-Map each identifier feature to the client-approved consent state and current vendor requirement. Under the default strict/basic route, block both the base tag and matching-enabled event tag until the required vendor consent is granted.
+## Govern the GA4 user ID lifecycle
 
-For explicitly approved advanced/native consent, verify whether denied-state requests can contain user-provided data. Configure the vendor controls so disallowed identifiers are not collected or transmitted under denied state.
+Use only a client-generated, stable, opaque, non-PII identifier. Enforce the current GA4 maximum
+length of 256 characters. Do not use an email address, hashed email, phone number, name, device ID,
+advertising ID, blank value, dummy value, or literal `null`/`undefined` string.
 
-Do not assume that hashing replaces consent or makes a value anonymous.
+Implement the lifecycle explicitly:
 
-## Validate without leaking data
+1. before authentication, omit `user_id`;
+2. after the authenticated identity is available, set the approved identifier on the Google tag;
+3. on logout or identity clearance, send JavaScript `null` through the documented Google-tag
+   lifecycle so the previous identity is not retained;
+4. verify account switching, SPA state changes, and every shared consumer;
+5. never register `user_id` as a custom dimension or duplicate it as a user property.
 
-Use synthetic test values when possible. Verify:
+Do not assume that hashing an email creates a valid `user_id`.
 
-- source availability at the exact event according to the approved contract;
-- the saved collection mode and complete authorized consumer set;
-- unrelated tags and events do not inherit the first-party data;
-- the selected direct tag field, Configuration Settings variable, Event Settings variable, or
-  native User-Provided Data variable is the narrowest correct owner;
-- normalization and hash ownership;
-- template field resolution;
-- configured collection fields remain blocked before required consent;
-- configured denied-state routes omit user data when prohibited by the approved contract;
-- no PII in GA4, URLs, logs, reports, or unrelated tags;
-- missing input produces no invented fallback.
+## Apply consent independently
 
-Record validation results without reproducing real personal data.
+Under this skill's default strict/basic route, the owning base/config tag and every user-data event
+or conversion tag receive the required vendor block. Hashing does not replace consent.
 
-## Current client-side boundary
+For Google advertising features, treat `ad_user_data` independently from `ad_storage`:
 
-Configure only the browser-side feature explicitly requested. Do not add server-side user-data events, Conversions API, enhanced conversions for leads uploads, offline conversion uploads, or browser/server deduplication in the current scope.
+- `ad_user_data: denied` means Google advertising user data, including enhanced-conversion data and
+  `user_id` used for advertising purposes, must not be sent;
+- `ad_storage` controls advertising storage and is not a substitute for the user-data decision;
+- `analytics_storage`, `ad_personalization`, and the product's other required types remain separate
+  decisions.
+
+In explicitly approved advanced/native mode, do not add a blocking trigger or Additional Consent
+Check that suppresses the intended denied-state request. Still prove that a denied `ad_user_data`
+state excludes user-provided fields. Never infer that a vendor's advanced mode behaves like Google
+Consent Mode.
+
+## Validate and hand off without leaking data
+
+Use synthetic identities. Saved readback must prove:
+
+- the exact feature, native field/mode, authorized consumers, timing, and supported field keys;
+- no empty, placeholder, double-hashed, invalid, or unauthorized field;
+- unrelated events and tags do not inherit the data;
+- the configured `user_id` set/omit/reset lifecycle when applicable;
+- exact consent topology and the required user-data consent type;
+- external account/property actions remain honestly separated;
+- no resolved PII appears in the machine artifact or human change log.
+
+The recette handoff names expected keys, consent states, and network cues without recording values.
+For Google Ads/GA4 enhanced matching, include the documented `em` request cue and the empty-data cue
+such as `tv.1~em` only where current Google documentation applies. Treat Diagnostics and match-rate
+reporting as external platform evidence, not static GTM proof.
+
+## Keep the client-side boundary
+
+Configure only the requested browser feature. Do not create server-side GTM transformations,
+Conversions API, enhanced conversions for leads uploads, offline conversion uploads, CRM jobs, or
+browser/server deduplication. A browser Google tag routed through `server_container_url` remains in
+scope, but the receiving server container remains external.
+
+## Official Google entry points
+
+Reopen the current pages during each implementation; these URLs are discovery entry points, not a
+cached field catalogue:
+
+- GA4 user-provided data overview: https://support.google.com/analytics/answer/14077171
+- GA4 manual GTM implementation: https://support.google.com/analytics/answer/14179229
+- GA4 user-data field formatting: https://support.google.com/analytics/answer/14179230
+- GA4 PII policy: https://support.google.com/analytics/answer/6366371
+- GA4 User-ID: https://support.google.com/analytics/answer/9213390
+- GA4 data redaction: https://support.google.com/analytics/answer/13544947
+- Google Ads enhanced conversions with GTM: https://support.google.com/google-ads/answer/13262500
+- Google Ads enhanced-conversion setup and formatting: https://support.google.com/google-ads/answer/13258081
+- Google customer-data policies: https://support.google.com/google-ads/answer/7475709
+- Google Consent Mode: https://developers.google.com/tag-platform/security/concepts/consent-mode

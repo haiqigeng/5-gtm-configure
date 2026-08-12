@@ -15,7 +15,7 @@ class ForwardTestCaseCorpusTest(unittest.TestCase):
         cls.cases = cls.payload["cases"]
 
     def test_corpus_is_raw_artifact_oriented_and_complete(self) -> None:
-        self.assertEqual(self.payload["version"], 3)
+        self.assertEqual(self.payload["version"], 5)
         expected_ids = {
             "ga4-extra-field-and-pii",
             "multi-environment-routing",
@@ -32,6 +32,22 @@ class ForwardTestCaseCorpusTest(unittest.TestCase):
             "browser-event-id-carveout",
             "destination-field-without-source",
             "cmp-grant-event-with-vendor-block",
+            "page-view-owner-automatic",
+            "pre-cmp-view-cart",
+            "bing-advanced-template",
+            "invented-cmp-event",
+            "ga4-native-ecommerce-duplicate-items",
+            "refonte-unfiltered-inventory",
+            "ga4-upd-user-data-event-scope",
+            "ads-enhanced-conversion-prior-page",
+            "local-phone-without-country-authority",
+            "hashed-email-as-ga4-dimension",
+            "approved-native-click-trigger",
+            "removed-ungated-legacy-tag",
+            "topology-saved-array-mismatch",
+            "page-owner-wrong-tag-type",
+            "first-party-cross-product-consumer",
+            "inventory-keep-linked-to-update",
         }
         self.assertEqual({case["id"] for case in self.cases}, expected_ids)
         for case in self.cases:

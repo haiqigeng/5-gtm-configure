@@ -18,7 +18,7 @@ class ConfigurationScenarioFixtureTest(unittest.TestCase):
         return next(item for item in self.scenarios if item["id"] == scenario_id)
 
     def test_scenario_corpus_has_expected_operational_coverage(self) -> None:
-        self.assertEqual(self.payload["version"], 6)
+        self.assertEqual(self.payload["version"], 7)
         self.assertIn("not model-output or runtime tests", self.payload["description"])
         expected_ids = {
             "ga4-tracking-plan-configured",
@@ -45,6 +45,22 @@ class ConfigurationScenarioFixtureTest(unittest.TestCase):
             "installed-template-schema-conflict",
             "first-party-data-narrow-consumer-scope",
             "server-side-deduplication-deferred",
+            "google-page-view-single-owner",
+            "strict-page-load-topology",
+            "strict-business-event-topology",
+            "pre-cmp-business-event-not-replayed",
+            "ga4-ecommerce-single-native-route",
+            "microsoft-uet-not-gtag",
+            "cmp-event-name-must-be-proved",
+            "media-shape-requires-projection",
+            "refonte-inventory-complete-disposition",
+            "ga4-upd-selected-event-only",
+            "google-ads-ec-same-event",
+            "google-ads-upd-prior-page",
+            "ga4-user-id-lifecycle",
+            "ga4-pii-outside-sanctioned-feature",
+            "browser-server-transport-in-scope",
+            "mcp-single-authoritative-baseline",
         }
         self.assertEqual({scenario["id"] for scenario in self.scenarios}, expected_ids)
 
@@ -242,6 +258,36 @@ class ConfigurationScenarioFixtureTest(unittest.TestCase):
         self.assertIn(
             "user_data attached to all events",
             scenario["forbidden_invariants"],
+        )
+
+    def test_new_operational_regressions_cover_topology_refonte_and_user_data(self) -> None:
+        self.assertIn(
+            "send_page_view false by default",
+            self.scenario("google-page-view-single-owner")["forbidden_invariants"],
+        )
+        self.assertIn(
+            "Trigger Group used as replay queue",
+            self.scenario("pre-cmp-business-event-not-replayed")["forbidden_invariants"],
+        )
+        self.assertIn(
+            "gtag consent command used for Bing",
+            self.scenario("microsoft-uet-not-gtag")["forbidden_invariants"],
+        )
+        self.assertIn(
+            "every inventory tag has one disposition",
+            self.scenario("refonte-inventory-complete-disposition")["expected_invariants"],
+        )
+        self.assertIn(
+            "user_data in shared Event Settings",
+            self.scenario("ga4-upd-selected-event-only")["forbidden_invariants"],
+        )
+        self.assertIn(
+            "ad_user_data consent",
+            self.scenario("google-ads-ec-same-event")["expected_invariants"],
+        )
+        self.assertIn(
+            "hashed email registered as custom dimension",
+            self.scenario("ga4-pii-outside-sanctioned-feature")["forbidden_invariants"],
         )
 
 

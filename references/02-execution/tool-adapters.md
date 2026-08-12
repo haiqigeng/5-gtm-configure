@@ -63,6 +63,20 @@ Cache the capability profile for the current run and re-check it after an adapte
 schema drift, unsupported fields, authentication changes, or a different endpoint/version. Never
 expose credentials while diagnosing compatibility.
 
+Use one authoritative read baseline per run:
+
+- for an isolated change, exhaust each relevant object family once;
+- for a refonte or broad migration, exhaust one complete paginated baseline for the container and
+  current workspace changes;
+- analyze references and consumers locally from that snapshot;
+- immediately before a write, re-read only the target and affected shared consumers;
+- after a write, re-read the saved target; refresh a whole family only after a conflict, external
+  workspace change, authentication/identity change, or pagination/schema anomaly.
+
+Do not turn repeated MCP listing into a substitute for local dependency analysis. Record baseline
+strategy, completion, families, timestamp, target identity, pre-existing changes, and fingerprint
+in the configuration-run artifact.
+
 ## Build an object-family capability profile
 
 Record `list/read/create/update/revert/readback/pagination` capability independently for workspace,
@@ -182,10 +196,20 @@ Do not use names alone as idempotency keys. Compare stable IDs where present and
 
 For a programmatic adapter, `scripts/adapter_runtime.py` provides the tested pagination, bounded
 retry, read-before-write, ambiguous-response, dependency-stop, and checkpoint state machine. Its
+`collect_resource_baseline` helper exhausts every selected family once for local dependency
+analysis rather than repeatedly listing the same objects. Feed that result to
+`build_container_baseline` to record exact family counts, semantic trigger keys/types, in-scope tag
+keys, workspace-change count, and one deterministic baseline fingerprint; do not hand-author those
+binding fields from memory. Its
 comparison method must return structured evidence covering every top-level intended field and bound
 to the intended and authoritative saved payloads; a boolean match claim is invalid. MCP and UI runs
 must supply equivalent saved readback and apply the same transitions even when they cannot call the
 helper directly.
+
+Normalize adapter-local tag `firingTriggerId`/`blockingTriggerId` values to the matching
+`trigger::<name>` object keys in the run artifact after exact ID resolution. Keep only the three
+reserved built-in trigger IDs as recognized built-in references. Never compare a human trigger name
+to an opaque adapter ID or invent a semantic reference when resolution is ambiguous.
 
 ## Handle partial failure
 

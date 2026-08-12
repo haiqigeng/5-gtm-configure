@@ -34,7 +34,9 @@ For durable checkpoints and machine handoff, use
 | --- | --- |
 | Object-family coverage, built-ins, Google tag configuration/destinations, Zones, environments, settings | [client-side-object-surface.md](references/02-execution/client-side-object-surface.md) |
 | Tracking plan, direct analytics requirement, workbook scope, conformance | [tracking-plan-fidelity-and-conformance.md](references/02-execution/tracking-plan-fidelity-and-conformance.md) |
+| Existing-container tracking refonte plus client tag inventory | [tracking-refonte.md](references/02-execution/tracking-refonte.md) |
 | Google tag or GA4 | [analytics-tags.md](references/02-execution/analytics-tags.md) |
+| Google tag field placement, settings variables, page-view/ecommerce ownership, browser transport | [google-field-ownership.md](references/02-execution/google-field-ownership.md) |
 | GA4 validity, limits, reserved names, PII, property-health effects | [ga4-collection-safety.md](references/02-execution/ga4-collection-safety.md) |
 | Non-GA4 browser analytics | [analytics-vendors.md](references/02-execution/analytics-vendors.md) |
 | Multiple destinations, brands, regions, hosts, environments | [multi-destination-routing.md](references/02-execution/multi-destination-routing.md) |
@@ -94,7 +96,11 @@ after authoritative readback; otherwise use the narrowest accurate `Partial`, `B
 - Default every product to strict/basic CMP blocking. Attach the complete reusable vendor block set
   to every in-scope vendor base/configuration and event tag. Select a verified CMP readiness/grant
   event independently when it supplies the initial or later-grant firing opportunity; it does not
-  replace the block. Advanced/native behavior requires an explicit request and exact current proof.
+  replace the block. Use that CMP event plus the block for baseline/page-load tags and the approved
+  business Custom Event plus the block for business tags. Do not duplicate the block with
+  Additional Consent Checks. Record template-owned built-in checks separately. Advanced/native
+  behavior requires an explicit request and exact current proof and must not receive a defeating
+  block or Additional Consent Check.
 - Build the smallest understandable object graph. Follow the default naming convention, use a
   shallow folder when helpful, prefer direct DLV/template mappings, use settings variables only for
   real sharing, LUT/RLT for deterministic routing, and narrow Custom JavaScript only for required
@@ -105,8 +111,15 @@ after authoritative readback; otherwise use the narrowest accurate `Partial`, `B
 - Preserve every required ecommerce item and destination shape. Never invent IDs/fields, drop
   items, or create payload-eligibility variables or validity triggers merely because runtime data
   can be absent.
-- Reconcile automatic/manual page views, business events, destinations, environments, consent, and
-  shared execution units before writing.
+- Assign exactly one page-view owner per destination, reconcile pre-CMP business events, and bind
+  every active tag's typed semantic normal-trigger references and vendor blocks to its exact target
+  `firingTriggerId`/`blockingTriggerId` arrays before writing. Record Additional/built-in checks,
+  firing option, destinations, environments, and shared execution units. A removed or paused tag
+  has pre-change evidence and an inventory disposition, not a fictional target firing topology.
+- For a tracking refonte, capture one complete paginated baseline, disposition every in-scope
+  inventory tag, rebuild analytics from the new plan, recursively remap retained consumers, and
+  preserve inventory row order in the user-facing change log. Do not turn refonte authority into
+  unrelated cleanup or implicit destructive authority.
 - Maintain the versioned run artifact when possible. Never overwrite saved run history; serialize
   writers for the same artifact; checkpoint immediately before and after each write; re-read every
   saved/reused object; bind structured comparison evidence to the supplied authoritative saved

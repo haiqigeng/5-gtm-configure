@@ -1,5 +1,74 @@
 # Changelog
 
+## 8.0.0
+
+### Why This Release Matters
+
+- Turns recurring field-run failures into explicit configuration decisions and preflight checks:
+  page-view ownership, per-tag trigger/consent topology, pre-CMP event handling, ecommerce payload
+  ownership, refonte disposition, media-template boundaries, and first-party-data placement.
+- Keeps utility ahead of machinery by extending the existing configuration-run controller and
+  human handoff instead of adding a second workflow, rollback engine, or runtime validator.
+
+### What Changed
+
+- Require exactly one page-view owner per destination and stop treating `send_page_view: false` as
+  a universal default.
+- Add per-active-tag lifecycle topology with plural typed semantic normal-trigger references,
+  strict/basic blocks, built-in and Additional Consent Checks, firing option, pre-CMP policy,
+  page-view capability, and ecommerce route. Bind normal/block sets to the exact target tag arrays;
+  preserve approved native Click/Form/Visibility/Scroll/YouTube/History/Timer trigger types; and do
+  not require fictional target topology for removed or paused tags.
+- Define non-replay behavior for business events that precede CMP readiness and reject Trigger
+  Groups as replay queues.
+- Add one authoritative Google field-ownership matrix and one-route GA4 ecommerce rules, including
+  no shared Event Settings `items`/`user_data`, no native-plus-manual items, and no `items.0.*`
+  flattening.
+- Add the tracking-refonte workflow: one complete paginated baseline, one disposition per inventory
+  tag, analytics reconstruction, recursive retained-consumer remapping, exact destructive authority,
+  and row-order-preserving tag-level change logs.
+- Establish one MCP/API baseline strategy, local dependency analysis, narrow pre-write reads, and
+  saved-object readback to reduce redundant quota use without weakening completeness.
+- Add negative platform rules for Microsoft UET through `gtag`, invented CMP events, template
+  bypass, direct DLV shape mismatches, eligibility helpers, and automatic matching.
+- Strengthen GA4 `user_id`, GA4 user-provided data, Google Ads enhanced conversions and User-
+  Provided Data Event timing, source priority, normalization, hashing ownership, PII firewall,
+  consent types, external activation, and recette network cues.
+- Bind page-view decisions to actual Google/GA4 tag types and effective `send_page_view`; bind every
+  first-party route to its mapped destination field and correct-product consumer; and make refonte
+  inventory dispositions agree with exactly one compatible tag operation and before/after state.
+- Move the run artifact to `configuration-run@2.0` with adapter baseline, execution topology,
+  page-view decisions, first-party-data routes, inventory dispositions, and recette-handoff v2.
+
+### What Users Should Do
+
+- Start new major-version runs with `configuration-run@2.0`; v1.1 artifacts remain historical and
+  are not silently upgraded with invented decisions.
+- For refontes, provide the unfiltered client inventory and explicit authority for each removal or
+  replacement. For first-party-data work, specify the exact product feature, consumer scope, source
+  timing, consent policy, and known account/property activation state.
+
+### Validation
+
+- Add deterministic regressions for single page-view ownership, baseline/event consent topology,
+  redundant checks, pre-CMP events, ecommerce route collisions, UET/`gtag`, invented CMP events,
+  media shape projection, complete refonte disposition, browser transport, one MCP baseline, GA4
+  user-provided data, Google Ads same-event/prior-page enhanced conversions, `user_id` lifecycle,
+  PII outside sanctioned features, truthful native trigger types, removed legacy tags, saved-array
+  topology equality, wrong-type page owners, cross-product user-data consumers, and inventory
+  action mismatches.
+- Run the complete unit, release, Ruff, compile, deterministic-package, and whitespace checks for
+  `v8.0.0`.
+
+### Known Limits
+
+- Runtime consent/event replay behavior, resolved data quality, network delivery, platform
+  diagnostics, account/property activation, publication, server-container internals, CAPI, and
+  browser/server deduplication remain outside this configuration skill.
+- `configuration-run@2.0` validates declared decisions and saved-state proof; it cannot infer an
+  undocumented CMP event, country context for phone normalization, or a missing client inventory
+  disposition.
+
 ## 7.0.0
 
 ### Why This Release Matters

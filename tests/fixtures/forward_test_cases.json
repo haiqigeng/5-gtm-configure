@@ -1,6 +1,6 @@
 {
-  "version": 3,
-  "description": "Anonymized raw-artifact cases for independent fresh-run evaluation of configure-gtm v6.2; expected controls are held separately from prompts.",
+  "version": 5,
+  "description": "Anonymized raw-artifact cases for independent fresh-run evaluation of configure-gtm v8; expected controls are held separately from prompts.",
   "cases": [
     {
       "id": "ga4-extra-field-and-pii",
@@ -91,6 +91,102 @@
       "prompt": "Configure the strict-basic analytics base and event tags using the supplied CMP grant lifecycle.",
       "artifact": {"normal_trigger": "cmp_vendor_granted", "consumer_tags": ["base", "event"], "block_scope": "regex:.*"},
       "expected_controls": ["CMP event retained as firing opportunity", "vendor block attached to both tags", "wildcard block scope verified"]
+    },
+    {
+      "id": "page-view-owner-automatic",
+      "prompt": "Configure the Google tag and page-view requirement from the supplied container evidence.",
+      "artifact": {"google_tag_send_page_view": true, "manual_page_view_tags": [], "enhanced_measurement_page_views": true, "spa": false},
+      "expected_controls": ["one page-view owner recorded", "send_page_view remains true", "no manual page_view added"]
+    },
+    {
+      "id": "pre-cmp-view-cart",
+      "prompt": "Configure the approved view_cart event under strict consent from the supplied lifecycle evidence.",
+      "artifact": {"event_time": "before-cmp-ready", "fresh_later_event": false, "retained_payload_replay_authorized": false},
+      "expected_controls": ["non-replay limitation identified", "site dependency recorded", "Trigger Group rejected as replay"]
+    },
+    {
+      "id": "bing-advanced-template",
+      "prompt": "Configure explicitly approved Microsoft Advertising advanced UET Consent Mode.",
+      "artifact": {"template": "supported-installed-uet", "official_consent_field": "ad_storage", "cmp_event": "verified_cmp_update"},
+      "expected_controls": ["UET template used", "no gtag consent command", "no defeating block or Additional check"]
+    },
+    {
+      "id": "invented-cmp-event",
+      "prompt": "Configure the vendor base tag to initialize after consent.",
+      "artifact": {"proposed_event": "microsoft_ads_consent_granted", "official_cmp_events": [], "approved_site_events": []},
+      "expected_controls": ["proposed event rejected", "official CMP lifecycle requested", "no invented Custom Event trigger"]
+    },
+    {
+      "id": "ga4-native-ecommerce-duplicate-items",
+      "prompt": "Configure the approved GA4 purchase from the supplied compatible ecommerce push.",
+      "artifact": {"native_ecommerce": true, "manual_items_mapping": true, "event_settings_items": true},
+      "expected_controls": ["single native route selected", "manual items removed from intended design", "shared Event Settings items rejected"]
+    },
+    {
+      "id": "refonte-unfiltered-inventory",
+      "prompt": "Configure the approved tracking refonte from the new plan and client inventory.",
+      "artifact": {"inventory_rows": 57, "filtered": false, "legacy_tags": 57, "removals_authorized": ["tag-4", "tag-9"]},
+      "expected_controls": ["full paginated baseline captured", "57 existing dispositions recorded", "source row order preserved"]
+    },
+    {
+      "id": "ga4-upd-user-data-event-scope",
+      "prompt": "Configure the approved GA4 user-provided data for the lead event.",
+      "artifact": {"authorized_events": ["generate_lead"], "source": "dataLayer", "input_mode": "raw", "property_activation": "external-confirmation-needed"},
+      "expected_controls": ["native User-Provided Data variable", "user_data only on generate_lead", "shared Event Settings rejected"]
+    },
+    {
+      "id": "ads-enhanced-conversion-prior-page",
+      "prompt": "Configure the approved Google Ads enhanced conversion from the supplied funnel timing.",
+      "artifact": {"user_data_available_on": "form-step", "conversion_on": "thank-you", "same_event_available": false, "consent_types": ["ad_storage", "ad_user_data"]},
+      "expected_controls": ["User-Provided Data Event tag selected", "prior-page timing recorded", "conversion tag remains separate"]
+    },
+    {
+      "id": "local-phone-without-country-authority",
+      "prompt": "Configure enhanced conversions using the supplied French-looking local mobile number source.",
+      "artifact": {"sample_shape": "0101010101", "approved_country_context": null, "hashing_mode": "native-raw"},
+      "expected_controls": ["country not inferred", "phone field blocked pending context", "invalid value not hashed or sent"]
+    },
+    {
+      "id": "hashed-email-as-ga4-dimension",
+      "prompt": "Configure the supplied hashed email as a GA4 event parameter and custom definition.",
+      "artifact": {"destination": "GA4 custom dimension", "field": "email_sha256", "sanctioned_user_data_feature": false},
+      "expected_controls": ["ordinary GA4 PII blocked", "hashing not treated as anonymization", "value excluded from artifacts"]
+    },
+    {
+      "id": "approved-native-click-trigger",
+      "prompt": "Configure the approved CTA interaction using the supplied native GTM Click trigger evidence.",
+      "artifact": {"saved_trigger_type": "click", "declared_trigger_type": "click-all-elements", "source": "Click ID"},
+      "expected_controls": ["native Click trigger retained", "saved type bound to topology", "Custom Event relabelling rejected"]
+    },
+    {
+      "id": "removed-ungated-legacy-tag",
+      "prompt": "Configure the authorized refonte removal of the supplied legacy tag that has no consent block.",
+      "artifact": {"action": "remove", "pre_change_firing_triggers": ["legacy-submit"], "pre_change_blocks": [], "destructive_authority": true},
+      "expected_controls": ["exact pre-change state retained", "no fictional target topology", "removal disposition bound"]
+    },
+    {
+      "id": "topology-saved-array-mismatch",
+      "prompt": "Configure the supplied event tag and reconcile its declared and saved trigger graph.",
+      "artifact": {"declared_firing": ["trigger::CE - purchase"], "target_firing": ["trigger::CE - checkout"], "target_blocks": ["trigger::Block - CMP - Ads"]},
+      "expected_controls": ["firing-array mismatch blocks write", "semantic trigger references used", "target graph remains authoritative"]
+    },
+    {
+      "id": "page-owner-wrong-tag-type",
+      "prompt": "Configure one automatic GA4 page-view owner from the supplied Google and GA4 Event tags.",
+      "artifact": {"declared_owner": "tag::GA4 - Event - page_view", "declared_owner_type": "gaawe", "google_tag_send_page_view": false},
+      "expected_controls": ["GA4 Event rejected as automatic Google-tag owner", "effective send_page_view checked", "one truthful owner required"]
+    },
+    {
+      "id": "first-party-cross-product-consumer",
+      "prompt": "Configure the approved Google Ads enhanced conversion using the supplied consumer graph.",
+      "artifact": {"feature": "google-ads-enhanced-conversions", "consumer_type": "gaawe", "destination_field": "user_data"},
+      "expected_controls": ["GA4 consumer rejected for Ads feature", "mapped destination bound to consumer", "correct product tag required"]
+    },
+    {
+      "id": "inventory-keep-linked-to-update",
+      "prompt": "Configure the supplied refonte inventory whose keep row links to an update operation.",
+      "artifact": {"disposition": "keep", "tag_action": "update", "before_name": "Meta - Purchase", "after_name": "Meta - Purchase"},
+      "expected_controls": ["keep/update mismatch rejected", "one tag operation per row", "before and after identity bound"]
     }
   ]
 }

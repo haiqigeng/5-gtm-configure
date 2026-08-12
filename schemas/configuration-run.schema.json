@@ -52,6 +52,11 @@
     "object_changes",
     "payload_mappings",
     "consent_routes",
+    "container_baseline",
+    "execution_topologies",
+    "page_view_decisions",
+    "first_party_data_routes",
+    "inventory_dispositions",
     "saved_readback",
     "official_sources",
     "external_dependencies",
@@ -60,7 +65,7 @@
     "recette_handoff"
   ],
   "properties": {
-    "schema_version": {"const": "1.1"},
+    "schema_version": {"const": "2.0"},
     "run": {
       "type": "object",
       "required": [
@@ -71,6 +76,7 @@
         "updated_at",
         "target",
         "contract",
+        "execution_mode",
         "publication"
       ],
       "properties": {
@@ -106,6 +112,7 @@
             "fingerprint": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
           }
         },
+        "execution_mode": {"enum": ["isolated-lightweight", "isolated-durable", "refonte-durable"]},
         "publication": {
           "type": "object",
           "required": ["performed", "version_created"],
@@ -287,6 +294,7 @@
         "type": "object",
         "required": [
           "requirement_id",
+          "field_scope",
           "destination_field",
           "source",
           "gtm_resolution",
@@ -296,6 +304,7 @@
         ],
         "properties": {
           "requirement_id": {"type": "string", "minLength": 1},
+          "field_scope": {"enum": ["event-parameter", "user-property", "item-parameter"]},
           "destination_field": {"type": "string", "minLength": 1},
           "source": {"type": ["string", "null"]},
           "source_authority_grade": {"type": ["string", "null"]},
@@ -333,6 +342,7 @@
       "type": "array",
       "items": {
         "type": "object",
+        "additionalProperties": false,
         "required": [
           "requirement_id",
           "product",
@@ -340,6 +350,8 @@
           "mechanism",
           "normal_trigger",
           "blocking_triggers",
+          "built_in_consent_checks",
+          "additional_consent_checks",
           "unknown_behavior",
           "evidence"
         ],
@@ -348,8 +360,18 @@
           "product": {"type": "string", "minLength": 1},
           "mode": {"enum": ["strict-basic", "advanced-native"]},
           "mechanism": {"enum": ["blocking-trigger", "grant-event", "native-advanced"]},
-          "normal_trigger": {"type": "string", "minLength": 1},
+          "normal_trigger": {"type": "string", "pattern": "^(trigger::.+|2147479553|2147479572|2147479573)$"},
           "blocking_triggers": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {"type": "string", "pattern": "^(trigger::.+|2147479553|2147479572|2147479573)$"}
+          },
+          "built_in_consent_checks": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {"type": "string", "minLength": 1}
+          },
+          "additional_consent_checks": {
             "type": "array",
             "uniqueItems": true,
             "items": {"type": "string", "minLength": 1}
@@ -360,6 +382,345 @@
           "evidence": {
             "type": "array",
             "minItems": 1,
+            "uniqueItems": true,
+            "items": {"type": "string", "minLength": 1}
+          }
+        }
+      }
+    },
+    "container_baseline": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "strategy",
+        "captured_at",
+        "complete",
+        "resource_families",
+        "family_counts",
+        "in_scope_tag_keys",
+        "trigger_index",
+        "preexisting_workspace_changes",
+        "fingerprint"
+      ],
+      "properties": {
+        "strategy": {"enum": ["relevant-families", "full-paginated"]},
+        "captured_at": {"type": ["string", "null"], "format": "date-time"},
+        "complete": {"type": "boolean"},
+        "resource_families": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1}
+        },
+        "family_counts": {
+          "type": "object",
+          "additionalProperties": {"type": "integer", "minimum": 0}
+        },
+        "in_scope_tag_keys": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1}
+        },
+        "trigger_index": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["object_key", "type", "fingerprint"],
+            "properties": {
+              "object_key": {"type": "string", "pattern": "^(trigger::.+|2147479553|2147479572|2147479573)$"},
+              "type": {"type": "string", "minLength": 1},
+              "fingerprint": {"type": ["string", "null"], "pattern": "^sha256:[0-9a-f]{64}$"}
+            }
+          }
+        },
+        "preexisting_workspace_changes": {"type": ["integer", "null"], "minimum": 0},
+        "fingerprint": {"type": ["string", "null"], "pattern": "^sha256:[0-9a-f]{64}$"}
+      }
+    },
+    "execution_topologies": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "tag_object_key",
+          "requirement_ids",
+          "lifecycle_role",
+          "normal_triggers",
+          "consent_mode",
+          "blocking_trigger_keys",
+          "blocking_event_scope",
+          "built_in_consent_checks",
+          "additional_consent_checks",
+          "firing_option",
+          "may_precede_cmp",
+          "pre_cmp_policy",
+          "page_view_capable",
+          "page_view_destinations",
+          "ecommerce_route",
+          "manual_ecommerce_fields",
+          "evidence"
+        ],
+        "properties": {
+          "tag_object_key": {"type": "string", "minLength": 1},
+          "requirement_ids": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {"type": "string", "minLength": 1}
+          },
+          "lifecycle_role": {"enum": ["baseline-page-load", "event-driven"]},
+          "normal_triggers": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["trigger_object_key", "role", "type"],
+              "properties": {
+                "trigger_object_key": {"type": "string", "pattern": "^(trigger::.+|2147479553|2147479572|2147479573)$"},
+                "role": {"enum": ["cmp-readiness-grant", "initialization-page-load", "source-event"]},
+                "type": {
+                  "enum": [
+                    "click-all-elements",
+                    "click-just-links",
+                    "consent-initialization",
+                    "custom-event",
+                    "dom-ready",
+                    "element-visibility",
+                    "form-submission",
+                    "history-change",
+                    "initialization",
+                    "javascript-error",
+                    "page-view",
+                    "scroll-depth",
+                    "timer",
+                    "trigger-group",
+                    "window-loaded",
+                    "youtube-video"
+                  ]
+                }
+              }
+            }
+          },
+          "consent_mode": {"enum": ["strict-basic", "advanced-native"]},
+          "blocking_trigger_keys": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {"type": "string", "pattern": "^(trigger::.+|2147479553|2147479572|2147479573)$"}
+          },
+          "blocking_event_scope": {"type": ["string", "null"]},
+          "built_in_consent_checks": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {"type": "string", "minLength": 1}
+          },
+          "additional_consent_checks": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {"type": "string", "minLength": 1}
+          },
+          "firing_option": {"enum": ["once-per-event", "once-per-page", "unlimited"]},
+          "may_precede_cmp": {"type": "boolean"},
+          "pre_cmp_policy": {
+            "enum": [
+              "not-applicable",
+              "source-after-readiness",
+              "later-fresh-event",
+              "explicit-one-time-replay",
+              "external-dependency"
+            ]
+          },
+          "page_view_capable": {"type": "boolean"},
+          "page_view_destinations": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {"type": "string", "minLength": 1}
+          },
+          "ecommerce_route": {
+            "enum": ["not-applicable", "native-data-layer", "native-custom-object", "manual"]
+          },
+          "manual_ecommerce_fields": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {"type": "string", "minLength": 1}
+          },
+          "evidence": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {"type": "string", "minLength": 1}
+          }
+        }
+      }
+    },
+    "page_view_decisions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "destination",
+          "requirement_ids",
+          "owner",
+          "owner_object_key",
+          "google_tag_object_key",
+          "send_page_view",
+          "external_dependency_ids",
+          "reason",
+          "evidence"
+        ],
+        "properties": {
+          "destination": {"type": "string", "minLength": 1},
+          "requirement_ids": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {"type": "string", "minLength": 1}
+          },
+          "owner": {
+            "enum": [
+              "google-tag-automatic",
+              "dedicated-ga4-event",
+              "external",
+              "intentionally-none"
+            ]
+          },
+          "owner_object_key": {"type": ["string", "null"]},
+          "google_tag_object_key": {"type": ["string", "null"]},
+          "send_page_view": {"type": "boolean"},
+          "external_dependency_ids": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {"type": "string", "minLength": 1}
+          },
+          "reason": {"type": "string", "minLength": 1},
+          "evidence": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {"type": "string", "minLength": 1}
+          }
+        }
+      }
+    },
+    "first_party_data_routes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "requirement_id",
+          "feature",
+          "destination_field",
+          "consumer_object_keys",
+          "source_priority",
+          "timing",
+          "hashing_owner",
+          "fields",
+          "consent_types",
+          "external_dependency_ids",
+          "evidence"
+        ],
+        "properties": {
+          "requirement_id": {"type": "string", "minLength": 1},
+          "feature": {
+            "enum": [
+              "ga4-user-id",
+              "ga4-user-provided-data",
+              "google-ads-enhanced-conversions",
+              "google-ads-tag-wide-user-data",
+              "google-ads-user-provided-data-event",
+              "vendor-advanced-matching"
+            ]
+          },
+          "destination_field": {"type": "string", "minLength": 1},
+          "consumer_object_keys": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {"type": "string", "minLength": 1}
+          },
+          "source_priority": {"enum": ["data-layer", "controlled-javascript", "dom", "automatic"]},
+          "timing": {"enum": ["tag-wide", "same-event", "prior-page"]},
+          "hashing_owner": {"enum": ["not-applicable", "native-raw", "prehashed-sha256"]},
+          "fields": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["name", "source", "normalization", "empty_behavior"],
+              "properties": {
+                "name": {"type": "string", "minLength": 1},
+                "source": {"type": "string", "minLength": 1},
+                "normalization": {
+                  "type": "array",
+                  "uniqueItems": true,
+                  "items": {"type": "string", "minLength": 1}
+                },
+                "empty_behavior": {"const": "omit"}
+              }
+            }
+          },
+          "consent_types": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {"type": "string", "minLength": 1}
+          },
+          "external_dependency_ids": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {"type": "string", "minLength": 1}
+          },
+          "evidence": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {"type": "string", "minLength": 1}
+          }
+        }
+      }
+    },
+    "inventory_dispositions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "row_id",
+          "source_order",
+          "source_locator",
+          "before_object_key",
+          "before_tag_name",
+          "disposition",
+          "after_tag_name",
+          "trigger_before",
+          "trigger_after",
+          "variable_changes",
+          "parameter_changes",
+          "consent_changes",
+          "rationale",
+          "operation_ids"
+        ],
+        "properties": {
+          "row_id": {"type": "string", "minLength": 1},
+          "source_order": {"type": "integer", "minimum": 0},
+          "source_locator": {"type": "string", "minLength": 1},
+          "before_object_key": {"type": ["string", "null"]},
+          "before_tag_name": {"type": ["string", "null"]},
+          "disposition": {
+            "enum": ["added", "keep", "update", "remap", "pause", "remove", "replace", "supersede"]
+          },
+          "after_tag_name": {"type": ["string", "null"]},
+          "trigger_before": {"type": "array", "items": {"type": "string"}},
+          "trigger_after": {"type": "array", "items": {"type": "string"}},
+          "variable_changes": {"type": "array", "items": {"type": "string"}},
+          "parameter_changes": {"type": "array", "items": {"type": "string"}},
+          "consent_changes": {"type": "array", "items": {"type": "string"}},
+          "rationale": {"type": "string", "minLength": 1},
+          "operation_ids": {
+            "type": "array",
             "uniqueItems": true,
             "items": {"type": "string", "minLength": 1}
           }
@@ -414,6 +775,7 @@
       "type": "array",
       "items": {
         "type": "object",
+        "additionalProperties": false,
         "required": ["id", "requirement_ids", "owner", "action", "status"],
         "properties": {
           "id": {"type": "string", "minLength": 1},
@@ -468,16 +830,29 @@
         "publication_performed"
       ],
       "properties": {
-        "manifest_version": {"const": "1.0"},
+        "manifest_version": {"const": "2.0"},
         "requirements": {
           "type": "array",
           "items": {
             "type": "object",
-            "required": ["id", "expected_tags", "expected_consent_states", "cues"],
+            "required": [
+              "id",
+              "expected_tags",
+              "expected_normal_triggers",
+              "expected_blocking_triggers",
+              "expected_consent_states",
+              "expected_user_data_keys",
+              "network_cues",
+              "cues"
+            ],
             "properties": {
               "id": {"type": "string", "minLength": 1},
               "expected_tags": {"type": "array", "items": {"type": "string"}},
+              "expected_normal_triggers": {"type": "array", "items": {"type": "string"}},
+              "expected_blocking_triggers": {"type": "array", "items": {"type": "string"}},
               "expected_consent_states": {"type": "array", "items": {"type": "string"}},
+              "expected_user_data_keys": {"type": "array", "items": {"type": "string"}},
+              "network_cues": {"type": "array", "items": {"type": "string"}},
               "cues": {"type": "array", "items": {"type": "string"}}
             }
           }

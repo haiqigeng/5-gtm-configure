@@ -67,6 +67,11 @@ resolution, trigger/consent/firing settings, object actions/dependencies, eviden
 status. Add detail in proportion to real transformation, consent, shared-consumer, template, or
 mutation risk.
 
+For each tag, record its lifecycle role, normal-trigger class, normal trigger, reusable blocks,
+Additional Consent Checks, built-in checks, firing option, and pre-CMP event policy. For Google
+tags, also record the one page-view owner and apply `google-field-ownership.md`. For an authorized
+refonte, add the exact inventory disposition records defined in `tracking-refonte.md`.
+
 ## Retain critical provenance
 
 | Grade | Permitted use |
@@ -150,6 +155,12 @@ event tag, including when the normal trigger is a CMP readiness/grant event. Rec
 behavior, later grant, and the blocking event scope. Prefer verified `regex:.*` for a vendor-wide
 Custom Event block; a narrower scope needs an explicit consumer-boundary reason. Advanced/native
 behavior needs explicit request and exact current evidence and must not receive a defeating block.
+
+Do not duplicate the strict/basic block through Additional Consent Checks. Record template-owned
+built-in checks without claiming they were removed. Business events keep their Custom Event normal
+trigger; baseline/page-load tags use the verified CMP readiness/grant opportunity. A pre-CMP
+business event needs an explicit fresh-event/replay/dependency decision because the gate does not
+replay it.
 
 Record site/dataLayer, CMP, GA4-property, media-platform, catalog/feed, publication, and server-side
 work separately. A GTM save never proves an external task completed.

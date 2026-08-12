@@ -6,7 +6,7 @@
 - [Configure the Google tag deliberately](#configure-the-google-tag-deliberately)
 - [Resolve Google tag and destination identity](#resolve-google-tag-and-destination-identity)
 - [Apply the GA4 safety gate](#apply-the-ga4-safety-gate)
-- [Keep page view separate by default](#keep-page-view-separate-by-default)
+- [Assign exactly one page-view owner](#assign-exactly-one-page-view-owner)
 - [Configure events from the official schema](#configure-events-from-the-official-schema)
 - [Use native GA4 ecommerce mechanics](#use-native-ga4-ecommerce-mechanics)
 - [Reconcile Enhanced Measurement and manual events](#reconcile-enhanced-measurement-and-manual-events)
@@ -77,6 +77,11 @@ Use a Configuration Settings variable only for a coherent set of configuration-l
 
 Inspect consumers before changing either settings variable because one edit may affect many tags and destinations.
 
+Use [google-field-ownership.md](google-field-ownership.md) as the authoritative placement matrix
+for configuration fields, event fields, settings variables, `user_id`, `user_data`, ecommerce,
+Google Ads fields, and browser transport. This playbook adds GA4 behavior but does not override that
+matrix.
+
 Use this semantic decision matrix; do not apply a fixed numerical threshold:
 
 | Decision | Keep directly on tag | Use shared settings variable |
@@ -120,21 +125,29 @@ Classify a valid recommendation difference as advisory and preserve the approved
 invalid or unsafe requirement. Never silently truncate a value, coerce a type, delete a parameter,
 or add a field to remain within a limit.
 
-## Keep page view separate by default
+## Assign exactly one page-view owner
 
-When page-view configuration is in the approved scope, keep the Google tag from sending an automatic page view by default. Verify the current `send_page_view` behavior and set it to `false` only where a separately managed page-view event is required. Do not alter an existing compatible page-view architecture merely to impose this preference during an unrelated event change.
+Do not default `send_page_view` to either `true` or `false`. Before changing a Google tag, inspect
+the saved Google-tag fields, GA4 Event tags, Enhanced Measurement page-load/history behavior, SPA
+routing, hard-coded/partner installations, and the approved page-view contract. Record exactly one
+owner per destination:
 
-When the approved requirement includes a manually managed page view and no compatible tag already supplies it, create `GA4 - Event - page_view` with the approved source values and trigger. Before doing so:
+| Owner | Google-tag decision | When valid |
+| --- | --- | --- |
+| Google tag automatic page view | `send_page_view: true` | Its timing, page fields, SPA behavior, and consent opportunity satisfy the approved requirement without another owner. |
+| Dedicated `GA4 - Event - page_view` | `send_page_view: false` | The approved event needs explicit parameters, timing, routing, or SPA ownership that the automatic route cannot supply. |
+| External/hard-coded owner | `send_page_view: false` for the in-scope Google tag | Authoritative evidence proves the external owner and its compatible destination/consent behavior. |
+| Intentionally no page view | `send_page_view: false` | The approved scope intentionally excludes page views; record the reason. |
 
-1. Inspect existing Google tags and any supplied evidence of hard-coded or partner installations; record unknown outside-container installation as an external dependency.
-2. Inspect Enhanced Measurement page-load and browser-history behavior.
-3. Disable or avoid overlapping automatic behavior.
-4. Verify page-load and SPA navigation semantics separately.
-5. Design CMP timing so the initial page view is not lost or duplicated.
+Ambiguous ownership blocks the affected Google-tag change. Never create a dedicated page-view tag
+and leave automatic collection enabled, or disable a proven compatible owner merely because a
+manual tag is easier to inspect.
 
-If the normal `page_view` dataLayer event occurs before CMP state is ready under strict/basic gating, use the CMP's officially documented one-time readiness event and a verified vendor gate. Do not use a repeatable consent-change event without an explicit duplicate and late-consent policy.
-
-When the tag fires on a CMP event instead of the original `page_view` event, revalidate every page parameter at that later event. Use browser built-ins or retained dataLayer state only when the approved source contract establishes that the value is current and in scope; never assume an earlier event-scoped payload remains available. If a required value is missing or stale under the contract, block the page-view implementation and request a CMP-safe application event or source contract.
+Under strict/basic consent, a page-load owner that cannot use the original pre-CMP event uses the
+CMP's verified one-time readiness/grant event as its normal trigger and retains the vendor blocking
+trigger. Do not use a repeatable consent-change event without an explicit duplicate and later-grant
+policy. Revalidate every page parameter at the later CMP event; an earlier event-scoped payload is
+not assumed to persist.
 
 ## Configure events from the official schema
 
@@ -164,7 +177,13 @@ the saved tag surface supports it:
 | --- | --- |
 | Event push contains the current GA4-shaped `ecommerce` object | Select the native Data Layer source and map only approved event-level fields that are not supplied through that object. |
 | Approved object exists at another exact source path or needs an approved reusable projection | Select the native Custom Object source and reference that object variable. |
-| Source is not GA4-shaped | Use direct field mappings or the narrowest real shape transformation; do not add a Boolean payload-eligibility helper. |
+| Source is not GA4-shaped | Use the narrowest approved Custom Object transformation that returns the complete GA4 ecommerce object, or explicit manual fields only when the native route cannot represent the approved contract; do not add a Boolean payload-eligibility helper. |
+
+Select exactly one route per GA4 event. Do not enable native ecommerce and also map `items`
+manually. Do not put `items`, transaction-specific ecommerce values, or event-specific commerce
+objects in a broadly shared Event Settings variable. Never flatten an item array into scalar
+`items.0.*` fields. A manual route is an explicit exception with current template evidence, not a
+parallel safety net.
 
 Preserve zero, false, one item, and every approved item. An empty or absent runtime object is a
 site/dataLayer or recette dependency, not permission for this skill to invent `CJS - Ecommerce -

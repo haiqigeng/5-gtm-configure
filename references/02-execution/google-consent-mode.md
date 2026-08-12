@@ -56,7 +56,7 @@ Record each mechanism separately; none is a synonym for another:
 | --- | --- |
 | Consent default/update state | The values supplied to Google's consent-aware tags. Defaults must precede affected tags; updates must follow the current user choice, including revocation. |
 | Built-in consent checks | Template-owned behavior that changes storage or requests according to consent state. Built-in checks do not prove a strict basic-mode firing block. |
-| Additional Consent Checks | GTM firing requirements configured on a tag. Verify exact types and whether they conflict with the intended advanced denied-state behavior. |
+| Additional Consent Checks | Optional GTM firing requirements configured on a tag. They are not the same as built-in checks or a blocking trigger. Do not add them as a second copy of this skill's strict/basic vendor block. |
 | Firing/blocking triggers | The strict pre-grant execution gate used by this skill's default basic route. |
 | Custom-template consent APIs | `setDefaultConsentState`, `updateConsentState`, and `isConsentGranted` used by a permissioned CMP/template implementation. An unset value can be treated as granted by `isConsentGranted`; do not use that API alone as proof that unknown state fails closed. |
 
@@ -86,13 +86,19 @@ For basic behavior:
 6. Attach the applicable block to each Google config, event, conversion, remarketing, and linker
    execution unit only after verifying that every destination or consumer of that unit has a
    compatible basic policy.
-7. Fire tags only after the required grant and prove from the complete GTM object graph that no
+7. Leave template-owned built-in checks visible, but set Additional Consent Checks to **not set**
+   when the reusable vendor block owns strict eligibility. Do not report the built-in checks as
+   removed; they are a separate native behavior surface.
+8. Fire tags only after the required grant and prove from the complete GTM object graph that no
    in-scope Google execution unit can execute before it. Describe this as a configured
    expectation, not observed network behavior.
 
 Use names such as `Block - Didomi - GA4 denied` and `Block - Didomi - Google Ads denied`.
 
-Built-in consent checks may remain visible, but the shared CMP block is the mechanism that enforces the default strict/basic non-fire policy.
+Built-in consent checks may remain visible, but the shared CMP block is the mechanism that enforces
+the default strict/basic non-fire policy. The normal trigger supplies the firing opportunity: use a
+verified CMP readiness/grant event for a baseline/page-load tag and the approved business Custom
+Event for a business-event tag.
 
 ## Implement advanced mode only when approved
 
@@ -104,7 +110,7 @@ For advanced behavior:
 4. Send consent updates as soon as the user confirms or changes a choice and before a page transition.
 5. Use the GTM consent template APIs rather than a Custom HTML `gtag('consent', ...)` workaround when implementing consent inside GTM.
 6. Let Google tags use their documented built-in consent behavior.
-7. Do not add additional consent requirements or exception triggers that block the denied-state pings the approved advanced design intends to send.
+7. Do not add Additional Consent Checks or exception triggers that block the denied-state pings the approved advanced design intends to send.
 8. Configure optional mechanics only when explicitly required and documented:
    - `region` only for an approved geographic default and with the broader/default precedence
      understood;
@@ -121,9 +127,10 @@ Do not attach a blocking trigger that would suppress the denied-state behavior e
 
 ## Keep tag behavior and page views separate
 
-Consent defaults and updates do not justify an automatic page view. Keep `GA4 - Config` from sending a page view by default and use a separate `GA4 - Event - page_view` design.
-
-Inspect Enhanced Measurement and browser-history page views independently. Consent Mode does not prevent duplicate automatic/manual events by itself.
+Consent defaults and updates do not decide page-view ownership. Apply the exact one-owner decision
+in `analytics-tags.md`: Google-tag automatic, dedicated GA4 event, proven external owner, or
+intentionally none. Inspect Enhanced Measurement and browser-history page views independently;
+Consent Mode does not prevent duplicate automatic/manual events by itself.
 
 ## Configure every Google product consistently
 

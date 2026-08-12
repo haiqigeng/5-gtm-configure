@@ -69,6 +69,11 @@ compatible template exists but is not installed or is too old, use the template-
 installation/update path. When that action lacks authority or adapter support, mark the affected
 tag family `Blocked`; do not silently fall back to Custom HTML.
 
+Never implement Microsoft UET, Meta, TikTok, or another media vendor through `gtag` merely because
+Google tags are already present. `gtag` is not a generic media dispatch layer. Never invent a CMP
+Custom Event such as `<vendor>_consent_granted`; use only a current documented CMP lifecycle event
+and approved site-specific signal contract.
+
 Use Custom HTML or Custom Image only when current official vendor browser documentation requires or
 supports that route, no suitable template exists, and the exact snippet/pixel, permissions, CSP,
 sequencing, and consent behavior are established. This is an exceptional implementation decision,
@@ -116,7 +121,12 @@ Inspect automatic event detection, Event Builder rules, CMS plugins, hard-coded 
 
 ## Transform only for the documented schema
 
-Prefer a direct DLV, constant, lookup table, or regex table when it yields the exact required output. Use Custom JavaScript only when built-in variables cannot express the required array/object structure or deterministic transformation cleanly.
+Prefer a direct DLV, constant, lookup table, or regex table when it yields the exact required
+terminal output. A direct DLV is valid only when the complete source type, object keys,
+cardinality, and nested shape match the installed template field. Media arrays such as `contents`,
+`content_ids`, product objects, or basket lines often need an explicit vendor projection even when
+the source is GA4-shaped. Use Custom JavaScript only when built-in variables cannot express that
+required array/object conversion cleanly.
 
 Make each Custom JavaScript variable deterministic, null-safe, narrowly scoped, free of invented fallbacks, and tested with representative source data. Name it for the vendor and output, for example `CJS - Meta - contents`.
 
@@ -163,7 +173,12 @@ Do not enable enhanced conversions, advanced matching, automatic matching, DOM s
 
 ## Apply consent
 
-Use strict/basic CMP gating by default for both base and event tags. Use the smallest reusable block set that expresses the complete approved predicate. Configure a native advanced consent mode only when the media team/analyst explicitly requests it, the vendor officially supports it, and its denied-state transmission is understood and approved.
+Use strict/basic CMP gating by default for both base and event tags. A base/page-load tag uses the
+CMP's verified readiness/grant event plus the vendor block; a business event uses its normal Custom
+Event plus the vendor block. Leave Additional Consent Checks unset when the block owns eligibility.
+Use the smallest reusable block set that expresses the complete approved predicate. Configure a
+native advanced consent mode only when the media team/analyst explicitly requests it, the vendor
+officially supports it, and its denied-state transmission is understood and approved.
 
 For multiple pixels, datasets, accounts, brands, regions, or environments, load the multi-
 destination routing playbook. Never use a production media identity as a no-match fallback.

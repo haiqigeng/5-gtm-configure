@@ -35,6 +35,10 @@ analytics field, source path, CMP signal, template field, advanced-consent route
 authority. A mapped field that may be empty at runtime is not a design blocker and does not justify
 a payload-eligibility helper.
 
+Classify the run as isolated or refonte. Load `tracking-refonte.md` for an explicitly authorized
+tracking migration with an existing tag inventory; its complete-baseline and disposition workflow
+replaces this section's relevance-limited inspection rule.
+
 ## 2. Create or reuse the workspace
 
 Resolve account and web container by stable ID. Reuse a dedicated workspace only when it belongs to
@@ -66,6 +70,12 @@ not best-practice evidence. Trace every affected consumer for a delta, fingerpri
 pre-change state, and separate pre-existing workspace changes from current-run actions. Do not
 reproduce a legacy pattern; do not turn the exercise into a tracking-plan or container audit.
 
+Use one authoritative adapter baseline. For an isolated change, list each relevant resource family
+once and build the dependency graph locally. For a refonte, exhaust one complete paginated baseline
+across the in-scope container surface. Re-read only objects about to be changed/reused and every
+saved object; refresh an affected family only after conflict, external change, authentication
+change, or pagination anomaly.
+
 ## 5. Build the configuration map
 
 Create one record per independently configurable requirement/destination. Keep analytics and media
@@ -76,6 +86,10 @@ authority separate. Capture only what mutation and proof need:
 - approved actual source/authority and source shape → GTM method → template field →
   destination field/shape, including missing-data behavior;
 - template/version, normal trigger, consent route, firing option, folder, and dependencies;
+- one per-active-tag execution topology: baseline/page-load or event-driven role, every typed
+  semantic normal-trigger reference, reusable block set, Additional Consent Checks, built-in
+  checks, firing option, pre-CMP policy, and page-view behavior; bind those references exactly to
+  the intended/saved tag arrays rather than restating trigger names;
 - one object action with canonical resource family, intended fields, evidence, and pre-change state
   for deltas;
 - blocker, external owner, and expected saved comparison.
@@ -98,9 +112,25 @@ For a vendor-wide Custom Event block, prefer a verified `.*` regex scope; use a 
 for a documented consumer boundary. Reconcile page views, automatic/manual business events, shared
 execution units, routing, and environment isolation.
 
+Under strict/basic consent, leave Additional Consent Checks unset when the vendor block owns
+eligibility. A baseline/page-load tag uses a verified CMP readiness/grant event plus its block; an
+event-driven tag uses the approved source trigger type plus its block. Click, Form, Visibility,
+Scroll, YouTube, History, Timer, and other approved native trigger types remain valid when the
+source contract calls for them. Record built-in checks separately.
+Resolve pre-CMP business events explicitly because no block replays them.
+
+Assign exactly one page-view owner and apply the authoritative Google field-ownership matrix before
+writing any Google tag. Ambiguous page-view ownership or shared-field ownership is a preflight
+blocker.
+
 For ecommerce, preserve every mapped item and exact destination shape. Do not assume analytics and
 media catalog IDs match, filter invalid items silently, invent a fallback, or turn an empty
 transformation into a generic firing gate.
+
+Use a lightweight map only for an isolated low-risk change. Use the durable run artifact for a
+refonte, destructive/replace action, shared-consumer update, template permission change,
+multi-product consent decision, or multi-destination graph. Both routes require per-tag topology
+and saved readback; proportional documentation does not create a weaker completion status.
 
 Preflight stable target/authority, complete pagination, source fidelity, GA4 safety, template
 support/permission deltas, shared consumers, consent truth, dependency order, fingerprints, and

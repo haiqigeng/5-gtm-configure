@@ -73,6 +73,13 @@ the configuration map, logs, source manifest, or handoff. If a required source c
 the approved safe contract is not established, block the affected GA4 field. Keep advertising
 matching fields isolated from GA4 even when the same source is approved for another destination.
 
+Hashing does not make an ordinary GA4 event parameter, user property, custom definition,
+`user_id`, URL, title, search value, form value, or campaign field an authorized PII destination.
+The only exception is a specifically permitted and explicitly activated native user-provided-data
+feature configured under `first-party-data.md`; its values never enter the ordinary analytics
+payload surfaces or the run/change-log artifacts. Treat GA4 data redaction as an external safety
+net, not permission to collect PII.
+
 ## Separate collection from property administration
 
 Record but do not claim completion of:

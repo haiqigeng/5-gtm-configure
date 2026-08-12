@@ -27,7 +27,7 @@ from validate_configuration_contract import (
     validate_document as validate_configuration_contract,
 )
 
-SCHEMA_VERSION = "1.1"
+SCHEMA_VERSION = "2.0"
 VERIFICATION_SCHEMA_VERSION = "1.0"
 RUN_PHASES = {"preflight", "mutation", "readback", "complete"}
 RUN_STATUSES = {"In progress", "Configured", "Partial", "Blocked", "Deferred"}
@@ -64,6 +64,119 @@ EXTENDED_MAPPING_KEYS = {
     "missing_behavior",
 }
 DEFAULT_VENDOR_BLOCK_SCOPE = "regex:.*"
+EXECUTION_MODES = {"isolated-lightweight", "isolated-durable", "refonte-durable"}
+LIFECYCLE_ROLES = {"baseline-page-load", "event-driven"}
+NORMAL_TRIGGER_ROLES = {
+    "cmp-readiness-grant",
+    "initialization-page-load",
+    "source-event",
+}
+NORMAL_TRIGGER_TYPES = {
+    "click-all-elements",
+    "click-just-links",
+    "consent-initialization",
+    "custom-event",
+    "dom-ready",
+    "element-visibility",
+    "form-submission",
+    "history-change",
+    "initialization",
+    "javascript-error",
+    "page-view",
+    "scroll-depth",
+    "timer",
+    "trigger-group",
+    "window-loaded",
+    "youtube-video",
+}
+PAGE_LOAD_TRIGGER_TYPES = {
+    "consent-initialization",
+    "dom-ready",
+    "initialization",
+    "page-view",
+    "window-loaded",
+}
+TRIGGER_TYPE_ALIASES = {
+    "always": "page-view",
+    "click": "click-all-elements",
+    "clickallelements": "click-all-elements",
+    "clickjustlinks": "click-just-links",
+    "consentinit": "consent-initialization",
+    "linkclick": "click-just-links",
+    "consentinitialization": "consent-initialization",
+    "customevent": "custom-event",
+    "domready": "dom-ready",
+    "elementvisibility": "element-visibility",
+    "formsubmission": "form-submission",
+    "historychange": "history-change",
+    "init": "initialization",
+    "initialization": "initialization",
+    "scripterror": "javascript-error",
+    "javascripterror": "javascript-error",
+    "jserror": "javascript-error",
+    "pageview": "page-view",
+    "scrolldepth": "scroll-depth",
+    "timer": "timer",
+    "triggergroup": "trigger-group",
+    "windowloaded": "window-loaded",
+    "youtubevideo": "youtube-video",
+}
+BUILT_IN_TRIGGER_TYPES = {
+    "trigger::builtin::2147479553": "page-view",
+    "trigger::builtin::2147479572": "consent-initialization",
+    "trigger::builtin::2147479573": "initialization",
+}
+NON_EXECUTING_TAG_ACTIONS = {"pause", "remove"}
+GOOGLE_CONFIGURATION_TAG_TYPES = {"gaawc", "googtag"}
+GA4_EVENT_TAG_TYPES = {"gaawe"}
+TAG_TYPE_ALIASES = {
+    "ga4configuration": "gaawc",
+    "ga4event": "gaawe",
+    "googleanalyticsga4configuration": "gaawc",
+    "googleanalyticsga4event": "gaawe",
+    "googletag": "googtag",
+}
+CONFIGURATION_FIELD_ALIASES = {
+    "userdata": {"userdata", "userdatavariable", "userprovideddata", "userprovideddatavariable"},
+}
+FIRING_OPTIONS = {"once-per-event", "once-per-page", "unlimited"}
+PRE_CMP_POLICIES = {
+    "not-applicable",
+    "source-after-readiness",
+    "later-fresh-event",
+    "explicit-one-time-replay",
+    "external-dependency",
+}
+PAGE_VIEW_OWNERS = {
+    "google-tag-automatic",
+    "dedicated-ga4-event",
+    "external",
+    "intentionally-none",
+}
+ECOMMERCE_ROUTES = {
+    "not-applicable",
+    "native-data-layer",
+    "native-custom-object",
+    "manual",
+}
+FIRST_PARTY_FEATURES = {
+    "ga4-user-id",
+    "ga4-user-provided-data",
+    "google-ads-enhanced-conversions",
+    "google-ads-tag-wide-user-data",
+    "google-ads-user-provided-data-event",
+    "vendor-advanced-matching",
+}
+INVENTORY_DISPOSITIONS = {
+    "added",
+    "keep",
+    "update",
+    "remap",
+    "pause",
+    "remove",
+    "replace",
+    "supersede",
+}
 TOP_LEVEL_KEYS = {
     "schema_version",
     "run",
@@ -71,6 +184,11 @@ TOP_LEVEL_KEYS = {
     "object_changes",
     "payload_mappings",
     "consent_routes",
+    "container_baseline",
+    "execution_topologies",
+    "page_view_decisions",
+    "first_party_data_routes",
+    "inventory_dispositions",
     "saved_readback",
     "official_sources",
     "external_dependencies",
@@ -105,6 +223,22 @@ def _object(value: Any, path: str) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise RunValidationError(f"{path} must be an object")
     return value
+
+
+def _exact_keys(
+    value: dict[str, Any],
+    path: str,
+    *,
+    required: set[str],
+    optional: set[str] | None = None,
+) -> None:
+    allowed = required | (optional or set())
+    missing = sorted(required - set(value))
+    unexpected = sorted(set(value) - allowed)
+    if missing:
+        raise RunValidationError(f"{path} is missing key(s): {', '.join(missing)}")
+    if unexpected:
+        raise RunValidationError(f"{path} contains unexpected key(s): {', '.join(unexpected)}")
 
 
 def _array(value: Any, path: str) -> list[Any]:
@@ -149,6 +283,10 @@ def _verification_target(operation: dict[str, Any]) -> Any:
         }
     if isinstance(operation.get("intended"), dict):
         return operation["intended"]
+    if operation.get("action") in {"reuse", "untouched"} and isinstance(
+        operation.get("pre_change"), dict
+    ):
+        return operation["pre_change"]
     return {
         "action": operation.get("action"),
         "object_id": operation.get("object_id"),
@@ -301,6 +439,190 @@ def _canonical_object_key(object_type: str, name: str) -> str:
     return f"{object_type}::{name}"
 
 
+def _normalized_token(value: str) -> str:
+    return "".join(character for character in value.casefold() if character.isalnum())
+
+
+def _effective_target(operation: dict[str, Any], path: str) -> dict[str, Any]:
+    intended = operation.get("intended")
+    if isinstance(intended, dict) and intended:
+        return intended
+    if operation.get("action") in {"reuse", "untouched", "pause"}:
+        pre_change = operation.get("pre_change")
+        if isinstance(pre_change, dict) and pre_change:
+            return pre_change
+    raise RunValidationError(
+        f"{path} requires an exact intended or pre_change target snapshot for binding"
+    )
+
+
+def _semantic_trigger_reference(value: Any, path: str) -> str:
+    reference = _text(value, path)
+    if reference in {key.removeprefix("trigger::builtin::") for key in BUILT_IN_TRIGGER_TYPES}:
+        return f"trigger::builtin::{reference}"
+    if reference.startswith("trigger::") and len(reference) > len("trigger::"):
+        return reference
+    raise RunValidationError(
+        f"{path} must use a semantic trigger:: reference or a reserved built-in trigger ID"
+    )
+
+
+def _semantic_trigger_references(value: Any, path: str) -> list[str]:
+    references = [_semantic_trigger_reference(item, f"{path}[]") for item in _array(value, path)]
+    if len(set(references)) != len(references):
+        raise RunValidationError(f"{path} contains duplicate trigger references")
+    return references
+
+
+def _normalized_trigger_type(value: Any, path: str) -> str:
+    raw = _text(value, path)
+    normalized = TRIGGER_TYPE_ALIASES.get(_normalized_token(raw))
+    if normalized is None:
+        raise RunValidationError(f"{path} has unsupported GTM trigger type {raw!r}")
+    return normalized
+
+
+def _decode_parameter_value(value: Any) -> Any:
+    if not isinstance(value, dict):
+        return value
+    if "value" in value:
+        decoded = value["value"]
+        if value.get("type") == "boolean" and isinstance(decoded, str):
+            if decoded.casefold() == "true":
+                return True
+            if decoded.casefold() == "false":
+                return False
+        return decoded
+    return value
+
+
+def _configuration_value(target: dict[str, Any], names: set[str]) -> tuple[bool, Any]:
+    normalized_names = {_normalized_token(name) for name in names}
+    normalized_names = {
+        alias
+        for name in normalized_names
+        for alias in CONFIGURATION_FIELD_ALIASES.get(name, {name})
+    }
+    for key, value in target.items():
+        if _normalized_token(key) in normalized_names:
+            return True, _decode_parameter_value(value)
+    for container_key in ("fields", "parameters", "configuration", "eventParameters"):
+        container = target.get(container_key)
+        if isinstance(container, dict):
+            for key, value in container.items():
+                if _normalized_token(key) in normalized_names:
+                    return True, _decode_parameter_value(value)
+    for container_key in ("parameter", "parameters"):
+        container = target.get(container_key)
+        if not isinstance(container, list):
+            continue
+        for item in container:
+            if not isinstance(item, dict):
+                continue
+            key = item.get("key") or item.get("name")
+            if isinstance(key, str) and _normalized_token(key) in normalized_names:
+                return True, _decode_parameter_value(item)
+    return False, None
+
+
+def _tag_type(target: dict[str, Any], path: str) -> str:
+    normalized = _normalized_token(_text(target.get("type"), f"{path}.type"))
+    return TAG_TYPE_ALIASES.get(normalized, normalized)
+
+
+def _tag_trigger_references(
+    target: dict[str, Any],
+    field: str,
+    path: str,
+) -> list[str]:
+    raw = target.get(field, [])
+    return _semantic_trigger_references(raw, f"{path}.{field}")
+
+
+def _tag_additional_consent_checks(target: dict[str, Any], path: str) -> list[str]:
+    direct = target.get("additional_consent_checks")
+    if direct is not None:
+        return _unique_texts(direct, f"{path}.additional_consent_checks")
+    settings = target.get("consentSettings")
+    if settings is None:
+        return []
+    settings = _object(settings, f"{path}.consentSettings")
+    status = settings.get("consentStatus")
+    if status in {None, "notSet", "notNeeded"}:
+        return []
+    consent_type = settings.get("consentType")
+    if not isinstance(consent_type, dict):
+        raise RunValidationError(f"{path}.consentSettings.consentType must be an object")
+    values = consent_type.get("list", [])
+    checks = []
+    for index, item in enumerate(_array(values, f"{path}.consentSettings.consentType.list")):
+        item = _object(item, f"{path}.consentSettings.consentType.list[{index}]")
+        checks.append(_text(item.get("value"), f"{path}.consentSettings.consentType.list[].value"))
+    if len(set(checks)) != len(checks):
+        raise RunValidationError(f"{path}.consentSettings contains duplicate consent types")
+    return checks
+
+
+def _tag_firing_option(target: dict[str, Any], path: str) -> str:
+    raw = target.get("tagFiringOption")
+    if raw is None:
+        return "once-per-event"
+    normalized = {
+        "onceperevent": "once-per-event",
+        "onceperload": "once-per-page",
+        "unlimited": "unlimited",
+    }.get(_normalized_token(_text(raw, f"{path}.tagFiringOption")))
+    if normalized is None:
+        raise RunValidationError(f"{path}.tagFiringOption is unsupported")
+    return normalized
+
+
+def _send_page_view_value(target: dict[str, Any], path: str) -> bool:
+    present, raw = _configuration_value(target, {"send_page_view", "sendPageView"})
+    if not present:
+        return True
+    if isinstance(raw, bool):
+        return raw
+    if isinstance(raw, str) and raw.casefold() in {"true", "false"}:
+        return raw.casefold() == "true"
+    raise RunValidationError(f"{path}.send_page_view must resolve to a boolean")
+
+
+def _validate_google_destination(target: dict[str, Any], destination: str, path: str) -> None:
+    present, value = _configuration_value(
+        target,
+        {
+            "tag_id",
+            "tagId",
+            "measurement_id",
+            "measurementId",
+            "destination_id",
+            "destinationId",
+        },
+    )
+    candidates = {value} if present and isinstance(value, str) else set()
+    for collection_name in {
+        "destinations",
+        "destination_ids",
+        "destinationIds",
+    }:
+        collection_present, collection = _configuration_value(target, {collection_name})
+        if not collection_present:
+            continue
+        if not isinstance(collection, list):
+            collection = [collection]
+        for item in collection:
+            if isinstance(item, str):
+                candidates.add(item)
+            elif isinstance(item, dict):
+                for key in ("id", "value", "destinationId", "measurementId"):
+                    candidate = item.get(key)
+                    if isinstance(candidate, str):
+                        candidates.add(candidate)
+    if destination not in candidates:
+        raise RunValidationError(f"{path} does not bind destination {destination!r}")
+
+
 def _validate_run_header(raw: Any) -> tuple[dict[str, Any], set[str], str]:
     run = _object(raw, "$.run")
     _text(run.get("id"), "$.run.id")
@@ -330,6 +652,10 @@ def _validate_run_header(raw: Any) -> tuple[dict[str, Any], set[str], str]:
     )
     _text(contract.get("source_locator"), "$.run.contract.source_locator")
     _text(contract.get("fingerprint"), "$.run.contract.fingerprint")
+
+    execution_mode = _text(run.get("execution_mode"), "$.run.execution_mode")
+    if execution_mode not in EXECUTION_MODES:
+        raise RunValidationError(f"$.run.execution_mode has unsupported value {execution_mode!r}")
 
     publication = _object(run.get("publication"), "$.run.publication")
     if publication.get("performed") is not False:
@@ -495,14 +821,18 @@ def _validate_object_changes(
     return operations, object_claims
 
 
-def _validate_payload_mappings(raw: Any, requirement_ids: set[str]) -> None:
+def _validate_payload_mappings(raw: Any, requirement_ids: set[str]) -> list[dict[str, Any]]:
     identities: set[tuple[str, str]] = set()
+    records: list[dict[str, Any]] = []
     for index, item_raw in enumerate(_array(raw, "$.payload_mappings")):
         path = f"$.payload_mappings[{index}]"
         item = _object(item_raw, path)
         requirement_id = _text(item.get("requirement_id"), f"{path}.requirement_id")
         if requirement_id not in requirement_ids:
             raise RunValidationError(f"{path}.requirement_id is unknown")
+        field_scope = _text(item.get("field_scope"), f"{path}.field_scope")
+        if field_scope not in {"event-parameter", "user-property", "item-parameter"}:
+            raise RunValidationError(f"{path}.field_scope has unsupported value {field_scope!r}")
         destination_field = _text(item.get("destination_field"), f"{path}.destination_field")
         identity = (requirement_id, destination_field)
         if identity in identities:
@@ -580,16 +910,56 @@ def _validate_payload_mappings(raw: Any, requirement_ids: set[str]) -> None:
                     raise RunValidationError(
                         f"{path}.custom-javascript requires a documented shape conversion"
                     )
+                if destination_field == "user_data" and method == "settings-variable":
+                    raise RunValidationError(
+                        f"{path}.user_data must not use a shared Event Settings variable"
+                    )
+                if destination_field == "items" and method == "settings-variable":
+                    raise RunValidationError(
+                        f"{path}.items must not use a shared Event Settings variable"
+                    )
+                if destination_field.startswith("items.0."):
+                    raise RunValidationError(
+                        f"{path}.destination_field must preserve the items array"
+                    )
+                if destination_field == "user_id" and field_scope == "user-property":
+                    raise RunValidationError(
+                        f"{path}.user_id must not be configured as a GA4 user property"
+                    )
         elif extended_keys and status in {"intentionally-omitted", "external", "blocked"}:
             if not missing_behavior:
                 raise RunValidationError(f"{path}.missing_behavior is required for {status}")
+        records.append(item)
+    return records
 
 
-def _validate_consent_routes(raw: Any, requirement_ids: set[str]) -> None:
+def _validate_consent_routes(
+    raw: Any,
+    requirement_ids: set[str],
+    *,
+    trigger_types: dict[str, str],
+) -> None:
     seen: set[str] = set()
     for index, item_raw in enumerate(_array(raw, "$.consent_routes")):
         path = f"$.consent_routes[{index}]"
         item = _object(item_raw, path)
+        _exact_keys(
+            item,
+            path,
+            required={
+                "requirement_id",
+                "product",
+                "mode",
+                "mechanism",
+                "normal_trigger",
+                "blocking_triggers",
+                "built_in_consent_checks",
+                "additional_consent_checks",
+                "unknown_behavior",
+                "evidence",
+            },
+            optional={"blocking_event_scope", "scope_exception_reason"},
+        )
         requirement_id = _text(item.get("requirement_id"), f"{path}.requirement_id")
         if requirement_id not in requirement_ids:
             raise RunValidationError(f"{path}.requirement_id is unknown")
@@ -603,8 +973,29 @@ def _validate_consent_routes(raw: Any, requirement_ids: set[str]) -> None:
         mechanism = _text(item.get("mechanism"), f"{path}.mechanism")
         if mechanism not in CONSENT_MECHANISMS:
             raise RunValidationError(f"{path}.mechanism has unsupported value {mechanism!r}")
-        normal_trigger = _text(item.get("normal_trigger"), f"{path}.normal_trigger")
-        blocking = _unique_texts(item.get("blocking_triggers"), f"{path}.blocking_triggers")
+        normal_trigger = _semantic_trigger_reference(
+            item.get("normal_trigger"),
+            f"{path}.normal_trigger",
+        )
+        blocking = _semantic_trigger_references(
+            item.get("blocking_triggers"),
+            f"{path}.blocking_triggers",
+        )
+        if normal_trigger not in trigger_types:
+            raise RunValidationError(f"{path}.normal_trigger references an unresolved trigger")
+        for trigger_key in blocking:
+            if trigger_types.get(trigger_key) != "custom-event":
+                raise RunValidationError(
+                    f"{path}.blocking_triggers contains an unresolved/non-Custom Event trigger"
+                )
+        _unique_texts(
+            item.get("built_in_consent_checks"),
+            f"{path}.built_in_consent_checks",
+        )
+        additional = _unique_texts(
+            item.get("additional_consent_checks"),
+            f"{path}.additional_consent_checks",
+        )
         _text(item.get("unknown_behavior"), f"{path}.unknown_behavior")
         _unique_texts(item.get("evidence"), f"{path}.evidence", allow_empty=False)
         block_scope = _optional_text(
@@ -629,17 +1020,974 @@ def _validate_consent_routes(raw: Any, requirement_ids: set[str]) -> None:
                     f"{path}.scope_exception_reason is required when blocking_event_scope is not "
                     f"{DEFAULT_VENDOR_BLOCK_SCOPE!r}"
                 )
+            if additional:
+                raise RunValidationError(
+                    f"{path}.additional_consent_checks must be empty when the strict/basic "
+                    "vendor block owns eligibility"
+                )
         if mechanism == "native-advanced" and mode != "advanced-native":
             raise RunValidationError(f"{path}.native-advanced requires advanced-native mode")
         if mode == "advanced-native":
             if mechanism != "native-advanced":
                 raise RunValidationError(f"{path}.advanced-native requires native-advanced")
-            if blocking or block_scope:
+            if blocking or block_scope or additional:
                 raise RunValidationError(
-                    f"{path}.advanced-native must not carry a defeating blocking trigger"
+                    f"{path}.advanced-native must not carry a defeating block or Additional "
+                    "Consent Check"
                 )
-        if not normal_trigger:
-            raise RunValidationError(f"{path}.normal_trigger must be non-empty")
+
+
+def _validate_container_baseline(raw: Any, *, execution_mode: str) -> dict[str, Any]:
+    baseline = _object(raw, "$.container_baseline")
+    _exact_keys(
+        baseline,
+        "$.container_baseline",
+        required={
+            "strategy",
+            "captured_at",
+            "complete",
+            "resource_families",
+            "family_counts",
+            "in_scope_tag_keys",
+            "trigger_index",
+            "preexisting_workspace_changes",
+            "fingerprint",
+        },
+    )
+    strategy = _text(baseline.get("strategy"), "$.container_baseline.strategy")
+    if strategy not in {"relevant-families", "full-paginated"}:
+        raise RunValidationError(
+            f"$.container_baseline.strategy has unsupported value {strategy!r}"
+        )
+    complete = baseline.get("complete")
+    if not isinstance(complete, bool):
+        raise RunValidationError("$.container_baseline.complete must be a boolean")
+    captured_at = baseline.get("captured_at")
+    if captured_at is not None:
+        _timestamp(captured_at, "$.container_baseline.captured_at")
+    families = _unique_texts(
+        baseline.get("resource_families"),
+        "$.container_baseline.resource_families",
+    )
+    family_counts = _object(
+        baseline.get("family_counts"),
+        "$.container_baseline.family_counts",
+    )
+    if set(family_counts) != set(families):
+        raise RunValidationError(
+            "$.container_baseline.family_counts must cover each resource family exactly"
+        )
+    for family, count in family_counts.items():
+        if not isinstance(count, int) or isinstance(count, bool) or count < 0:
+            raise RunValidationError(
+                f"$.container_baseline.family_counts.{family} must be a non-negative integer"
+            )
+    in_scope_tag_keys = set(
+        _unique_texts(
+            baseline.get("in_scope_tag_keys"),
+            "$.container_baseline.in_scope_tag_keys",
+        )
+    )
+    change_count = baseline.get("preexisting_workspace_changes")
+    if change_count is not None and (
+        not isinstance(change_count, int) or isinstance(change_count, bool) or change_count < 0
+    ):
+        raise RunValidationError(
+            "$.container_baseline.preexisting_workspace_changes must be a non-negative integer "
+            "or null"
+        )
+    fingerprint = _optional_text(
+        baseline.get("fingerprint"),
+        "$.container_baseline.fingerprint",
+    )
+    if fingerprint is not None:
+        if len(fingerprint) != 71 or not fingerprint.startswith("sha256:"):
+            raise RunValidationError(
+                "$.container_baseline.fingerprint must be a sha256 fingerprint"
+            )
+        try:
+            int(fingerprint.removeprefix("sha256:"), 16)
+        except ValueError as exc:
+            raise RunValidationError(
+                "$.container_baseline.fingerprint must be a sha256 fingerprint"
+            ) from exc
+    if complete and (
+        captured_at is None or not families or change_count is None or fingerprint is None
+    ):
+        raise RunValidationError(
+            "a complete container baseline requires captured_at, resource_families, "
+            "preexisting_workspace_changes, and fingerprint"
+        )
+    if execution_mode == "refonte-durable" and strategy != "full-paginated":
+        raise RunValidationError("refonte-durable requires a full-paginated container baseline")
+    if (
+        complete
+        and strategy == "full-paginated"
+        and not {
+            "tag",
+            "trigger",
+            "variable",
+        }
+        <= set(families)
+    ):
+        raise RunValidationError(
+            "a full-paginated baseline must include tag, trigger, and variable families"
+        )
+    if "tag" in family_counts and len(in_scope_tag_keys) > family_counts["tag"]:
+        raise RunValidationError(
+            "$.container_baseline.in_scope_tag_keys exceeds the captured tag family count"
+        )
+
+    trigger_types: dict[str, str] = dict(BUILT_IN_TRIGGER_TYPES)
+    indexed_triggers = _array(
+        baseline.get("trigger_index"),
+        "$.container_baseline.trigger_index",
+    )
+    for index, raw_trigger in enumerate(indexed_triggers):
+        path = f"$.container_baseline.trigger_index[{index}]"
+        trigger = _object(raw_trigger, path)
+        _exact_keys(
+            trigger,
+            path,
+            required={"object_key", "type", "fingerprint"},
+        )
+        object_key = _semantic_trigger_reference(
+            trigger.get("object_key"),
+            f"{path}.object_key",
+        )
+        if object_key in trigger_types:
+            raise RunValidationError(f"duplicate baseline trigger index entry {object_key!r}")
+        trigger_types[object_key] = _normalized_trigger_type(
+            trigger.get("type"),
+            f"{path}.type",
+        )
+        fingerprint_value = _optional_text(trigger.get("fingerprint"), f"{path}.fingerprint")
+        if fingerprint_value is not None:
+            if len(fingerprint_value) != 71 or not fingerprint_value.startswith("sha256:"):
+                raise RunValidationError(f"{path}.fingerprint must be a sha256 fingerprint")
+            try:
+                int(fingerprint_value.removeprefix("sha256:"), 16)
+            except ValueError as exc:
+                raise RunValidationError(
+                    f"{path}.fingerprint must be a sha256 fingerprint"
+                ) from exc
+    if "trigger" in family_counts and len(indexed_triggers) > family_counts["trigger"]:
+        raise RunValidationError(
+            "$.container_baseline.trigger_index exceeds the captured trigger family count"
+        )
+    return {
+        "in_scope_tag_keys": in_scope_tag_keys,
+        "trigger_types": trigger_types,
+    }
+
+
+def _resolved_trigger_types(
+    operations: dict[str, dict[str, Any]],
+    baseline_trigger_types: dict[str, str],
+) -> dict[str, str]:
+    resolved = dict(baseline_trigger_types)
+    for operation in operations.values():
+        if (
+            operation["object_type"] != "trigger"
+            or operation["action"] in NON_EXECUTING_TAG_ACTIONS
+        ):
+            continue
+        target = _effective_target(operation, f"operation {operation['operation_id']}")
+        resolved[operation["object_key"]] = _normalized_trigger_type(
+            target.get("type"),
+            f"operation {operation['operation_id']}.intended.type",
+        )
+    return resolved
+
+
+def _validate_normal_trigger_bindings(
+    item: dict[str, Any],
+    *,
+    path: str,
+    target: dict[str, Any],
+    trigger_types: dict[str, str],
+) -> list[dict[str, str]]:
+    records: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for index, raw_trigger in enumerate(
+        _array(item.get("normal_triggers"), f"{path}.normal_triggers")
+    ):
+        trigger_path = f"{path}.normal_triggers[{index}]"
+        trigger = _object(raw_trigger, trigger_path)
+        _exact_keys(
+            trigger,
+            trigger_path,
+            required={"trigger_object_key", "role", "type"},
+        )
+        object_key = _semantic_trigger_reference(
+            trigger.get("trigger_object_key"),
+            f"{trigger_path}.trigger_object_key",
+        )
+        if object_key in seen:
+            raise RunValidationError(f"{path}.normal_triggers contains duplicate {object_key!r}")
+        seen.add(object_key)
+        role = _text(trigger.get("role"), f"{trigger_path}.role")
+        if role not in NORMAL_TRIGGER_ROLES:
+            raise RunValidationError(f"{trigger_path}.role has unsupported value {role!r}")
+        trigger_type = _text(trigger.get("type"), f"{trigger_path}.type")
+        if trigger_type not in NORMAL_TRIGGER_TYPES:
+            raise RunValidationError(f"{trigger_path}.type has unsupported value {trigger_type!r}")
+        actual_type = trigger_types.get(object_key)
+        if actual_type is None:
+            raise RunValidationError(
+                f"{trigger_path} references an unresolved trigger {object_key!r}"
+            )
+        if trigger_type != actual_type:
+            raise RunValidationError(
+                f"{trigger_path}.type {trigger_type!r} differs from bound trigger type {actual_type!r}"
+            )
+        if role == "cmp-readiness-grant" and trigger_type != "custom-event":
+            raise RunValidationError(f"{trigger_path}.cmp-readiness-grant must be a Custom Event")
+        if role == "initialization-page-load" and trigger_type not in {
+            "consent-initialization",
+            "initialization",
+            "page-view",
+        }:
+            raise RunValidationError(
+                f"{trigger_path}.initialization-page-load uses an incompatible trigger type"
+            )
+        records.append({"trigger_object_key": object_key, "role": role, "type": trigger_type})
+    if not records:
+        raise RunValidationError(f"{path}.normal_triggers must not be empty")
+    intended_refs = set(_tag_trigger_references(target, "firingTriggerId", f"{path}.bound_tag"))
+    declared_refs = {item["trigger_object_key"] for item in records}
+    if intended_refs != declared_refs:
+        raise RunValidationError(
+            f"{path}.normal_triggers must equal bound firingTriggerId; "
+            f"missing={sorted(intended_refs - declared_refs)}, "
+            f"extra={sorted(declared_refs - intended_refs)}"
+        )
+    return records
+
+
+def _validate_execution_topologies(
+    raw: Any,
+    *,
+    requirement_ids: set[str],
+    operations: dict[str, dict[str, Any]],
+    baseline_trigger_types: dict[str, str],
+) -> dict[str, dict[str, Any]]:
+    operation_by_key = {item["object_key"]: item for item in operations.values()}
+    trigger_types = _resolved_trigger_types(operations, baseline_trigger_types)
+    records: dict[str, dict[str, Any]] = {}
+    for index, item_raw in enumerate(_array(raw, "$.execution_topologies")):
+        path = f"$.execution_topologies[{index}]"
+        item = _object(item_raw, path)
+        _exact_keys(
+            item,
+            path,
+            required={
+                "tag_object_key",
+                "requirement_ids",
+                "lifecycle_role",
+                "normal_triggers",
+                "consent_mode",
+                "blocking_trigger_keys",
+                "blocking_event_scope",
+                "built_in_consent_checks",
+                "additional_consent_checks",
+                "firing_option",
+                "may_precede_cmp",
+                "pre_cmp_policy",
+                "page_view_capable",
+                "page_view_destinations",
+                "ecommerce_route",
+                "manual_ecommerce_fields",
+                "evidence",
+            },
+        )
+        tag_key = _text(item.get("tag_object_key"), f"{path}.tag_object_key")
+        if tag_key in records:
+            raise RunValidationError(f"duplicate execution topology for {tag_key!r}")
+        operation = operation_by_key.get(tag_key)
+        if operation is None or operation["object_type"] != "tag":
+            raise RunValidationError(f"{path}.tag_object_key must reference an in-scope tag")
+        if operation["action"] in NON_EXECUTING_TAG_ACTIONS:
+            raise RunValidationError(
+                f"{path} must not assign target execution topology to {operation['action']!r}"
+            )
+        target = _effective_target(operation, path)
+        linked = set(
+            _unique_texts(
+                item.get("requirement_ids"),
+                f"{path}.requirement_ids",
+                allow_empty=False,
+            )
+        )
+        if linked - requirement_ids:
+            raise RunValidationError(f"{path}.requirement_ids contains unknown IDs")
+        if linked != set(operation["requirement_ids"]):
+            raise RunValidationError(
+                f"{path}.requirement_ids must equal the tag operation requirement_ids"
+            )
+        role = _text(item.get("lifecycle_role"), f"{path}.lifecycle_role")
+        if role not in LIFECYCLE_ROLES:
+            raise RunValidationError(f"{path}.lifecycle_role has unsupported value {role!r}")
+        mode = _text(item.get("consent_mode"), f"{path}.consent_mode")
+        if mode not in CONSENT_MODES:
+            raise RunValidationError(f"{path}.consent_mode has unsupported value {mode!r}")
+        normal_triggers = _validate_normal_trigger_bindings(
+            item,
+            path=path,
+            target=target,
+            trigger_types=trigger_types,
+        )
+        trigger_roles = {trigger["role"] for trigger in normal_triggers}
+        if role == "event-driven":
+            if trigger_roles != {"source-event"}:
+                raise RunValidationError(
+                    f"{path}.event-driven tags require only source-event triggers"
+                )
+            if any(trigger["type"] in PAGE_LOAD_TRIGGER_TYPES for trigger in normal_triggers):
+                raise RunValidationError(
+                    f"{path}.page-load trigger types require baseline-page-load lifecycle"
+                )
+        expected_baseline_role = (
+            "cmp-readiness-grant" if mode == "strict-basic" else "initialization-page-load"
+        )
+        if role == "baseline-page-load" and expected_baseline_role not in trigger_roles:
+            raise RunValidationError(
+                f"{path}.baseline-page-load under {mode} requires a {expected_baseline_role} trigger"
+            )
+
+        blocking = _semantic_trigger_references(
+            item.get("blocking_trigger_keys"),
+            f"{path}.blocking_trigger_keys",
+        )
+        intended_blocks = set(
+            _tag_trigger_references(target, "blockingTriggerId", f"{path}.bound_tag")
+        )
+        if set(blocking) != intended_blocks:
+            raise RunValidationError(
+                f"{path}.blocking_trigger_keys must equal bound blockingTriggerId"
+            )
+        for trigger_key in blocking:
+            if trigger_types.get(trigger_key) != "custom-event":
+                raise RunValidationError(
+                    f"{path}.blocking_trigger_keys contains unresolved/non-Custom Event "
+                    f"{trigger_key!r}"
+                )
+        block_scope = _optional_text(
+            item.get("blocking_event_scope"),
+            f"{path}.blocking_event_scope",
+        )
+        _unique_texts(
+            item.get("built_in_consent_checks"),
+            f"{path}.built_in_consent_checks",
+        )
+        additional = _unique_texts(
+            item.get("additional_consent_checks"),
+            f"{path}.additional_consent_checks",
+        )
+        if set(additional) != set(_tag_additional_consent_checks(target, f"{path}.bound_tag")):
+            raise RunValidationError(
+                f"{path}.additional_consent_checks differs from bound tag consentSettings"
+            )
+        if mode == "strict-basic":
+            if not blocking or not block_scope:
+                raise RunValidationError(
+                    f"{path}.strict-basic requires blocking_trigger_keys and blocking_event_scope"
+                )
+            if additional:
+                raise RunValidationError(
+                    f"{path}.additional_consent_checks must be empty under strict-basic"
+                )
+        elif blocking or block_scope or additional:
+            raise RunValidationError(
+                f"{path}.advanced-native must not carry a defeating block or Additional check"
+            )
+        firing_option = _text(item.get("firing_option"), f"{path}.firing_option")
+        if firing_option not in FIRING_OPTIONS:
+            raise RunValidationError(
+                f"{path}.firing_option has unsupported value {firing_option!r}"
+            )
+        if firing_option != _tag_firing_option(target, f"{path}.bound_tag"):
+            raise RunValidationError(f"{path}.firing_option differs from the bound tag")
+        may_precede_cmp = item.get("may_precede_cmp")
+        if not isinstance(may_precede_cmp, bool):
+            raise RunValidationError(f"{path}.may_precede_cmp must be a boolean")
+        pre_cmp_policy = _text(item.get("pre_cmp_policy"), f"{path}.pre_cmp_policy")
+        if pre_cmp_policy not in PRE_CMP_POLICIES:
+            raise RunValidationError(
+                f"{path}.pre_cmp_policy has unsupported value {pre_cmp_policy!r}"
+            )
+        if may_precede_cmp and role != "event-driven":
+            raise RunValidationError(f"{path}.may_precede_cmp applies only to event-driven tags")
+        if may_precede_cmp and pre_cmp_policy == "not-applicable":
+            raise RunValidationError(
+                f"{path}.pre_cmp_policy must resolve an event that may precede CMP"
+            )
+        if not may_precede_cmp and pre_cmp_policy != "not-applicable":
+            raise RunValidationError(
+                f"{path}.pre_cmp_policy must be not-applicable when may_precede_cmp is false"
+            )
+        if not isinstance(item.get("page_view_capable"), bool):
+            raise RunValidationError(f"{path}.page_view_capable must be a boolean")
+        page_view_destinations = _unique_texts(
+            item.get("page_view_destinations"),
+            f"{path}.page_view_destinations",
+        )
+        if item["page_view_capable"] != bool(page_view_destinations):
+            raise RunValidationError(
+                f"{path}.page_view_destinations must be populated exactly when page_view_capable"
+            )
+        ecommerce_route = _text(item.get("ecommerce_route"), f"{path}.ecommerce_route")
+        if ecommerce_route not in ECOMMERCE_ROUTES:
+            raise RunValidationError(
+                f"{path}.ecommerce_route has unsupported value {ecommerce_route!r}"
+            )
+        manual_fields = _unique_texts(
+            item.get("manual_ecommerce_fields"),
+            f"{path}.manual_ecommerce_fields",
+        )
+        if ecommerce_route != "manual" and manual_fields:
+            raise RunValidationError(
+                f"{path}.manual_ecommerce_fields must be empty for a native/non-ecommerce route"
+            )
+        if any(field.startswith("items.0.") for field in manual_fields):
+            raise RunValidationError(f"{path} must not flatten items into items.0.* fields")
+        _unique_texts(item.get("evidence"), f"{path}.evidence", allow_empty=False)
+        records[tag_key] = item
+    return records
+
+
+def _validate_page_view_decisions(
+    raw: Any,
+    *,
+    requirement_ids: set[str],
+    operations: dict[str, dict[str, Any]],
+    external_dependencies: dict[str, dict[str, Any]],
+) -> list[dict[str, Any]]:
+    operation_by_key = {item["object_key"]: item for item in operations.values()}
+
+    def bound_tag(object_key: str, field_path: str) -> tuple[dict[str, Any], dict[str, Any]]:
+        operation = operation_by_key.get(object_key)
+        if operation is None or operation["object_type"] != "tag":
+            raise RunValidationError(f"{field_path} must reference an in-scope tag")
+        if operation["action"] in NON_EXECUTING_TAG_ACTIONS:
+            raise RunValidationError(f"{field_path} must reference an executing target tag")
+        return operation, _effective_target(operation, field_path)
+
+    seen: set[str] = set()
+    records: list[dict[str, Any]] = []
+    for index, item_raw in enumerate(_array(raw, "$.page_view_decisions")):
+        path = f"$.page_view_decisions[{index}]"
+        item = _object(item_raw, path)
+        _exact_keys(
+            item,
+            path,
+            required={
+                "destination",
+                "requirement_ids",
+                "owner",
+                "owner_object_key",
+                "google_tag_object_key",
+                "send_page_view",
+                "external_dependency_ids",
+                "reason",
+                "evidence",
+            },
+        )
+        destination = _text(item.get("destination"), f"{path}.destination")
+        if destination in seen:
+            raise RunValidationError(f"duplicate page-view decision for {destination!r}")
+        seen.add(destination)
+        linked = set(
+            _unique_texts(
+                item.get("requirement_ids"),
+                f"{path}.requirement_ids",
+                allow_empty=False,
+            )
+        )
+        if linked - requirement_ids:
+            raise RunValidationError(f"{path}.requirement_ids contains unknown IDs")
+        owner = _text(item.get("owner"), f"{path}.owner")
+        if owner not in PAGE_VIEW_OWNERS:
+            raise RunValidationError(f"{path}.owner has unsupported value {owner!r}")
+        owner_key = _optional_text(item.get("owner_object_key"), f"{path}.owner_object_key")
+        google_tag_key = _optional_text(
+            item.get("google_tag_object_key"),
+            f"{path}.google_tag_object_key",
+        )
+        dependency_ids = set(
+            _unique_texts(
+                item.get("external_dependency_ids"),
+                f"{path}.external_dependency_ids",
+            )
+        )
+        if dependency_ids - set(external_dependencies):
+            raise RunValidationError(f"{path}.external_dependency_ids contains unknown IDs")
+        if any(
+            not linked <= set(external_dependencies[dependency_id]["requirement_ids"])
+            for dependency_id in dependency_ids
+        ):
+            raise RunValidationError(
+                f"{path}.external_dependency_ids contains a dependency outside the requirements"
+            )
+        send_page_view = item.get("send_page_view")
+        if not isinstance(send_page_view, bool):
+            raise RunValidationError(f"{path}.send_page_view must be a boolean")
+        if owner == "google-tag-automatic":
+            if not owner_key or owner_key != google_tag_key or not send_page_view:
+                raise RunValidationError(
+                    f"{path}.google-tag-automatic requires the same owner and Google tag key "
+                    "with send_page_view true"
+                )
+            owner_operation, owner_target = bound_tag(owner_key, f"{path}.owner_object_key")
+            if _tag_type(owner_target, f"{path}.owner") not in GOOGLE_CONFIGURATION_TAG_TYPES:
+                raise RunValidationError(f"{path}.google-tag-automatic owner is not a Google tag")
+            if not _send_page_view_value(owner_target, f"{path}.owner"):
+                raise RunValidationError(f"{path}.send_page_view differs from the bound Google tag")
+            _validate_google_destination(owner_target, destination, f"{path}.owner")
+            if not linked <= set(owner_operation["requirement_ids"]):
+                raise RunValidationError(f"{path}.owner does not cover its requirement_ids")
+        elif owner == "dedicated-ga4-event":
+            if not owner_key or not google_tag_key or send_page_view:
+                raise RunValidationError(
+                    f"{path}.dedicated-ga4-event requires owner and Google tag keys with "
+                    "send_page_view false"
+                )
+            owner_operation, owner_target = bound_tag(owner_key, f"{path}.owner_object_key")
+            if _tag_type(owner_target, f"{path}.owner") not in GA4_EVENT_TAG_TYPES:
+                raise RunValidationError(f"{path}.dedicated-ga4-event owner is not a GA4 Event tag")
+            _, event_name = _configuration_value(owner_target, {"event_name", "eventName"})
+            if event_name != "page_view":
+                raise RunValidationError(
+                    f"{path}.dedicated-ga4-event owner must send the page_view event"
+                )
+            if not linked <= set(owner_operation["requirement_ids"]):
+                raise RunValidationError(f"{path}.owner does not cover its requirement_ids")
+            google_operation, google_target = bound_tag(
+                google_tag_key,
+                f"{path}.google_tag_object_key",
+            )
+            if _tag_type(google_target, f"{path}.google_tag") not in GOOGLE_CONFIGURATION_TAG_TYPES:
+                raise RunValidationError(f"{path}.google_tag_object_key is not a Google tag")
+            if _send_page_view_value(google_target, f"{path}.google_tag"):
+                raise RunValidationError(
+                    f"{path}.dedicated-ga4-event requires bound Google tag send_page_view false"
+                )
+            _validate_google_destination(google_target, destination, f"{path}.google_tag")
+            if not linked <= set(google_operation["requirement_ids"]):
+                raise RunValidationError(f"{path}.Google tag does not cover its requirement_ids")
+        else:
+            if owner_key is not None or send_page_view:
+                raise RunValidationError(
+                    f"{path}.{owner} requires a null owner_object_key and send_page_view false"
+                )
+            if owner == "external" and not dependency_ids:
+                raise RunValidationError(f"{path}.external requires an external dependency")
+            if owner == "intentionally-none" and dependency_ids:
+                raise RunValidationError(
+                    f"{path}.intentionally-none must not claim an external owner"
+                )
+            if google_tag_key is not None:
+                google_operation, google_target = bound_tag(
+                    google_tag_key,
+                    f"{path}.google_tag_object_key",
+                )
+                if (
+                    _tag_type(
+                        google_target,
+                        f"{path}.google_tag",
+                    )
+                    not in GOOGLE_CONFIGURATION_TAG_TYPES
+                ):
+                    raise RunValidationError(f"{path}.google_tag_object_key is not a Google tag")
+                if _send_page_view_value(google_target, f"{path}.google_tag"):
+                    raise RunValidationError(
+                        f"{path}.{owner} requires bound Google tag send_page_view false"
+                    )
+                _validate_google_destination(google_target, destination, f"{path}.google_tag")
+                if not linked <= set(google_operation["requirement_ids"]):
+                    raise RunValidationError(
+                        f"{path}.Google tag does not cover its requirement_ids"
+                    )
+        _text(item.get("reason"), f"{path}.reason")
+        _unique_texts(item.get("evidence"), f"{path}.evidence", allow_empty=False)
+        records.append(item)
+    return records
+
+
+def _validate_first_party_feature_contract(
+    *,
+    path: str,
+    feature: str,
+    destination_field: str,
+    timing: str,
+    hashing_owner: str,
+    field_names: set[str],
+    consumer_targets: list[dict[str, Any]],
+    dependency_ids: set[str],
+    consent_types: set[str],
+) -> None:
+    product_types = {_tag_type(target, f"{path}.consumer") for target in consumer_targets}
+    if feature == "ga4-user-id":
+        if (
+            hashing_owner != "not-applicable"
+            or timing != "tag-wide"
+            or destination_field != "user_id"
+        ):
+            raise RunValidationError(
+                f"{path}.ga4-user-id requires destination user_id, tag-wide timing, and no hashing"
+            )
+        if field_names != {"user_id"}:
+            raise RunValidationError(f"{path}.ga4-user-id requires only the user_id field")
+        if not product_types <= GOOGLE_CONFIGURATION_TAG_TYPES:
+            raise RunValidationError(f"{path}.ga4-user-id requires a Google configuration tag")
+        return
+
+    if hashing_owner == "not-applicable":
+        raise RunValidationError(f"{path}.{feature} requires an explicit hashing owner")
+    if feature == "ga4-user-provided-data":
+        if destination_field != "user_data" or timing != "same-event":
+            raise RunValidationError(f"{path}.ga4-user-provided-data requires same-event user_data")
+        if not product_types <= GA4_EVENT_TAG_TYPES:
+            raise RunValidationError(f"{path}.ga4-user-provided-data requires GA4 Event tags")
+    elif feature == "google-ads-enhanced-conversions":
+        if destination_field != "user_data" or timing != "same-event":
+            raise RunValidationError(
+                f"{path}.google-ads-enhanced-conversions requires same-event user_data"
+            )
+    elif feature == "google-ads-tag-wide-user-data":
+        if destination_field != "user_data" or timing != "tag-wide":
+            raise RunValidationError(
+                f"{path}.google-ads-tag-wide-user-data requires tag-wide user_data"
+            )
+        if not product_types <= {"googtag"}:
+            raise RunValidationError(
+                f"{path}.google-ads-tag-wide-user-data requires a current Google tag"
+            )
+    elif feature == "google-ads-user-provided-data-event":
+        if destination_field != "user_data" or timing != "prior-page":
+            raise RunValidationError(
+                f"{path}.google-ads-user-provided-data-event requires prior-page user_data"
+            )
+
+    if feature.startswith("google-ads-") and feature != "google-ads-tag-wide-user-data":
+        if product_types & (GOOGLE_CONFIGURATION_TAG_TYPES | GA4_EVENT_TAG_TYPES):
+            raise RunValidationError(
+                f"{path}.{feature} must not bind a GA4 or generic Google configuration tag"
+            )
+    externally_administered = {
+        "ga4-user-provided-data",
+        "google-ads-enhanced-conversions",
+        "google-ads-tag-wide-user-data",
+        "google-ads-user-provided-data-event",
+    }
+    if feature in externally_administered and not dependency_ids:
+        raise RunValidationError(f"{path}.{feature} requires an external administration dependency")
+    if feature in externally_administered and "ad_user_data" not in consent_types:
+        raise RunValidationError(f"{path}.{feature} requires ad_user_data consent")
+
+
+def _validate_first_party_data_routes(
+    raw: Any,
+    *,
+    requirement_ids: set[str],
+    operations: dict[str, dict[str, Any]],
+    external_dependencies: dict[str, dict[str, Any]],
+    payload_mappings: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    operation_by_key = {item["object_key"]: item for item in operations.values()}
+    mapped_fields = {
+        (item["requirement_id"], item["destination_field"])
+        for item in payload_mappings
+        if item["status"] == "mapped"
+    }
+    identities: set[tuple[str, str]] = set()
+    records: list[dict[str, Any]] = []
+    for index, item_raw in enumerate(_array(raw, "$.first_party_data_routes")):
+        path = f"$.first_party_data_routes[{index}]"
+        item = _object(item_raw, path)
+        _exact_keys(
+            item,
+            path,
+            required={
+                "requirement_id",
+                "feature",
+                "destination_field",
+                "consumer_object_keys",
+                "source_priority",
+                "timing",
+                "hashing_owner",
+                "fields",
+                "consent_types",
+                "external_dependency_ids",
+                "evidence",
+            },
+        )
+        requirement_id = _text(item.get("requirement_id"), f"{path}.requirement_id")
+        if requirement_id not in requirement_ids:
+            raise RunValidationError(f"{path}.requirement_id is unknown")
+        feature = _text(item.get("feature"), f"{path}.feature")
+        if feature not in FIRST_PARTY_FEATURES:
+            raise RunValidationError(f"{path}.feature has unsupported value {feature!r}")
+        destination_field = _text(
+            item.get("destination_field"),
+            f"{path}.destination_field",
+        )
+        if (requirement_id, destination_field) not in mapped_fields:
+            raise RunValidationError(
+                f"{path} must bind to a mapped payload field {requirement_id}::{destination_field}"
+            )
+        identity = (requirement_id, feature)
+        if identity in identities:
+            raise RunValidationError(f"duplicate first-party-data route {identity!r}")
+        identities.add(identity)
+        consumers = set(
+            _unique_texts(
+                item.get("consumer_object_keys"),
+                f"{path}.consumer_object_keys",
+                allow_empty=False,
+            )
+        )
+        consumer_targets: list[dict[str, Any]] = []
+        for object_key in consumers:
+            operation = operation_by_key.get(object_key)
+            if operation is None or operation["object_type"] != "tag":
+                raise RunValidationError(
+                    f"{path}.consumer_object_keys contains a non-tag or unknown object"
+                )
+            if operation["action"] in NON_EXECUTING_TAG_ACTIONS:
+                raise RunValidationError(
+                    f"{path}.consumer_object_keys contains a non-executing tag"
+                )
+            if requirement_id not in operation["requirement_ids"]:
+                raise RunValidationError(
+                    f"{path}.consumer_object_keys contains a tag outside the requirement"
+                )
+            target = _effective_target(operation, f"{path}.consumer_object_keys")
+            present, _ = _configuration_value(target, {destination_field})
+            if not present:
+                raise RunValidationError(
+                    f"{path}.consumer {object_key!r} does not configure {destination_field!r}"
+                )
+            consumer_targets.append(target)
+        source_priority = _text(item.get("source_priority"), f"{path}.source_priority")
+        if source_priority not in {"data-layer", "controlled-javascript", "dom", "automatic"}:
+            raise RunValidationError(f"{path}.source_priority is unsupported")
+        timing = _text(item.get("timing"), f"{path}.timing")
+        if timing not in {"tag-wide", "same-event", "prior-page"}:
+            raise RunValidationError(f"{path}.timing is unsupported")
+        hashing_owner = _text(item.get("hashing_owner"), f"{path}.hashing_owner")
+        if hashing_owner not in {"not-applicable", "native-raw", "prehashed-sha256"}:
+            raise RunValidationError(f"{path}.hashing_owner is unsupported")
+        fields = _array(item.get("fields"), f"{path}.fields")
+        if not fields:
+            raise RunValidationError(f"{path}.fields must not be empty")
+        field_names: set[str] = set()
+        for field_index, field_raw in enumerate(fields):
+            field_path = f"{path}.fields[{field_index}]"
+            field = _object(field_raw, field_path)
+            _exact_keys(
+                field,
+                field_path,
+                required={"name", "source", "normalization", "empty_behavior"},
+            )
+            name = _text(field.get("name"), f"{field_path}.name")
+            if name in field_names:
+                raise RunValidationError(f"{path}.fields contains duplicate field {name!r}")
+            field_names.add(name)
+            _text(field.get("source"), f"{field_path}.source")
+            _unique_texts(field.get("normalization"), f"{field_path}.normalization")
+            if field.get("empty_behavior") != "omit":
+                raise RunValidationError(f"{field_path}.empty_behavior must be 'omit'")
+        consent_types = set(_unique_texts(item.get("consent_types"), f"{path}.consent_types"))
+        dependency_ids = set(
+            _unique_texts(
+                item.get("external_dependency_ids"),
+                f"{path}.external_dependency_ids",
+            )
+        )
+        if dependency_ids - set(external_dependencies):
+            raise RunValidationError(f"{path}.external_dependency_ids contains unknown IDs")
+        if any(
+            requirement_id not in external_dependencies[dependency_id]["requirement_ids"]
+            for dependency_id in dependency_ids
+        ):
+            raise RunValidationError(
+                f"{path}.external_dependency_ids contains a dependency outside the requirement"
+            )
+        _unique_texts(item.get("evidence"), f"{path}.evidence", allow_empty=False)
+        _validate_first_party_feature_contract(
+            path=path,
+            feature=feature,
+            destination_field=destination_field,
+            timing=timing,
+            hashing_owner=hashing_owner,
+            field_names=field_names,
+            consumer_targets=consumer_targets,
+            dependency_ids=dependency_ids,
+            consent_types=consent_types,
+        )
+        records.append(item)
+    return records
+
+
+def _validate_inventory_dispositions(
+    raw: Any,
+    *,
+    execution_mode: str,
+    in_scope_tag_keys: set[str],
+    operations: dict[str, dict[str, Any]],
+) -> list[dict[str, Any]]:
+    allowed_tag_actions = {
+        "added": {"create"},
+        "keep": {"reuse", "untouched"},
+        "update": {"update", "rename", "unpause"},
+        "remap": {"update", "rename"},
+        "pause": {"pause"},
+        "remove": {"remove"},
+        "replace": {"replace"},
+        "supersede": {"pause", "reuse", "untouched"},
+    }
+    operation_ids = set(operations)
+    row_ids: set[str] = set()
+    orders: set[int] = set()
+    before_keys: set[str] = set()
+    after_names: set[str] = set()
+    linked_tag_operation_ids: set[str] = set()
+    records: list[dict[str, Any]] = []
+    for index, item_raw in enumerate(_array(raw, "$.inventory_dispositions")):
+        path = f"$.inventory_dispositions[{index}]"
+        item = _object(item_raw, path)
+        _exact_keys(
+            item,
+            path,
+            required={
+                "row_id",
+                "source_order",
+                "source_locator",
+                "before_object_key",
+                "before_tag_name",
+                "disposition",
+                "after_tag_name",
+                "trigger_before",
+                "trigger_after",
+                "variable_changes",
+                "parameter_changes",
+                "consent_changes",
+                "rationale",
+                "operation_ids",
+            },
+        )
+        row_id = _text(item.get("row_id"), f"{path}.row_id")
+        if row_id in row_ids:
+            raise RunValidationError(f"duplicate inventory row_id {row_id!r}")
+        row_ids.add(row_id)
+        order = item.get("source_order")
+        if not isinstance(order, int) or isinstance(order, bool) or order < 0:
+            raise RunValidationError(f"{path}.source_order must be a non-negative integer")
+        if order in orders:
+            raise RunValidationError(f"duplicate inventory source_order {order}")
+        orders.add(order)
+        _text(item.get("source_locator"), f"{path}.source_locator")
+        before_key = _optional_text(item.get("before_object_key"), f"{path}.before_object_key")
+        before_name = _optional_text(item.get("before_tag_name"), f"{path}.before_tag_name")
+        disposition = _text(item.get("disposition"), f"{path}.disposition")
+        if disposition not in INVENTORY_DISPOSITIONS:
+            raise RunValidationError(f"{path}.disposition has unsupported value {disposition!r}")
+        after_name = _optional_text(item.get("after_tag_name"), f"{path}.after_tag_name")
+        if disposition == "added":
+            if before_key is not None or before_name is not None or after_name is None:
+                raise RunValidationError(
+                    f"{path}.added requires blank before identity and a non-empty after_tag_name"
+                )
+        else:
+            if before_key is None or before_name is None:
+                raise RunValidationError(
+                    f"{path}.{disposition} requires before_object_key and before_tag_name"
+                )
+            if before_key in before_keys:
+                raise RunValidationError(f"duplicate inventory before_object_key {before_key!r}")
+            before_keys.add(before_key)
+        if disposition == "remove" and after_name is not None:
+            raise RunValidationError(f"{path}.remove requires a null after_tag_name")
+        if disposition not in {"remove", "added"} and after_name is None:
+            raise RunValidationError(f"{path}.{disposition} requires after_tag_name")
+        if after_name is not None:
+            if after_name in after_names:
+                raise RunValidationError(f"duplicate inventory after_tag_name {after_name!r}")
+            after_names.add(after_name)
+        for field in (
+            "trigger_before",
+            "trigger_after",
+            "variable_changes",
+            "parameter_changes",
+            "consent_changes",
+        ):
+            _unique_texts(item.get(field), f"{path}.{field}")
+        _text(item.get("rationale"), f"{path}.rationale")
+        linked_operations = set(_unique_texts(item.get("operation_ids"), f"{path}.operation_ids"))
+        if linked_operations - operation_ids:
+            raise RunValidationError(f"{path}.operation_ids contains unknown IDs")
+        tag_operations = [
+            operations[operation_id]
+            for operation_id in linked_operations
+            if operations[operation_id]["object_type"] == "tag"
+        ]
+        if len(tag_operations) != 1:
+            raise RunValidationError(f"{path}.operation_ids must link exactly one tag operation")
+        tag_operation = tag_operations[0]
+        operation_id = tag_operation["operation_id"]
+        if operation_id in linked_tag_operation_ids:
+            raise RunValidationError(
+                f"tag operation {operation_id!r} is linked by multiple inventory rows"
+            )
+        linked_tag_operation_ids.add(operation_id)
+        if tag_operation["action"] not in allowed_tag_actions[disposition]:
+            raise RunValidationError(
+                f"{path}.{disposition} is incompatible with tag action {tag_operation['action']!r}"
+            )
+        target = _effective_target(tag_operation, path) if disposition != "remove" else None
+        target_name = target.get("name") if isinstance(target, dict) else None
+        if disposition == "added":
+            if after_name != target_name:
+                raise RunValidationError(f"{path}.after_tag_name differs from the created tag")
+        else:
+            if before_key != tag_operation["object_key"]:
+                raise RunValidationError(f"{path}.before_object_key differs from its tag operation")
+            pre_change = _object(
+                tag_operation.get("pre_change"), f"{path}.tag_operation.pre_change"
+            )
+            if before_name != pre_change.get("name"):
+                raise RunValidationError(f"{path}.before_tag_name differs from pre_change.name")
+            if disposition != "remove" and after_name != target_name:
+                raise RunValidationError(f"{path}.after_tag_name differs from the target tag")
+        records.append(item)
+    if execution_mode == "refonte-durable" and before_keys != in_scope_tag_keys:
+        missing = sorted(in_scope_tag_keys - before_keys)
+        extra = sorted(before_keys - in_scope_tag_keys)
+        raise RunValidationError(
+            "refonte inventory dispositions must cover every in-scope baseline tag exactly; "
+            f"missing={missing}, extra={extra}"
+        )
+    if execution_mode == "refonte-durable":
+        tag_operation_ids = {
+            operation_id
+            for operation_id, operation in operations.items()
+            if operation["object_type"] == "tag"
+        }
+        if tag_operation_ids != linked_tag_operation_ids:
+            missing = sorted(tag_operation_ids - linked_tag_operation_ids)
+            extra = sorted(linked_tag_operation_ids - tag_operation_ids)
+            raise RunValidationError(
+                "refonte inventory rows must cover every tag operation exactly; "
+                f"missing={missing}, extra={extra}"
+            )
+        existing_orders = [
+            item["source_order"] for item in records if item["disposition"] != "added"
+        ]
+        added_orders = [item["source_order"] for item in records if item["disposition"] == "added"]
+        if existing_orders and added_orders and min(added_orders) <= max(existing_orders):
+            raise RunValidationError("refonte added inventory rows must follow all source rows")
+    return records
 
 
 def _validate_readback(
@@ -693,15 +2041,22 @@ def _validate_official_sources(raw: Any) -> None:
         _unique_texts(item.get("supports"), f"{path}.supports", allow_empty=False)
 
 
-def _validate_external_dependencies(raw: Any, requirement_ids: set[str]) -> None:
-    seen: set[str] = set()
+def _validate_external_dependencies(
+    raw: Any,
+    requirement_ids: set[str],
+) -> dict[str, dict[str, Any]]:
+    records: dict[str, dict[str, Any]] = {}
     for index, item_raw in enumerate(_array(raw, "$.external_dependencies")):
         path = f"$.external_dependencies[{index}]"
         item = _object(item_raw, path)
+        _exact_keys(
+            item,
+            path,
+            required={"id", "requirement_ids", "owner", "action", "status"},
+        )
         dependency_id = _text(item.get("id"), f"{path}.id")
-        if dependency_id in seen:
+        if dependency_id in records:
             raise RunValidationError(f"duplicate external dependency id {dependency_id!r}")
-        seen.add(dependency_id)
         linked = set(_unique_texts(item.get("requirement_ids"), f"{path}.requirement_ids"))
         if linked - requirement_ids:
             raise RunValidationError(f"{path}.requirement_ids contains unknown IDs")
@@ -709,6 +2064,8 @@ def _validate_external_dependencies(raw: Any, requirement_ids: set[str]) -> None
         _text(item.get("action"), f"{path}.action")
         if _text(item.get("status"), f"{path}.status") not in {"open", "resolved", "deferred"}:
             raise RunValidationError(f"{path}.status is unsupported")
+        records[dependency_id] = item
+    return records
 
 
 def _validate_recovery_boundary(value: Any, *, required: bool) -> None:
@@ -728,8 +2085,8 @@ def _validate_recovery_boundary(value: Any, *, required: bool) -> None:
 
 def _validate_recette_handoff(raw: Any, requirement_ids: set[str]) -> None:
     handoff = _object(raw, "$.recette_handoff")
-    if _text(handoff.get("manifest_version"), "$.recette_handoff.manifest_version") != "1.0":
-        raise RunValidationError("$.recette_handoff.manifest_version must be '1.0'")
+    if _text(handoff.get("manifest_version"), "$.recette_handoff.manifest_version") != "2.0":
+        raise RunValidationError("$.recette_handoff.manifest_version must be '2.0'")
     records = _array(handoff.get("requirements"), "$.recette_handoff.requirements")
     seen: set[str] = set()
     for index, item_raw in enumerate(records):
@@ -740,7 +2097,20 @@ def _validate_recette_handoff(raw: Any, requirement_ids: set[str]) -> None:
             raise RunValidationError(f"{path}.id is unknown or duplicated")
         seen.add(requirement_id)
         _unique_texts(item.get("expected_tags"), f"{path}.expected_tags")
+        _unique_texts(
+            item.get("expected_normal_triggers"),
+            f"{path}.expected_normal_triggers",
+        )
+        _unique_texts(
+            item.get("expected_blocking_triggers"),
+            f"{path}.expected_blocking_triggers",
+        )
         _unique_texts(item.get("expected_consent_states"), f"{path}.expected_consent_states")
+        _unique_texts(
+            item.get("expected_user_data_keys"),
+            f"{path}.expected_user_data_keys",
+        )
+        _unique_texts(item.get("network_cues"), f"{path}.network_cues")
         _unique_texts(item.get("cues"), f"{path}.cues")
     if seen != requirement_ids:
         raise RunValidationError("$.recette_handoff.requirements must cover every requirement")
@@ -768,11 +2138,50 @@ def validate_document(value: Any) -> dict[str, Any]:
         document["object_changes"],
         requirement_ids=requirement_ids,
     )
-    _validate_payload_mappings(document["payload_mappings"], requirement_ids)
-    _validate_consent_routes(document["consent_routes"], requirement_ids)
+    payload_mappings = _validate_payload_mappings(
+        document["payload_mappings"],
+        requirement_ids,
+    )
+    baseline = _validate_container_baseline(
+        document["container_baseline"],
+        execution_mode=run["execution_mode"],
+    )
+    trigger_types = _resolved_trigger_types(operations, baseline["trigger_types"])
+    _validate_consent_routes(
+        document["consent_routes"],
+        requirement_ids,
+        trigger_types=trigger_types,
+    )
+    _validate_execution_topologies(
+        document["execution_topologies"],
+        requirement_ids=requirement_ids,
+        operations=operations,
+        baseline_trigger_types=baseline["trigger_types"],
+    )
+    external_dependencies = _validate_external_dependencies(
+        document["external_dependencies"], requirement_ids
+    )
+    _validate_page_view_decisions(
+        document["page_view_decisions"],
+        requirement_ids=requirement_ids,
+        operations=operations,
+        external_dependencies=external_dependencies,
+    )
     readback = _validate_readback(document["saved_readback"], operations=operations)
     _validate_official_sources(document["official_sources"])
-    _validate_external_dependencies(document["external_dependencies"], requirement_ids)
+    _validate_first_party_data_routes(
+        document["first_party_data_routes"],
+        requirement_ids=requirement_ids,
+        operations=operations,
+        external_dependencies=external_dependencies,
+        payload_mappings=payload_mappings,
+    )
+    _validate_inventory_dispositions(
+        document["inventory_dispositions"],
+        execution_mode=run["execution_mode"],
+        in_scope_tag_keys=baseline["in_scope_tag_keys"],
+        operations=operations,
+    )
     _validate_recovery_boundary(document["recovery_boundary"], required=status == "Partial")
 
     idempotency = _object(document["idempotency"], "$.idempotency")
@@ -873,7 +2282,12 @@ def _contract_fingerprint(contract: dict[str, Any]) -> str:
 
 def _field_mappings(requirement: dict[str, Any]) -> list[dict[str, Any]]:
     mappings: list[dict[str, Any]] = []
-    for map_name in ("parameters", "user_properties", "item_parameters"):
+    field_scopes = {
+        "parameters": "event-parameter",
+        "user_properties": "user-property",
+        "item_parameters": "item-parameter",
+    }
+    for map_name, field_scope in field_scopes.items():
         for field_name, field in requirement.get(map_name, {}).items():
             source = field.get("source")
             if source is None and "literal" in field:
@@ -888,6 +2302,7 @@ def _field_mappings(requirement: dict[str, Any]) -> list[dict[str, Any]]:
             mappings.append(
                 {
                     "requirement_id": requirement["id"],
+                    "field_scope": field_scope,
                     "destination_field": field_name,
                     "source": source,
                     "source_authority_grade": (
@@ -915,8 +2330,45 @@ def _preflight_issues(
     requirement_ids: set[str],
 ) -> list[str]:
     issues: list[str] = []
+    baseline = document["container_baseline"]
+    if not baseline["complete"]:
+        issues.append("authoritative container baseline is incomplete")
+
+    linked_operations = [
+        item
+        for item in document["object_changes"]
+        if set(item["requirement_ids"]) & requirement_ids
+    ]
+    has_executing_target_tag = any(
+        item["object_type"] == "tag" and item["action"] not in NON_EXECUTING_TAG_ACTIONS
+        for item in linked_operations
+    )
+    high_risk = any(
+        item["action"] in {"remove", "replace"}
+        or len(item["requirement_ids"]) > 1
+        or item["object_type"]
+        in {
+            "zone",
+            "environment",
+            "destination",
+            "google tag configuration",
+            "container setting",
+            "template",
+        }
+        for item in linked_operations
+    )
+    products = {
+        item["product"]
+        for item in document["consent_routes"]
+        if item["requirement_id"] in requirement_ids
+    }
+    if document["run"]["execution_mode"] == "isolated-lightweight" and (
+        high_risk or len(products) > 1
+    ):
+        issues.append("risk surface requires a durable configuration-run artifact")
+
     for mapping in document["payload_mappings"]:
-        if mapping["requirement_id"] not in requirement_ids:
+        if not has_executing_target_tag or mapping["requirement_id"] not in requirement_ids:
             continue
         identity = f"{mapping['requirement_id']}::{mapping['destination_field']}"
         if mapping["status"] == "pending":
@@ -928,11 +2380,126 @@ def _preflight_issues(
         item["id"]: item for item in document["requirements"] if item["id"] in requirement_ids
     }
     consent_by_requirement = {item["requirement_id"]: item for item in document["consent_routes"]}
+    executable_tag_requirement_ids = {
+        requirement_id
+        for item in linked_operations
+        if item["object_type"] == "tag" and item["action"] not in NON_EXECUTING_TAG_ACTIONS
+        for requirement_id in item["requirement_ids"]
+    }
     for requirement_id, requirement in requirements.items():
         if requirement["kind"] == "consent" or requirement["status"] == "Deferred":
             continue
-        if requirement_id not in consent_by_requirement:
+        if (
+            requirement_id in executable_tag_requirement_ids
+            and requirement_id not in consent_by_requirement
+        ):
             issues.append(f"consent route {requirement_id} is missing")
+
+    topology_by_tag = {item["tag_object_key"]: item for item in document["execution_topologies"]}
+    tag_operations = [
+        item
+        for item in linked_operations
+        if item["object_type"] == "tag"
+        and item["action"] not in NON_EXECUTING_TAG_ACTIONS
+        and any(
+            requirements.get(requirement_id, {}).get("kind") not in {None, "consent"}
+            for requirement_id in item["requirement_ids"]
+        )
+    ]
+    for operation in tag_operations:
+        tag_key = operation["object_key"]
+        topology = topology_by_tag.get(tag_key)
+        if topology is None:
+            issues.append(f"execution topology {tag_key} is missing")
+            continue
+        for requirement_id in operation["requirement_ids"]:
+            requirement = requirements.get(requirement_id)
+            if requirement is None or requirement["kind"] == "consent":
+                continue
+            route = consent_by_requirement.get(requirement_id)
+            if route is None:
+                continue
+            if topology["consent_mode"] != route["mode"]:
+                issues.append(
+                    f"execution topology {tag_key} consent mode differs from {requirement_id}"
+                )
+            if route["normal_trigger"] not in {
+                trigger["trigger_object_key"] for trigger in topology["normal_triggers"]
+            }:
+                issues.append(
+                    f"execution topology {tag_key} normal triggers omit {requirement_id} route"
+                )
+            if set(topology["blocking_trigger_keys"]) != set(route["blocking_triggers"]):
+                issues.append(
+                    f"execution topology {tag_key} blocking triggers differ from {requirement_id}"
+                )
+            if set(topology["additional_consent_checks"]) != set(
+                route["additional_consent_checks"]
+            ):
+                issues.append(
+                    f"execution topology {tag_key} Additional Consent Checks differ from "
+                    f"{requirement_id}"
+                )
+
+        if topology["page_view_capable"]:
+            decisions = {
+                item["destination"]: item
+                for item in document["page_view_decisions"]
+                if set(item["requirement_ids"]) & set(operation["requirement_ids"])
+            }
+            expected_destinations = set(topology["page_view_destinations"])
+            if set(decisions) != expected_destinations:
+                issues.append(
+                    f"page-view ownership for {tag_key} must resolve exactly for destinations "
+                    f"{sorted(expected_destinations)}"
+                )
+            for decision in decisions.values():
+                if (
+                    decision["owner"] == "google-tag-automatic"
+                    and decision["owner_object_key"] == tag_key
+                    and topology["lifecycle_role"] != "baseline-page-load"
+                ):
+                    issues.append(
+                        f"automatic page-view owner {tag_key} requires baseline-page-load topology"
+                    )
+
+        mapped_items = [
+            item
+            for item in document["payload_mappings"]
+            if item["requirement_id"] in operation["requirement_ids"]
+            and item["destination_field"] == "items"
+            and item["status"] == "mapped"
+        ]
+        if topology["ecommerce_route"].startswith("native-") and mapped_items:
+            issues.append(f"ecommerce {tag_key} mixes a native route with a manual items mapping")
+
+    first_party_by_requirement: dict[str, set[str]] = {}
+    for route in document["first_party_data_routes"]:
+        first_party_by_requirement.setdefault(route["requirement_id"], set()).add(route["feature"])
+    for mapping in document["payload_mappings"]:
+        if (
+            not has_executing_target_tag
+            or mapping["requirement_id"] not in requirement_ids
+            or mapping["status"] != "mapped"
+        ):
+            continue
+        if mapping["destination_field"] == "user_data" and not (
+            first_party_by_requirement.get(mapping["requirement_id"], set())
+            & {
+                "ga4-user-provided-data",
+                "google-ads-enhanced-conversions",
+                "google-ads-tag-wide-user-data",
+                "google-ads-user-provided-data-event",
+                "vendor-advanced-matching",
+            }
+        ):
+            issues.append(
+                f"first-party-data route for {mapping['requirement_id']}::user_data is missing"
+            )
+        if mapping["destination_field"] == "user_id" and "ga4-user-id" not in (
+            first_party_by_requirement.get(mapping["requirement_id"], set())
+        ):
+            issues.append(f"GA4 user_id route for {mapping['requirement_id']} is missing")
     return issues
 
 
@@ -1041,6 +2608,20 @@ def create_from_contract(
             external_dependencies.append(dependency)
 
     workspace = contract["implementation"]["workspace"]
+    high_risk = any(
+        item["action"] in {"remove", "replace"}
+        or item["object_type"]
+        in {
+            "zone",
+            "environment",
+            "destination",
+            "google tag configuration",
+            "container setting",
+            "template",
+        }
+        or len(item.get("requirement_ids") or contract_ids) > 1
+        for item in contract["implementation"]["objects"]
+    )
     document = {
         "schema_version": SCHEMA_VERSION,
         "run": {
@@ -1061,24 +2642,44 @@ def create_from_contract(
                 "source_locator": source_locator,
                 "fingerprint": _contract_fingerprint(contract),
             },
+            "execution_mode": "isolated-durable" if high_risk else "isolated-lightweight",
             "publication": {"performed": False, "version_created": False},
         },
         "requirements": requirements,
         "object_changes": object_changes,
         "payload_mappings": payload_mappings,
         "consent_routes": [],
+        "container_baseline": {
+            "strategy": "relevant-families",
+            "captured_at": None,
+            "complete": False,
+            "resource_families": [],
+            "family_counts": {},
+            "in_scope_tag_keys": [],
+            "trigger_index": [],
+            "preexisting_workspace_changes": None,
+            "fingerprint": None,
+        },
+        "execution_topologies": [],
+        "page_view_decisions": [],
+        "first_party_data_routes": [],
+        "inventory_dispositions": [],
         "saved_readback": [],
         "official_sources": official_sources,
         "external_dependencies": external_dependencies,
         "recovery_boundary": None,
         "idempotency": {"checked": False, "remaining_actions": []},
         "recette_handoff": {
-            "manifest_version": "1.0",
+            "manifest_version": "2.0",
             "requirements": [
                 {
                     "id": requirement_id,
                     "expected_tags": [],
+                    "expected_normal_triggers": [],
+                    "expected_blocking_triggers": [],
                     "expected_consent_states": [],
+                    "expected_user_data_keys": [],
+                    "network_cues": [],
                     "cues": [],
                 }
                 for requirement_id in contract_ids
@@ -1358,6 +2959,14 @@ def _json_file(path: Path, label: str) -> dict[str, Any]:
     return _object(_json_value_file(path, label), label)
 
 
+def _markdown_cell(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, list):
+        value = "; ".join(str(item) for item in value)
+    return str(value).replace("|", "\\|").replace("\n", " ")
+
+
 def render_markdown(document: dict[str, Any], *, embed_machine: bool = False) -> str:
     """Render one manifest into executive, analyst, and optional machine layers."""
     document = validate_document(document)
@@ -1379,6 +2988,15 @@ def render_markdown(document: dict[str, Any], *, embed_machine: bool = False) ->
             "`{workspace_id}`"
         ).format(**run["target"]),
         f"- Requirements: {len(document['requirements'])}",
+        f"- Execution mode: `{run['execution_mode']}`",
+        (
+            "- Adapter baseline: {strategy}; complete={complete}; pre-existing workspace "
+            "changes={changes}"
+        ).format(
+            strategy=document["container_baseline"]["strategy"],
+            complete=str(document["container_baseline"]["complete"]).lower(),
+            changes=document["container_baseline"]["preexisting_workspace_changes"],
+        ),
         "- Intended object actions: "
         + (", ".join(f"{action} {count}" for action, count in sorted(counts.items())) or "none"),
         "- Consent routes: " + str(len(document["consent_routes"])),
@@ -1413,6 +3031,40 @@ def render_markdown(document: dict[str, Any], *, embed_machine: bool = False) ->
                 )
             )
         )
+
+    if document["inventory_dispositions"]:
+        lines.extend(
+            [
+                "",
+                "## Inventory-aligned tag change log",
+                "",
+                "| Order | Source row | Vendor/source | Disposition | Tag before | Tag after | "
+                "Trigger before | Trigger after | Variable changes | Parameter changes | Consent "
+                "changes | Rationale |",
+                "| ---: | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+            ]
+        )
+        for item in sorted(
+            document["inventory_dispositions"], key=lambda value: value["source_order"]
+        ):
+            lines.append(
+                "| {order} | {row} | {source} | {disposition} | {before} | {after} | "
+                "{trigger_before} | {trigger_after} | {variables} | {parameters} | {consent} | "
+                "{rationale} |".format(
+                    order=item["source_order"],
+                    row=_markdown_cell(item["row_id"]),
+                    source=_markdown_cell(item["source_locator"]),
+                    disposition=_markdown_cell(item["disposition"]),
+                    before=_markdown_cell(item["before_tag_name"]),
+                    after=_markdown_cell(item["after_tag_name"]),
+                    trigger_before=_markdown_cell(item["trigger_before"]),
+                    trigger_after=_markdown_cell(item["trigger_after"]),
+                    variables=_markdown_cell(item["variable_changes"]),
+                    parameters=_markdown_cell(item["parameter_changes"]),
+                    consent=_markdown_cell(item["consent_changes"]),
+                    rationale=_markdown_cell(item["rationale"]),
+                )
+            )
 
     lines.extend(["", "## Analyst and developer change log", ""])
     if not operations:
@@ -1467,6 +3119,12 @@ def render_markdown(document: dict[str, Any], *, embed_machine: bool = False) ->
                 f"on `{consent['normal_trigger']}`; block scope "
                 f"`{consent.get('blocking_event_scope') or 'not applicable'}`"
             )
+            lines.append(
+                "- Consent checks: built-in "
+                + (", ".join(consent["built_in_consent_checks"]) or "none recorded")
+                + "; Additional "
+                + (", ".join(consent["additional_consent_checks"]) or "not set")
+            )
         else:
             lines.append("- Consent: not yet recorded")
         for mapping in mappings:
@@ -1484,6 +3142,52 @@ def render_markdown(document: dict[str, Any], *, embed_machine: bool = False) ->
                 )
             )
         lines.append("")
+
+    lines.extend(["## Per-tag execution topology", ""])
+    if not document["execution_topologies"]:
+        lines.append("No tag topology is recorded.")
+    for topology in document["execution_topologies"]:
+        normal_triggers = ", ".join(
+            "{key} [{role}/{type}]".format(
+                key=trigger["trigger_object_key"],
+                role=trigger["role"],
+                type=trigger["type"],
+            )
+            for trigger in topology["normal_triggers"]
+        )
+        lines.append(
+            "- `{tag}`: {role}; triggers {triggers}; blocks {blocks}; Additional "
+            "{additional}; firing {firing}; pre-CMP {pre_cmp}; ecommerce {ecommerce}".format(
+                tag=topology["tag_object_key"],
+                role=topology["lifecycle_role"],
+                triggers=normal_triggers,
+                blocks=", ".join(topology["blocking_trigger_keys"]) or "none",
+                additional=", ".join(topology["additional_consent_checks"]) or "not set",
+                firing=topology["firing_option"],
+                pre_cmp=topology["pre_cmp_policy"],
+                ecommerce=topology["ecommerce_route"],
+            )
+        )
+    lines.append("")
+
+    lines.extend(["## Page-view and first-party-data decisions", ""])
+    for decision in document["page_view_decisions"]:
+        lines.append(
+            f"- Page view `{decision['destination']}`: {decision['owner']}; "
+            f"send_page_view={str(decision['send_page_view']).lower()}; "
+            f"Google tag={decision.get('google_tag_object_key') or 'none'}; "
+            f"{decision['reason']}"
+        )
+    for route in document["first_party_data_routes"]:
+        field_names = ", ".join(field["name"] for field in route["fields"])
+        lines.append(
+            f"- First-party data `{route['requirement_id']}`: {route['feature']}; "
+            f"destination={route['destination_field']}; timing={route['timing']}; "
+            f"hashing={route['hashing_owner']}; keys={field_names}"
+        )
+    if not document["page_view_decisions"] and not document["first_party_data_routes"]:
+        lines.append("- No page-view-capable or first-party-data decision is in scope.")
+    lines.append("")
 
     lines.extend(["## External actions and handoff", ""])
     for dependency in document["external_dependencies"]:

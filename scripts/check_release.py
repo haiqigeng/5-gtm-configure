@@ -13,7 +13,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SEMVER = re.compile(r"^v(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)$")
-CURRENT_RELEASE = "7.0.0"
+CURRENT_RELEASE = "8.0.0"
 REFERENCE_LAYERS = {
     "01-orientation": {
         "official-source-policy.md",
@@ -32,6 +32,7 @@ REFERENCE_LAYERS = {
         "first-party-data.md",
         "ga4-collection-safety.md",
         "google-consent-mode.md",
+        "google-field-ownership.md",
         "implementation-workflow.md",
         "media-criteo.md",
         "media-affiliate.md",
@@ -52,6 +53,7 @@ REFERENCE_LAYERS = {
         "tcf-consent.md",
         "tool-adapters.md",
         "tracking-plan-fidelity-and-conformance.md",
+        "tracking-refonte.md",
         "transformation-patterns.md",
         "triggers-and-variables.md",
         "vendor-consent-modes.md",
@@ -262,6 +264,7 @@ def check_content() -> list[str]:
     configuration_contract = read("references/02-execution/configuration-contract.md")
     configuration_run_reference = read("references/02-execution/configuration-run-and-resume.md")
     fidelity = read("references/02-execution/tracking-plan-fidelity-and-conformance.md")
+    refonte = read("references/02-execution/tracking-refonte.md")
     workflow = read("references/02-execution/implementation-workflow.md")
     analytics = read("references/02-execution/analytics-tags.md")
     analytics_vendors = read("references/02-execution/analytics-vendors.md")
@@ -283,6 +286,7 @@ def check_content() -> list[str]:
     cross_domain = read("references/02-execution/conversion-linker-cross-domain.md")
     ga4_safety = read("references/02-execution/ga4-collection-safety.md")
     google_consent = read("references/02-execution/google-consent-mode.md")
+    google_field_ownership = read("references/02-execution/google-field-ownership.md")
     vendor_consent = read("references/02-execution/vendor-consent-modes.md")
     routing = read("references/02-execution/multi-destination-routing.md")
     transformations = read("references/02-execution/transformation-patterns.md")
@@ -383,7 +387,7 @@ def check_content() -> list[str]:
         if term not in compact_configuration_contract
     )
     configuration_run_terms = (
-        "Use one durable run artifact",
+        "Use proportionate proof and one durable run artifact",
         "Preserve stable requirement identity",
         "Render impact without adding a routine approval gate",
         "Checkpoint every write boundary",
@@ -392,11 +396,13 @@ def check_content() -> list[str]:
         "Use replace as one governed action",
         "Summarize template permission changes",
         "Hand off in three layers",
-        "configuration-run@1.1",
+        "configuration-run@2.0",
         "exclusive per-artifact writer lock",
         "structured comparison",
         "--saved-readback",
         "top-level intended field",
+        "per-active-tag execution topology",
+        "refonte inventory dispositions",
     )
     errors.extend(
         f"configuration-run reference missing requirement: {term}"
@@ -504,7 +510,32 @@ def check_content() -> list[str]:
         ),
         "first-party data": (
             first_party_data,
-            ("User-Provided Data variable", "not pre-hash it", "account-side activation"),
+            (
+                "User-Provided Data variable",
+                "not pre-hash it",
+                "account-side activation",
+                "Google Ads User-Provided Data Event",
+                "PII firewall",
+                "ad_user_data",
+            ),
+        ),
+        "Google field ownership": (
+            google_field_ownership,
+            (
+                "Assign every Google field to exactly one GTM surface",
+                "GA4 `user_id`",
+                "server_container_url",
+                "Keep ecommerce on one route",
+            ),
+        ),
+        "tracking refonte": (
+            refonte,
+            (
+                "one complete, paginated read",
+                "Assign every in-scope existing tag exactly one",
+                "preserve source order",
+                "Do not optimize unrelated",
+            ),
         ),
     }
     for label, (text, terms) in capability_contracts.items():
@@ -524,6 +555,7 @@ def check_content() -> list[str]:
         ("configuration-run controller", "DEFAULT_VENDOR_BLOCK_SCOPE", run_controller),
         ("configuration-run controller", "_preflight_issues", run_controller),
         ("adapter state machine", "collect_paginated", adapter_runtime),
+        ("adapter state machine", "collect_resource_baseline", adapter_runtime),
         ("adapter state machine", "AmbiguousWriteError", adapter_runtime),
         ("object graph comparator", "normalize_graph", graph_diff),
         ("object graph comparator", "compare_graphs", graph_diff),
@@ -538,7 +570,7 @@ def check_content() -> list[str]:
             errors.append(f"{label} missing contract: {term}")
     exact_version_constants = (
         ("configuration schema validator", schema_validator, "SCHEMA_VERSION", "5.0"),
-        ("configuration-run controller", run_controller, "SCHEMA_VERSION", "1.1"),
+        ("configuration-run controller", run_controller, "SCHEMA_VERSION", "2.0"),
         (
             "configuration-run verification",
             run_controller,
@@ -842,20 +874,28 @@ def check_content() -> list[str]:
         "references/01-orientation/official-source-policy.md",
         "references/02-execution/implementation-workflow.md",
         "references/02-execution/configuration-contract.md",
-        "references/02-execution/configuration-run-and-resume.md",
         "references/03-judgement/acceptance-and-handoff.md",
     )
     mandatory_words = sum(len(re.findall(r"\S+", read(path))) for path in mandatory_runtime_files)
     if mandatory_words > 7500:
         errors.append(f"mandatory runtime instruction load exceeds 7,500 words: {mandatory_words}")
+    durable_runtime_files = (
+        *mandatory_runtime_files,
+        "references/02-execution/configuration-run-and-resume.md",
+    )
+    durable_words = sum(len(re.findall(r"\S+", read(path))) for path in durable_runtime_files)
+    if durable_words > 8500:
+        errors.append(
+            f"durable-run mandatory instruction load exceeds 8,500 words: {durable_words}"
+        )
 
     try:
         parsed_run_schema = json.loads(run_schema)
     except json.JSONDecodeError as exc:
         errors.append(f"configuration-run schema is invalid JSON: {exc}")
     else:
-        if parsed_run_schema.get("properties", {}).get("schema_version", {}).get("const") != "1.1":
-            errors.append("configuration-run schema does not declare version 1.1")
+        if parsed_run_schema.get("properties", {}).get("schema_version", {}).get("const") != "2.0":
+            errors.append("configuration-run schema does not declare version 2.0")
         if parsed_run_schema.get("additionalProperties") is not False:
             errors.append("configuration-run schema must reject unknown top-level fields")
         verification = parsed_run_schema.get("$defs", {}).get("verificationComparison", {})
@@ -870,6 +910,26 @@ def check_content() -> list[str]:
         }
         if not verification_required <= set(verification.get("required", [])):
             errors.append("configuration-run schema lacks structured verification evidence")
+        run_properties = parsed_run_schema.get("properties", {})
+        baseline_required = set(run_properties.get("container_baseline", {}).get("required", []))
+        if not {"family_counts", "trigger_index"} <= baseline_required:
+            errors.append("configuration-run baseline lacks count/type binding fields")
+        topology_schema = run_properties.get("execution_topologies", {}).get("items", {})
+        topology_required = set(topology_schema.get("required", []))
+        if not {"normal_triggers", "blocking_trigger_keys"} <= topology_required:
+            errors.append("configuration-run topology lacks semantic trigger bindings")
+        if {"normal_trigger", "normal_trigger_class", "blocking_triggers"} & topology_required:
+            errors.append("configuration-run topology retains obsolete unbound trigger fields")
+        page_required = set(
+            run_properties.get("page_view_decisions", {}).get("items", {}).get("required", [])
+        )
+        if not {"google_tag_object_key", "external_dependency_ids"} <= page_required:
+            errors.append("configuration-run page-view decision lacks owner-object binding")
+        first_party_required = set(
+            run_properties.get("first_party_data_routes", {}).get("items", {}).get("required", [])
+        )
+        if "destination_field" not in first_party_required:
+            errors.append("configuration-run first-party route lacks destination binding")
 
     strict_json_terms = ("object_pairs_hook", "parse_constant", "utf-8-sig", "MAX_JSON_DEPTH")
     errors.extend(
@@ -879,6 +939,7 @@ def check_content() -> list[str]:
     )
     adapter_terms = (
         "def compare(",
+        "build_container_baseline",
         "validate_verification_comparison",
         "deepcopy",
         "run_file_lock",

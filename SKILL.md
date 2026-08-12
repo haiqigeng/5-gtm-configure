@@ -121,10 +121,10 @@ after authoritative readback; otherwise use the narrowest accurate `Partial`, `B
   preserve inventory row order in the user-facing change log. Do not turn refonte authority into
   unrelated cleanup or implicit destructive authority.
 - Maintain the versioned run artifact when possible. Never overwrite saved run history; serialize
-  writers for the same artifact; checkpoint immediately before and after each write; re-read every
-  saved/reused object; bind structured comparison evidence to the supplied authoritative saved
-  payload and every intended field; never retry an ambiguous mutation without decisive readback;
-  make an identical rerun a no-op.
+  writers for the same artifact; before a delta write, prove fresh saved state still matches
+  `pre_change`; never overwrite a conflicting create; checkpoint around each write; re-read every
+  saved/reused object; bind structured comparison evidence to authoritative readback; never retry
+  ambiguity; make an identical rerun a no-op, then use the single locked finalization transition.
 - Record site, CMP, GA4/media administration, catalog/feed, recette, publication, and server work as
   external. Never claim GTM completed another system or runtime validation.
 - Keep server-side GTM, CAPI, and deduplication as future extensions. Never generate a browser event

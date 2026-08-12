@@ -92,6 +92,8 @@ authority separate. Capture only what mutation and proof need:
   the intended/saved tag arrays rather than restating trigger names;
 - one object action with canonical resource family, intended fields, evidence, and pre-change state
   for deltas;
+- for first-party data, positive product identity plus the bound native tag type or installed
+  template identity for every consumer;
 - blocker, external owner, and expected saved comparison.
 
 Use `requirement_ids` on every object in a multi-requirement map. Validate normalized v5 JSON before
@@ -117,6 +119,8 @@ eligibility. A baseline/page-load tag uses a verified CMP readiness/grant event 
 event-driven tag uses the approved source trigger type plus its block. Click, Form, Visibility,
 Scroll, YouTube, History, Timer, and other approved native trigger types remain valid when the
 source contract calls for them. Record built-in checks separately.
+For explicitly approved advanced/native page-load behavior, Initialization, Page View, DOM Ready,
+and Window Loaded remain valid when they match the product contract.
 Resolve pre-CMP business events explicitly because no block replays them.
 
 Assign exactly one page-view owner and apply the authoritative Google field-ownership matrix before
@@ -153,10 +157,11 @@ Write only in-scope dependencies, normally:
 5. event/conversion/remarketing tags;
 6. sequencing, firing options, and consent settings.
 
-Checkpoint `in_progress` immediately before one write. Re-read it immediately afterward and record
-`verified`, `failed`, or `uncertain`. Retry only a documented non-applied rate-limit response within
-a bound. On timeout or ambiguous response, read by stable parent and semantic identity before any
-retry. Stop dependents on auth, fingerprint, consumer, schema, or readback conflict.
+Immediately before a delta write, re-read the object and prove it still matches `pre_change`; on
+drift, stop without mutation. A create collision also stops without overwrite. Persist the passing
+comparison, then checkpoint `in_progress`. Re-read after the write and record `verified`, `failed`,
+or `uncertain`. Retry only a documented non-applied rate-limit response within a bound. On timeout
+or ambiguity, read by stable identity; stop all remaining writes on failure or uncertainty.
 
 ## 8. Read back, correct, and hand off
 
@@ -167,7 +172,8 @@ references; every other in-scope reference needs closure.
 
 Prove analytics requirement equality and media brief-to-official-schema mapping. Recompute the
 change map so a second identical run is entirely reuse/untouched. Correct safe current-operation
-differences; preserve a precise recovery boundary when not safe.
+differences; preserve a precise recovery boundary when not safe. Use the single locked finalization
+transition to derive `Configured`; do not hand-edit status or idempotency.
 
 Apply canonical status rules, then render the executive summary, analyst/developer change log, and
 machine recette handoff from the same validated run. State that runtime recette and publication did

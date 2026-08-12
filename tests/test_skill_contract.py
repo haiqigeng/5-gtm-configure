@@ -406,6 +406,7 @@ class SkillContractTest(unittest.TestCase):
         skill = read("SKILL.md")
         run_reference = read("references/02-execution/configuration-run-and-resume.md")
         run_script = read("scripts/configuration_run.py")
+        run_model = read("scripts/run_model.py")
         adapter_runtime = read("scripts/adapter_runtime.py")
         self.assertIn("configuration-run-and-resume.md", skill)
         self.assertIn("configuration-run schema", skill)
@@ -417,7 +418,7 @@ class SkillContractTest(unittest.TestCase):
             "Hand off in three layers",
         ):
             self.assertIn(term, run_reference)
-        self.assertRegex(run_script, r'(?m)^SCHEMA_VERSION = "2\.0"$')
+        self.assertRegex(run_model, r'(?m)^SCHEMA_VERSION = "2\.1"$')
         self.assertIn("reopen_failed_operation", run_script)
         self.assertIn("collect_paginated", adapter_runtime)
         mandatory = (

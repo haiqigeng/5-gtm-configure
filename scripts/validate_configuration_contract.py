@@ -289,6 +289,8 @@ def _validate_v4_object_action(raw: Any, *, index: int) -> None:
     if action not in LEGACY_ACTIONS:
         raise ContractValidationError(f"{path}.action has unsupported value {action!r}")
     object_type = _require_text(item.get("object_type"), f"{path}.object_type")
+    if action in {"pause", "unpause"} and object_type != "tag":
+        raise ContractValidationError(f"{path}.{action} is supported only for tag objects")
     _require_text(item.get("name"), f"{path}.name")
     _require_text(item.get("justification"), f"{path}.justification")
 
@@ -334,6 +336,8 @@ def _validate_object_action(
         raise ContractValidationError(
             f"{path}.object_type must be a canonical GTM resource family: {supported}"
         )
+    if action in {"pause", "unpause"} and object_type != "tag":
+        raise ContractValidationError(f"{path}.{action} is supported only for tag objects")
     name = _require_text(item.get("name"), f"{path}.name")
     _require_text(item.get("justification"), f"{path}.justification")
 

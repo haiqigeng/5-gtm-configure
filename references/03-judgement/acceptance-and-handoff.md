@@ -18,7 +18,8 @@ graph matches the approved requirement. Require all applicable invariants:
 2. approved analytics authority or explicit media brief, current official technical evidence,
    installed template/version, and relevant container integration are established;
 3. Select the best-practice architecture before considering container reuse; every action has
-   evidence, and every delta has consumer tracing and exact pre-change state;
+   evidence, and every delta has consumer tracing, exact pre-change state, and a fresh passing
+   pre-write comparison before mutation;
 4. every outgoing field resolves from approved source through GTM and template to the exact
    destination field; zero/false and all mapped array items are preserved;
 5. every active tag has typed semantic normal/block references bound to its saved trigger arrays,
@@ -31,6 +32,9 @@ graph matches the approved requirement. Require all applicable invariants:
    unauthorized difference;
 8. an identical rerun is reuse/untouched, external dependencies are separate, and no runtime
    recette, publication, Submit, or GTM version action occurred.
+
+Derive `Configured` only through the run controller's locked finalization transition after all
+operations are verified/skipped and concrete no-op rerun evidence is recorded.
 
 Static proof does not certify browser, network, dataLayer, CMP-journey, or vendor-platform behavior.
 
@@ -92,13 +96,13 @@ This proves configured Boolean logic, not observed consent behavior.
 Accept an execution topology only when its typed semantic trigger/block references equal the exact
 saved tag arrays. Accept page-view ownership only when the referenced saved Google/GA4 tag types
 and effective `send_page_view` values agree. Accept first-party-data routing only when the mapped
-destination field exists on every correct-product consumer. For a refonte, accept each inventory
+field exists and positive native/template product identity is proved for every consumer. For a refonte, accept each inventory
 disposition only when it matches exactly one compatible tag operation and its saved before/after
 identity. Removed or paused tags are proved from pre-change state, not target topology.
 
 ## Three-layer handoff
 
-Generate all layers from the validated `configuration-run@2.0` artifact so human and machine views
+Generate all layers from the validated `configuration-run@2.1` artifact so human and machine views
 cannot drift.
 
 ### 1. Executive summary

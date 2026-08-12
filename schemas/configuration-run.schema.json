@@ -65,7 +65,7 @@
     "recette_handoff"
   ],
   "properties": {
-    "schema_version": {"const": "2.0"},
+    "schema_version": {"const": "2.1"},
     "run": {
       "type": "object",
       "required": [
@@ -157,6 +157,7 @@
       "type": "array",
       "items": {
         "type": "object",
+        "additionalProperties": false,
         "required": [
           "operation_id",
           "requirement_ids",
@@ -220,6 +221,7 @@
           "destructive_authorization": {"type": "boolean"},
           "permission_delta": {
             "type": "object",
+            "additionalProperties": false,
             "required": ["added", "removed", "evidence_locator"],
             "properties": {
               "added": {"type": "array", "uniqueItems": true, "items": {"type": "string"}},
@@ -248,6 +250,7 @@
             "type": "array",
             "items": {
               "type": "object",
+              "additionalProperties": false,
               "required": ["state", "at", "note"],
               "properties": {
                 "state": {
@@ -268,9 +271,17 @@
           },
           "result": {"type": "object"},
           "comparison": {"$ref": "#/$defs/verificationComparison"},
+          "pre_write_comparison": {"$ref": "#/$defs/verificationComparison"},
           "error": {"type": "string", "minLength": 1}
         },
         "allOf": [
+          {
+            "if": {
+              "properties": {"action": {"enum": ["pause", "unpause"]}},
+              "required": ["action"]
+            },
+            "then": {"properties": {"object_type": {"const": "tag"}}}
+          },
           {
             "if": {"properties": {"state": {"const": "verified"}}, "required": ["state"]},
             "then": {
@@ -292,6 +303,7 @@
       "type": "array",
       "items": {
         "type": "object",
+        "additionalProperties": false,
         "required": [
           "requirement_id",
           "field_scope",
@@ -614,6 +626,7 @@
           "feature",
           "destination_field",
           "consumer_object_keys",
+          "consumer_bindings",
           "source_priority",
           "timing",
           "hashing_owner",
@@ -640,6 +653,35 @@
             "minItems": 1,
             "uniqueItems": true,
             "items": {"type": "string", "minLength": 1}
+          },
+          "consumer_bindings": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "object_key",
+                "product",
+                "implementation",
+                "tag_type",
+                "template_identity",
+                "evidence"
+              ],
+              "properties": {
+                "object_key": {"type": "string", "minLength": 1},
+                "product": {"type": "string", "minLength": 1},
+                "implementation": {"enum": ["native", "installed-template"]},
+                "tag_type": {"type": "string", "minLength": 1},
+                "template_identity": {"type": ["string", "null"]},
+                "evidence": {
+                  "type": "array",
+                  "minItems": 1,
+                  "uniqueItems": true,
+                  "items": {"type": "string", "minLength": 1}
+                }
+              }
+            }
           },
           "source_priority": {"enum": ["data-layer", "controlled-javascript", "dom", "automatic"]},
           "timing": {"enum": ["tag-wide", "same-event", "prior-page"]},
@@ -811,10 +853,16 @@
     },
     "idempotency": {
       "type": "object",
-      "required": ["checked", "remaining_actions"],
+      "additionalProperties": false,
+      "required": ["checked", "remaining_actions", "evidence"],
       "properties": {
         "checked": {"type": "boolean"},
         "remaining_actions": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1}
+        },
+        "evidence": {
           "type": "array",
           "uniqueItems": true,
           "items": {"type": "string", "minLength": 1}

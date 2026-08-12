@@ -370,6 +370,10 @@ class AdapterRuntimeTest(unittest.TestCase):
             {"OP-001": "verified", "OP-002": "failed", "OP-003": "planned"},
         )
         self.assertEqual(adapter.mutate_calls["OP-003"], 0)
+        self.assertIn(
+            "all remaining writes stopped",
+            saved["object_changes"][1]["journal"][-1]["note"],
+        )
 
     def test_ambiguous_write_uses_readback_and_never_blindly_retries(self) -> None:
         for behavior, expected_state in (
@@ -407,6 +411,78 @@ class AdapterRuntimeTest(unittest.TestCase):
             saved = load_document(path)
         self.assertEqual(saved["object_changes"][0]["state"], "verified")
         self.assertEqual(adapter.mutate_calls["OP-001"], 0)
+
+    def test_delta_write_requires_fresh_pre_change_match(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = self.run_path(Path(temporary))
+            document = load_document(path)
+            operation = document["object_changes"][0]
+            operation["action"] = "update"
+            operation["pre_change"] = {
+                "object_type": "tag",
+                "name": "Object 1",
+                "value": 0,
+            }
+            atomic_write(path, document)
+            adapter = FakeAdapter()
+            adapter.saved[operation["object_key"]] = deepcopy(operation["pre_change"])
+            execute_ready_operations(
+                path,
+                adapter,
+                timestamp=lambda: "2026-08-01T10:01:00Z",
+            )
+            saved = load_document(path)
+        self.assertEqual(adapter.mutate_calls["OP-001"], 1)
+        self.assertTrue(saved["object_changes"][0]["pre_write_comparison"]["pass"])
+        self.assertEqual(saved["object_changes"][0]["state"], "verified")
+
+    def test_delta_write_stops_when_saved_state_drifted(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = self.run_path(Path(temporary))
+            document = load_document(path)
+            operation = document["object_changes"][0]
+            operation["action"] = "update"
+            operation["pre_change"] = {
+                "object_type": "tag",
+                "name": "Object 1",
+                "value": 0,
+            }
+            atomic_write(path, document)
+            adapter = FakeAdapter()
+            adapter.saved[operation["object_key"]] = {
+                **operation["pre_change"],
+                "value": "changed outside this run",
+            }
+            execute_ready_operations(
+                path,
+                adapter,
+                timestamp=lambda: "2026-08-01T10:01:00Z",
+            )
+            saved = load_document(path)
+        self.assertEqual(adapter.mutate_calls["OP-001"], 0)
+        self.assertEqual(saved["object_changes"][0]["state"], "failed")
+        self.assertFalse(saved["object_changes"][0]["pre_write_comparison"]["pass"])
+        self.assertIn("container_drift", saved["object_changes"][0]["error"])
+
+    def test_create_conflict_never_overwrites_an_existing_semantic_object(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = self.run_path(Path(temporary))
+            operation = load_document(path)["object_changes"][0]
+            adapter = FakeAdapter()
+            adapter.saved[operation["object_key"]] = {
+                "object_type": "tag",
+                "name": "Object 1",
+                "value": "different",
+            }
+            execute_ready_operations(
+                path,
+                adapter,
+                timestamp=lambda: "2026-08-01T10:01:00Z",
+            )
+            saved = load_document(path)
+        self.assertEqual(adapter.mutate_calls["OP-001"], 0)
+        self.assertEqual(saved["object_changes"][0]["state"], "failed")
+        self.assertIn("create_conflict", saved["object_changes"][0]["error"])
 
     def test_uncertain_checkpoint_blocks_automatic_resume(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

@@ -13,6 +13,7 @@ from typing import Any, Protocol
 from configuration_run import (
     RunConflictError,
     atomic_write,
+    build_pre_write_comparison,
     canonical_sha256,
     checkpoint_operation,
     inspect_document,
@@ -408,12 +409,60 @@ def _execute_ready_operations_locked(
             _save(run_path, document)
             break
 
+        if operation["action"] == "create" and existing is not None:
+            document = checkpoint_operation(
+                document,
+                operation_id=operation_id,
+                state="failed",
+                note="Create target already exists with different saved state; no write attempted.",
+                timestamp=at,
+                error="create_conflict: semantic object identity is already occupied",
+            )
+            _save(run_path, document)
+            break
+
+        pre_write_comparison = None
+        if operation["action"] in {"update", "replace", "rename", "pause", "unpause", "remove"}:
+            try:
+                pre_write_comparison = build_pre_write_comparison(operation, existing)
+            except ValueError as exc:
+                document = checkpoint_operation(
+                    document,
+                    operation_id=operation_id,
+                    state="failed",
+                    note="Pre-write drift comparison could not be built; no write attempted.",
+                    timestamp=at,
+                    error=f"adapter_schema_error: {exc}",
+                )
+                _save(run_path, document)
+                break
+            if not pre_write_comparison["pass"]:
+                document = checkpoint_operation(
+                    document,
+                    operation_id=operation_id,
+                    state="failed",
+                    note="Saved object drifted from pre_change; no write attempted.",
+                    timestamp=at,
+                    pre_write_comparison=pre_write_comparison,
+                    pre_write_saved=existing,
+                    error="container_drift: live saved state differs from approved pre_change",
+                )
+                _save(run_path, document)
+                break
+
+        pre_write_checkpoint = {}
+        if pre_write_comparison is not None:
+            pre_write_checkpoint = {
+                "pre_write_comparison": pre_write_comparison,
+                "pre_write_saved": existing,
+            }
         document = checkpoint_operation(
             document,
             operation_id=operation_id,
             state="in_progress",
             note="Read-before-write completed; starting one mutation.",
             timestamp=at,
+            **pre_write_checkpoint,
         )
         _save(run_path, document)
 
@@ -435,7 +484,7 @@ def _execute_ready_operations_locked(
                         document,
                         operation_id=operation_id,
                         state="failed",
-                        note="Bounded rate-limit retries exhausted; dependent writes stopped.",
+                        note="Bounded rate-limit retries exhausted; all remaining writes stopped.",
                         timestamp=now(),
                         error=str(exc),
                     )
@@ -466,7 +515,7 @@ def _execute_ready_operations_locked(
                     document,
                     operation_id=operation_id,
                     state="failed",
-                    note="Authentication failed during mutation; dependent writes stopped.",
+                    note="Authentication failed during mutation; all remaining writes stopped.",
                     timestamp=now(),
                     error=str(exc),
                 )

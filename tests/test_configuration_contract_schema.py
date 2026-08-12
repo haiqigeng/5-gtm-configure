@@ -199,6 +199,20 @@ class ConfigurationContractSchemaTest(unittest.TestCase):
                     item["new_name"] = "Renamed object"
                 self.assertEqual(validate_document(contract)["schema_version"], "5.0")
 
+        for action in ("pause", "unpause"):
+            with self.subTest(incompatible_action=action):
+                contract = valid_contract()
+                item = contract["implementation"]["objects"][0]
+                item.update(
+                    {
+                        "action": action,
+                        "object_type": "variable",
+                        "pre_change": {"name": item["name"], "type": "c"},
+                    }
+                )
+                with self.assertRaisesRegex(ContractValidationError, "only for tag"):
+                    validate_document(contract)
+
     def test_remove_requires_pre_change_and_destructive_authority(self) -> None:
         contract = valid_contract()
         item = contract["implementation"]["objects"][0]

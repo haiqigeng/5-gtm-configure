@@ -50,8 +50,10 @@ authorized consumer object. Read the consumer target back and prove that field i
 the correct product surface: GA4 `user_id` on a Google configuration tag, GA4 `user_data` on the
 authorized GA4 Event tag, Google Ads enhanced conversion on its Ads consumer, tag-wide Google Ads
 `user_data` on the authorized Google tag, and prior-page collection on the User-Provided Data Event
-tag. A route label, field mapping, or consumer name alone is insufficient, and cross-product
-analogy is invalid.
+tag. Record positive product identity, implementation kind, saved tag type, and—for a community
+template—the exact installed template identity with current official/template evidence. A route
+label, consumer name, or negative “not GA4” test is insufficient. Custom HTML/Image cannot claim
+native product identity; use the supported product surface or block the route.
 
 Before considering the browser graph complete, record the applicable external or account-side activation:
 

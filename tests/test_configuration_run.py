@@ -17,6 +17,7 @@ from configuration_run import (  # noqa: E402
     build_verification_comparison,
     checkpoint_operation,
     create_from_contract,
+    finalize_document,
     inspect_document,
     render_markdown,
     reopen_failed_operation,
@@ -270,6 +271,7 @@ class ConfigurationRunTest(unittest.TestCase):
 
     def test_checkpoint_requires_readback_proof_and_exposes_resume_state(self) -> None:
         document = ready_run_document()
+        original = deepcopy(document)
         document = checkpoint_operation(
             document,
             operation_id="OP-001",
@@ -277,6 +279,7 @@ class ConfigurationRunTest(unittest.TestCase):
             note="Starting mutation.",
             timestamp="2026-08-01T10:01:00Z",
         )
+        self.assertEqual(original["object_changes"][0]["state"], "planned")
         self.assertFalse(inspect_document(document)["resumable"])
 
         with self.assertRaisesRegex(RunValidationError, "comparison must be an object"):
@@ -392,7 +395,11 @@ class ConfigurationRunTest(unittest.TestCase):
         document["run"]["phase"] = "complete"
         document["run"]["status"] = "Configured"
         document["requirements"][0]["status"] = "Configured"
-        document["idempotency"] = {"checked": True, "remaining_actions": []}
+        document["idempotency"] = {
+            "checked": True,
+            "remaining_actions": [],
+            "evidence": ["second adapter pass returned zero mutations"],
+        }
         self.assertEqual(validate_document(document)["run"]["status"], "Configured")
         configured = inspect_document(document)
         self.assertTrue(configured["pass"])
@@ -403,6 +410,39 @@ class ConfigurationRunTest(unittest.TestCase):
         invalid["saved_readback"] = []
         with self.assertRaisesRegex(RunValidationError, "lacks verified readback"):
             validate_document(invalid)
+
+    def test_locked_finalize_derives_configured_from_verified_state(self) -> None:
+        document = ready_run_document()
+        saved = saved_object(document)
+        document = checkpoint_operation(
+            document,
+            operation_id="OP-001",
+            state="verified",
+            note="Authoritative saved state matched.",
+            timestamp="2026-08-01T10:02:00Z",
+            result={"object_id": "9", "fingerprint": "abc"},
+            comparison=verification(document, saved),
+            saved=saved,
+        )
+        before = deepcopy(document)
+        finalized = finalize_document(
+            document,
+            idempotency_evidence=["adapter rerun at 10:03 returned zero mutations"],
+            timestamp="2026-08-01T10:04:00Z",
+        )
+        self.assertEqual(before["run"]["status"], "In progress")
+        self.assertEqual(finalized["run"]["status"], "Configured")
+        self.assertEqual(finalized["requirements"][0]["status"], "Configured")
+        self.assertEqual(
+            finalized["idempotency"]["evidence"],
+            ["adapter rerun at 10:03 returned zero mutations"],
+        )
+
+        with self.assertRaisesRegex(RunValidationError, "verified or skipped"):
+            finalize_document(
+                ready_run_document(),
+                idempotency_evidence=["not enough"],
+            )
 
     def test_cmp_grant_event_and_vendor_block_have_independent_roles(self) -> None:
         document = ready_run_document()
@@ -513,7 +553,7 @@ class ConfigurationRunTest(unittest.TestCase):
             "removed": [],
             "evidence_locator": "Installed template permission diff",
         }
-        self.assertEqual(validate_document(document)["schema_version"], "2.0")
+        self.assertEqual(validate_document(document)["schema_version"], "2.1")
 
     def test_long_dependency_chain_is_validated_iteratively(self) -> None:
         value = contract()
@@ -548,7 +588,7 @@ class ConfigurationRunTest(unittest.TestCase):
         self.assertIn("## Executive summary", rendered)
         self.assertIn("## Analyst and developer change log", rendered)
         self.assertIn("## Machine handoff", rendered)
-        self.assertIn('"schema_version": "2.0"', rendered)
+        self.assertIn('"schema_version": "2.1"', rendered)
         self.assertIn("resolve mapping/consent blockers", rendered)
 
     def test_cli_init_validate_inspect_and_render(self) -> None:
@@ -642,6 +682,43 @@ class ConfigurationRunTest(unittest.TestCase):
                 )
         self.assertEqual(result.returncode, 2)
         self.assertEqual(json.loads(result.stdout)["error_code"], "run_conflict")
+
+    def test_cli_finalize_is_one_locked_atomic_transition(self) -> None:
+        document = ready_run_document()
+        saved = saved_object(document)
+        document = checkpoint_operation(
+            document,
+            operation_id="OP-001",
+            state="verified",
+            note="Saved readback matched.",
+            timestamp="2026-08-01T10:02:00Z",
+            result={"object_id": "9", "fingerprint": "abc"},
+            comparison=verification(document, saved),
+            saved=saved,
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            run_path = Path(temporary) / "run.json"
+            atomic_write(run_path, document)
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(ROOT / "scripts" / "configuration_run.py"),
+                    "finalize",
+                    "--run",
+                    str(run_path),
+                    "--evidence",
+                    "second adapter pass returned zero mutations",
+                    "--timestamp",
+                    "2026-08-01T10:03:00Z",
+                ],
+                cwd=ROOT,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            finalized = json.loads(run_path.read_text(encoding="utf-8"))
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(finalized["run"]["status"], "Configured")
 
     def test_strict_basic_rejects_redundant_additional_consent_checks(self) -> None:
         document = ready_run_document()
@@ -741,6 +818,62 @@ class ConfigurationRunTest(unittest.TestCase):
             }
         )
         self.assertEqual(validate_document(advanced)["run"]["status"], "In progress")
+
+        for raw_type, normalized_type in (
+            ("domReady", "dom-ready"),
+            ("windowLoaded", "window-loaded"),
+        ):
+            with self.subTest(page_load_type=normalized_type):
+                page_load = deepcopy(advanced)
+                page_load["container_baseline"]["trigger_index"][0]["type"] = raw_type
+                page_load["consent_routes"][0]["normal_trigger"] = "trigger::CE - form_success"
+                page_load["object_changes"][0]["intended"]["firingTriggerId"] = [
+                    "trigger::CE - form_success"
+                ]
+                page_load["execution_topologies"][0]["normal_triggers"] = [
+                    {
+                        "trigger_object_key": "trigger::CE - form_success",
+                        "role": "initialization-page-load",
+                        "type": normalized_type,
+                    }
+                ]
+                self.assertEqual(
+                    validate_document(page_load)["run"]["status"],
+                    "In progress",
+                )
+
+    def test_lightweight_mode_rejects_global_multi_product_risk(self) -> None:
+        document = ready_run_document()
+        requirement_id = "MB::Meta::purchase"
+        document["run"]["contract"]["requirement_ids"].append(requirement_id)
+        document["requirements"].append(
+            {
+                "id": requirement_id,
+                "kind": "media",
+                "source_locator": "Media brief / Meta purchase",
+                "source_event": "purchase",
+                "destination": "Meta",
+                "status": "In progress",
+                "object_keys": [],
+            }
+        )
+        document["recette_handoff"]["requirements"].append(
+            {
+                "id": requirement_id,
+                "expected_tags": [],
+                "expected_normal_triggers": [],
+                "expected_blocking_triggers": [],
+                "expected_consent_states": [],
+                "expected_user_data_keys": [],
+                "network_cues": [],
+                "cues": [],
+            }
+        )
+        second_route = deepcopy(document["consent_routes"][0])
+        second_route.update({"requirement_id": requirement_id, "product": "Meta"})
+        document["consent_routes"].append(second_route)
+        blockers = inspect_document(document)["preflight_blockers"]["OP-001"]
+        self.assertTrue(any("multiple product consent routes" in item for item in blockers))
 
     def test_pre_cmp_business_event_requires_an_explicit_recovery_policy(self) -> None:
         document = ready_run_document()
@@ -842,6 +975,16 @@ class ConfigurationRunTest(unittest.TestCase):
                 "feature": "google-ads-enhanced-conversions",
                 "destination_field": "user_data",
                 "consumer_object_keys": ["tag::GA4 - Event - generate_lead"],
+                "consumer_bindings": [
+                    {
+                        "object_key": "tag::GA4 - Event - generate_lead",
+                        "product": "google-ads",
+                        "implementation": "native",
+                        "tag_type": "awct",
+                        "template_identity": None,
+                        "evidence": ["official-current", "container-confirmed"],
+                    }
+                ],
                 "source_priority": "data-layer",
                 "timing": "same-event",
                 "hashing_owner": "native-raw",
@@ -878,6 +1021,16 @@ class ConfigurationRunTest(unittest.TestCase):
                 "feature": "google-ads-enhanced-conversions",
                 "destination_field": "user_data",
                 "consumer_object_keys": ["tag::GA4 - Event - generate_lead"],
+                "consumer_bindings": [
+                    {
+                        "object_key": "tag::GA4 - Event - generate_lead",
+                        "product": "google-ads",
+                        "implementation": "native",
+                        "tag_type": "gaawe",
+                        "template_identity": None,
+                        "evidence": ["official-current", "container-confirmed"],
+                    }
+                ],
                 "source_priority": "data-layer",
                 "timing": "same-event",
                 "hashing_owner": "native-raw",
@@ -894,8 +1047,15 @@ class ConfigurationRunTest(unittest.TestCase):
                 "evidence": ["approved-input", "official-current"],
             }
         ]
-        with self.assertRaisesRegex(RunValidationError, "must not bind a GA4"):
+        with self.assertRaisesRegex(RunValidationError, "native Google Ads conversion"):
             validate_document(document)
+
+        custom_html = deepcopy(document)
+        custom_html["object_changes"][0]["intended"]["type"] = "html"
+        binding = custom_html["first_party_data_routes"][0]["consumer_bindings"][0]
+        binding["tag_type"] = "html"
+        with self.assertRaisesRegex(RunValidationError, "cannot identify Custom HTML"):
+            validate_document(custom_html)
 
     def test_google_ads_tag_wide_user_data_binds_the_google_tag_field(self) -> None:
         document = ready_run_document()
@@ -916,6 +1076,16 @@ class ConfigurationRunTest(unittest.TestCase):
                 "feature": "google-ads-tag-wide-user-data",
                 "destination_field": "user_data",
                 "consumer_object_keys": ["tag::GA4 - Event - generate_lead"],
+                "consumer_bindings": [
+                    {
+                        "object_key": "tag::GA4 - Event - generate_lead",
+                        "product": "google-ads",
+                        "implementation": "native",
+                        "tag_type": "googtag",
+                        "template_identity": None,
+                        "evidence": ["official-current", "container-confirmed"],
+                    }
+                ],
                 "source_priority": "data-layer",
                 "timing": "tag-wide",
                 "hashing_owner": "native-raw",

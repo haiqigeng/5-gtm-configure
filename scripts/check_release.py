@@ -5,15 +5,16 @@ from __future__ import annotations
 
 import argparse
 import ast
-import json
 import re
 import subprocess
 import sys
 from pathlib import Path
 
+from strict_json import StrictJsonError, loads_strict
+
 ROOT = Path(__file__).resolve().parents[1]
 SEMVER = re.compile(r"^v(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)$")
-CURRENT_RELEASE = "8.0.0"
+CURRENT_RELEASE = "8.1.0"
 REFERENCE_LAYERS = {
     "01-orientation": {
         "official-source-policy.md",
@@ -85,6 +86,7 @@ REQUIRED_FILES = (
     "scripts/configuration_run.py",
     "scripts/diff_object_graph.py",
     "scripts/import_ga4_tracking_plan_handoff.py",
+    "scripts/run_model.py",
     "scripts/validate_configuration_contract.py",
     "scripts/validate_contract_conformance.py",
     "scripts/strict_json.py",
@@ -95,6 +97,7 @@ REQUIRED_FILES = (
     "tests/test_cli_json_output.py",
     "tests/test_release.py",
     "tests/test_runtime_hardening.py",
+    "tests/test_run_schema.py",
     "tests/test_forward_test_cases.py",
     "tests/test_object_graph_diff.py",
     "tests/test_skill_contract.py",
@@ -307,6 +310,7 @@ def check_content() -> list[str]:
     release_workflow = read(".github/workflows/release.yml")
     schema_validator = read("scripts/validate_configuration_contract.py")
     run_controller = read("scripts/configuration_run.py")
+    run_model = read("scripts/run_model.py")
     adapter_runtime = read("scripts/adapter_runtime.py")
     strict_json = read("scripts/strict_json.py")
     graph_diff = read("scripts/diff_object_graph.py")
@@ -396,13 +400,15 @@ def check_content() -> list[str]:
         "Use replace as one governed action",
         "Summarize template permission changes",
         "Hand off in three layers",
-        "configuration-run@2.0",
+        "configuration-run@2.1",
         "exclusive per-artifact writer lock",
         "structured comparison",
         "--saved-readback",
         "top-level intended field",
         "per-active-tag execution topology",
         "refonte inventory dispositions",
+        "pre-write comparison",
+        "single locked `finalize` transition",
     )
     errors.extend(
         f"configuration-run reference missing requirement: {term}"
@@ -570,10 +576,10 @@ def check_content() -> list[str]:
             errors.append(f"{label} missing contract: {term}")
     exact_version_constants = (
         ("configuration schema validator", schema_validator, "SCHEMA_VERSION", "5.0"),
-        ("configuration-run controller", run_controller, "SCHEMA_VERSION", "2.0"),
+        ("configuration-run model", run_model, "SCHEMA_VERSION", "2.1"),
         (
             "configuration-run verification",
-            run_controller,
+            run_model,
             "VERIFICATION_SCHEMA_VERSION",
             "1.0",
         ),
@@ -884,18 +890,18 @@ def check_content() -> list[str]:
         "references/02-execution/configuration-run-and-resume.md",
     )
     durable_words = sum(len(re.findall(r"\S+", read(path))) for path in durable_runtime_files)
-    if durable_words > 8500:
+    if durable_words > 8000:
         errors.append(
-            f"durable-run mandatory instruction load exceeds 8,500 words: {durable_words}"
+            f"durable-run mandatory instruction load exceeds 8,000 words: {durable_words}"
         )
 
     try:
-        parsed_run_schema = json.loads(run_schema)
-    except json.JSONDecodeError as exc:
+        parsed_run_schema = loads_strict(run_schema, source="configuration-run.schema.json")
+    except StrictJsonError as exc:
         errors.append(f"configuration-run schema is invalid JSON: {exc}")
     else:
-        if parsed_run_schema.get("properties", {}).get("schema_version", {}).get("const") != "2.0":
-            errors.append("configuration-run schema does not declare version 2.0")
+        if parsed_run_schema.get("properties", {}).get("schema_version", {}).get("const") != "2.1":
+            errors.append("configuration-run schema does not declare version 2.1")
         if parsed_run_schema.get("additionalProperties") is not False:
             errors.append("configuration-run schema must reject unknown top-level fields")
         verification = parsed_run_schema.get("$defs", {}).get("verificationComparison", {})

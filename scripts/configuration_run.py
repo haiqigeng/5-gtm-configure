@@ -15,7 +15,46 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
-from strict_json import StrictJsonError, load_json, write_json_atomic
+from run_model import (
+    ALLOWED_TRANSITIONS,
+    BUILT_IN_TRIGGER_TYPES,
+    CONFIGURATION_FIELD_ALIASES,
+    CONSENT_MECHANISMS,
+    CONSENT_MODES,
+    CUSTOM_CODE_TAG_TYPES,
+    DEFAULT_VENDOR_BLOCK_SCOPE,
+    ECOMMERCE_ROUTES,
+    EXECUTION_MODES,
+    EXTENDED_MAPPING_KEYS,
+    FIRING_OPTIONS,
+    FIRST_PARTY_FEATURES,
+    FIRST_PARTY_PRODUCTS,
+    GA4_EVENT_TAG_TYPES,
+    GOOGLE_ADS_CONVERSION_TAG_TYPES,
+    GOOGLE_CONFIGURATION_TAG_TYPES,
+    INVENTORY_DISPOSITIONS,
+    LEGACY_SCHEMA_VERSIONS,
+    LIFECYCLE_ROLES,
+    MAPPING_METHODS,
+    MAPPING_STATUSES,
+    NON_EXECUTING_TAG_ACTIONS,
+    NORMAL_TRIGGER_ROLES,
+    NORMAL_TRIGGER_TYPES,
+    OPERATION_STATES,
+    PAGE_LOAD_TRIGGER_TYPES,
+    PAGE_VIEW_OWNERS,
+    PRE_CMP_POLICIES,
+    REQUIREMENT_STATUSES,
+    RUN_PHASES,
+    RUN_STATUSES,
+    SCHEMA_VERSION,
+    SHAPE_COMPATIBILITY,
+    TAG_TYPE_ALIASES,
+    TOP_LEVEL_KEYS,
+    TRIGGER_TYPE_ALIASES,
+    VERIFICATION_SCHEMA_VERSION,
+)
+from strict_json import StrictJsonError, load_json, write_json_atomic, write_text_atomic
 from validate_configuration_contract import (
     ACTIONS,
     DELTA_ACTIONS,
@@ -26,185 +65,6 @@ from validate_configuration_contract import (
 from validate_configuration_contract import (
     validate_document as validate_configuration_contract,
 )
-
-SCHEMA_VERSION = "2.0"
-VERIFICATION_SCHEMA_VERSION = "1.0"
-RUN_PHASES = {"preflight", "mutation", "readback", "complete"}
-RUN_STATUSES = {"In progress", "Configured", "Partial", "Blocked", "Deferred"}
-REQUIREMENT_STATUSES = {"In progress", "Configured", "Partial", "Blocked", "Deferred"}
-OPERATION_STATES = {
-    "planned",
-    "in_progress",
-    "saved",
-    "verified",
-    "failed",
-    "uncertain",
-    "skipped",
-}
-CONSENT_MODES = {"strict-basic", "advanced-native"}
-CONSENT_MECHANISMS = {"blocking-trigger", "grant-event", "native-advanced"}
-MAPPING_STATUSES = {"pending", "mapped", "intentionally-omitted", "external", "blocked"}
-MAPPING_METHODS = {
-    "constant",
-    "custom-javascript",
-    "direct-dlv",
-    "lookup-table",
-    "native-template",
-    "regex-table",
-    "settings-variable",
-}
-SHAPE_COMPATIBILITY = {"compatible", "conversion-required"}
-EXTENDED_MAPPING_KEYS = {
-    "source_authority_grade",
-    "source_authority_locator",
-    "source_shape",
-    "destination_shape",
-    "shape_compatibility",
-    "mapping_method",
-    "missing_behavior",
-}
-DEFAULT_VENDOR_BLOCK_SCOPE = "regex:.*"
-EXECUTION_MODES = {"isolated-lightweight", "isolated-durable", "refonte-durable"}
-LIFECYCLE_ROLES = {"baseline-page-load", "event-driven"}
-NORMAL_TRIGGER_ROLES = {
-    "cmp-readiness-grant",
-    "initialization-page-load",
-    "source-event",
-}
-NORMAL_TRIGGER_TYPES = {
-    "click-all-elements",
-    "click-just-links",
-    "consent-initialization",
-    "custom-event",
-    "dom-ready",
-    "element-visibility",
-    "form-submission",
-    "history-change",
-    "initialization",
-    "javascript-error",
-    "page-view",
-    "scroll-depth",
-    "timer",
-    "trigger-group",
-    "window-loaded",
-    "youtube-video",
-}
-PAGE_LOAD_TRIGGER_TYPES = {
-    "consent-initialization",
-    "dom-ready",
-    "initialization",
-    "page-view",
-    "window-loaded",
-}
-TRIGGER_TYPE_ALIASES = {
-    "always": "page-view",
-    "click": "click-all-elements",
-    "clickallelements": "click-all-elements",
-    "clickjustlinks": "click-just-links",
-    "consentinit": "consent-initialization",
-    "linkclick": "click-just-links",
-    "consentinitialization": "consent-initialization",
-    "customevent": "custom-event",
-    "domready": "dom-ready",
-    "elementvisibility": "element-visibility",
-    "formsubmission": "form-submission",
-    "historychange": "history-change",
-    "init": "initialization",
-    "initialization": "initialization",
-    "scripterror": "javascript-error",
-    "javascripterror": "javascript-error",
-    "jserror": "javascript-error",
-    "pageview": "page-view",
-    "scrolldepth": "scroll-depth",
-    "timer": "timer",
-    "triggergroup": "trigger-group",
-    "windowloaded": "window-loaded",
-    "youtubevideo": "youtube-video",
-}
-BUILT_IN_TRIGGER_TYPES = {
-    "trigger::builtin::2147479553": "page-view",
-    "trigger::builtin::2147479572": "consent-initialization",
-    "trigger::builtin::2147479573": "initialization",
-}
-NON_EXECUTING_TAG_ACTIONS = {"pause", "remove"}
-GOOGLE_CONFIGURATION_TAG_TYPES = {"gaawc", "googtag"}
-GA4_EVENT_TAG_TYPES = {"gaawe"}
-TAG_TYPE_ALIASES = {
-    "ga4configuration": "gaawc",
-    "ga4event": "gaawe",
-    "googleanalyticsga4configuration": "gaawc",
-    "googleanalyticsga4event": "gaawe",
-    "googletag": "googtag",
-}
-CONFIGURATION_FIELD_ALIASES = {
-    "userdata": {"userdata", "userdatavariable", "userprovideddata", "userprovideddatavariable"},
-}
-FIRING_OPTIONS = {"once-per-event", "once-per-page", "unlimited"}
-PRE_CMP_POLICIES = {
-    "not-applicable",
-    "source-after-readiness",
-    "later-fresh-event",
-    "explicit-one-time-replay",
-    "external-dependency",
-}
-PAGE_VIEW_OWNERS = {
-    "google-tag-automatic",
-    "dedicated-ga4-event",
-    "external",
-    "intentionally-none",
-}
-ECOMMERCE_ROUTES = {
-    "not-applicable",
-    "native-data-layer",
-    "native-custom-object",
-    "manual",
-}
-FIRST_PARTY_FEATURES = {
-    "ga4-user-id",
-    "ga4-user-provided-data",
-    "google-ads-enhanced-conversions",
-    "google-ads-tag-wide-user-data",
-    "google-ads-user-provided-data-event",
-    "vendor-advanced-matching",
-}
-INVENTORY_DISPOSITIONS = {
-    "added",
-    "keep",
-    "update",
-    "remap",
-    "pause",
-    "remove",
-    "replace",
-    "supersede",
-}
-TOP_LEVEL_KEYS = {
-    "schema_version",
-    "run",
-    "requirements",
-    "object_changes",
-    "payload_mappings",
-    "consent_routes",
-    "container_baseline",
-    "execution_topologies",
-    "page_view_decisions",
-    "first_party_data_routes",
-    "inventory_dispositions",
-    "saved_readback",
-    "official_sources",
-    "external_dependencies",
-    "recovery_boundary",
-    "idempotency",
-    "recette_handoff",
-}
-ALLOWED_TRANSITIONS = {
-    "planned": {"in_progress", "skipped", "verified", "failed"},
-    "in_progress": {"saved", "verified", "failed", "uncertain"},
-    "saved": {"verified", "failed", "uncertain"},
-    "uncertain": {"verified", "failed"},
-    "verified": set(),
-    "failed": set(),
-    "skipped": set(),
-}
 
 
 class RunValidationError(ValueError):
@@ -403,6 +263,107 @@ def validate_verification_comparison(
     if require_pass and not passed:
         raise RunValidationError("verified requires a passing saved-readback comparison")
     return comparison
+
+
+def _pre_write_operation(operation: dict[str, Any]) -> dict[str, Any]:
+    pre_change = operation.get("pre_change")
+    if operation.get("action") not in DELTA_ACTIONS or not isinstance(pre_change, dict):
+        raise RunValidationError("pre-write comparison requires a delta operation with pre_change")
+    return {
+        "action": "update",
+        "object_key": operation.get("object_key"),
+        "intended": pre_change,
+    }
+
+
+def _subset_differences(expected: Any, observed: Any, path: str = "$") -> list[dict[str, Any]]:
+    """Compare a normalized pre-change snapshot while tolerating extra adapter metadata."""
+    differences: list[dict[str, Any]] = []
+    stack: list[tuple[Any, Any, str]] = [(expected, observed, path)]
+    while stack:
+        expected_value, observed_value, current_path = stack.pop()
+        if isinstance(expected_value, dict):
+            if not isinstance(observed_value, dict):
+                differences.append(
+                    {
+                        "path": current_path,
+                        "expected": deepcopy(expected_value),
+                        "actual": deepcopy(observed_value),
+                    }
+                )
+                continue
+            for key in reversed(list(expected_value)):
+                child_path = f"{current_path}.{key}"
+                if key not in observed_value:
+                    differences.append(
+                        {
+                            "path": child_path,
+                            "expected": deepcopy(expected_value[key]),
+                            "actual": None,
+                            "reason": "missing",
+                        }
+                    )
+                    continue
+                stack.append((expected_value[key], observed_value[key], child_path))
+            continue
+        if isinstance(expected_value, list):
+            if not isinstance(observed_value, list) or len(expected_value) != len(observed_value):
+                differences.append(
+                    {
+                        "path": current_path,
+                        "expected": deepcopy(expected_value),
+                        "actual": deepcopy(observed_value),
+                    }
+                )
+                continue
+            for index in range(len(expected_value) - 1, -1, -1):
+                stack.append(
+                    (expected_value[index], observed_value[index], f"{current_path}[{index}]")
+                )
+            continue
+        if type(expected_value) is not type(observed_value) or expected_value != observed_value:
+            differences.append(
+                {
+                    "path": current_path,
+                    "expected": deepcopy(expected_value),
+                    "actual": deepcopy(observed_value),
+                }
+            )
+    return differences
+
+
+def build_pre_write_comparison(
+    operation: dict[str, Any],
+    saved: Any,
+    *,
+    comparator: str = "configure-gtm-pre-change-subset-v1",
+) -> dict[str, Any]:
+    """Bind one fresh saved read to the approved pre-change snapshot before mutation."""
+    pseudo_operation = _pre_write_operation(operation)
+    pre_change = pseudo_operation["intended"]
+    return build_verification_comparison(
+        pseudo_operation,
+        saved,
+        comparator=comparator,
+        compared_fields=sorted(pre_change),
+        differences=_subset_differences(pre_change, saved),
+    )
+
+
+def validate_pre_write_comparison(
+    value: Any,
+    *,
+    operation: dict[str, Any],
+    saved: Any = _UNSET,
+    require_pass: bool = False,
+) -> dict[str, Any]:
+    """Validate pre-write drift evidence against an operation's immutable pre_change."""
+    return validate_verification_comparison(
+        value,
+        operation=_pre_write_operation(operation),
+        saved=saved,
+        require_pass=require_pass,
+    )
 
 
 def _unique_texts(value: Any, path: str, *, allow_empty: bool = True) -> list[str]:
@@ -691,6 +652,7 @@ def _validate_requirements(raw: Any, expected_ids: set[str]) -> dict[str, dict[s
 
 def _validate_permission_delta(value: Any, path: str) -> None:
     delta = _object(value, path)
+    _exact_keys(delta, path, required={"added", "removed", "evidence_locator"})
     _unique_texts(delta.get("added"), f"{path}.added")
     _unique_texts(delta.get("removed"), f"{path}.removed")
     _text(delta.get("evidence_locator"), f"{path}.evidence_locator")
@@ -700,6 +662,7 @@ def _validate_object_changes(
     raw: Any,
     *,
     requirement_ids: set[str],
+    schema_version: str,
 ) -> tuple[dict[str, dict[str, Any]], dict[str, str]]:
     operations: dict[str, dict[str, Any]] = {}
     object_claims: dict[str, str] = {}
@@ -707,6 +670,34 @@ def _validate_object_changes(
     for index, item_raw in enumerate(_array(raw, "$.object_changes")):
         path = f"$.object_changes[{index}]"
         item = _object(item_raw, path)
+        _exact_keys(
+            item,
+            path,
+            required={
+                "operation_id",
+                "requirement_ids",
+                "action",
+                "object_type",
+                "name",
+                "object_key",
+                "dependencies",
+                "state",
+                "evidence",
+                "journal",
+            },
+            optional={
+                "object_id",
+                "intended",
+                "pre_change",
+                "replacement_reason",
+                "destructive_authorization",
+                "permission_delta",
+                "result",
+                "comparison",
+                "pre_write_comparison",
+                "error",
+            },
+        )
         operation_id = _text(item.get("operation_id"), f"{path}.operation_id")
         if operation_id in operations:
             raise RunValidationError(f"duplicate operation_id {operation_id!r}")
@@ -728,6 +719,8 @@ def _validate_object_changes(
         object_type = _text(item.get("object_type"), f"{path}.object_type")
         if object_type not in OBJECT_RESOURCE_FAMILIES:
             raise RunValidationError(f"{path}.object_type is not a canonical resource family")
+        if action in {"pause", "unpause"} and object_type != "tag":
+            raise RunValidationError(f"{path}.{action} is supported only for tag objects")
         name = _text(item.get("name"), f"{path}.name")
         object_key = _text(item.get("object_key"), f"{path}.object_key")
         expected_key = _canonical_object_key(object_type, name)
@@ -767,6 +760,7 @@ def _validate_object_changes(
         for journal_index, entry_raw in enumerate(journal):
             journal_path = f"{path}.journal[{journal_index}]"
             entry = _object(entry_raw, journal_path)
+            _exact_keys(entry, journal_path, required={"state", "at", "note"})
             entry_state = _text(entry.get("state"), f"{journal_path}.state")
             if entry_state not in OPERATION_STATES:
                 raise RunValidationError(
@@ -781,6 +775,24 @@ def _validate_object_changes(
         if state == "verified":
             validate_verification_comparison(
                 item.get("comparison"),
+                operation=item,
+                require_pass=True,
+            )
+        pre_write_comparison = item.get("pre_write_comparison")
+        if pre_write_comparison is not None:
+            validate_pre_write_comparison(
+                pre_write_comparison,
+                operation=item,
+                require_pass=False,
+            )
+        mutation_started = any(entry.get("state") == "in_progress" for entry in journal)
+        if schema_version == SCHEMA_VERSION and action in DELTA_ACTIONS and mutation_started:
+            if pre_write_comparison is None:
+                raise RunValidationError(
+                    f"{path}.pre_write_comparison is required before a delta mutation"
+                )
+            validate_pre_write_comparison(
+                pre_write_comparison,
                 operation=item,
                 require_pass=True,
             )
@@ -827,6 +839,21 @@ def _validate_payload_mappings(raw: Any, requirement_ids: set[str]) -> list[dict
     for index, item_raw in enumerate(_array(raw, "$.payload_mappings")):
         path = f"$.payload_mappings[{index}]"
         item = _object(item_raw, path)
+        _exact_keys(
+            item,
+            path,
+            required={
+                "requirement_id",
+                "field_scope",
+                "destination_field",
+                "source",
+                "gtm_resolution",
+                "template_field",
+                "status",
+                "provenance_locator",
+            },
+            optional=EXTENDED_MAPPING_KEYS,
+        )
         requirement_id = _text(item.get("requirement_id"), f"{path}.requirement_id")
         if requirement_id not in requirement_ids:
             raise RunValidationError(f"{path}.requirement_id is unknown")
@@ -1243,11 +1270,7 @@ def _validate_normal_trigger_bindings(
             )
         if role == "cmp-readiness-grant" and trigger_type != "custom-event":
             raise RunValidationError(f"{trigger_path}.cmp-readiness-grant must be a Custom Event")
-        if role == "initialization-page-load" and trigger_type not in {
-            "consent-initialization",
-            "initialization",
-            "page-view",
-        }:
+        if role == "initialization-page-load" and trigger_type not in PAGE_LOAD_TRIGGER_TYPES:
             raise RunValidationError(
                 f"{trigger_path}.initialization-page-load uses an incompatible trigger type"
             )
@@ -1654,6 +1677,11 @@ def _validate_first_party_feature_contract(
             raise RunValidationError(
                 f"{path}.google-ads-enhanced-conversions requires same-event user_data"
             )
+        if not product_types <= GOOGLE_ADS_CONVERSION_TAG_TYPES:
+            raise RunValidationError(
+                f"{path}.google-ads-enhanced-conversions requires the native Google Ads "
+                "conversion tag"
+            )
     elif feature == "google-ads-tag-wide-user-data":
         if destination_field != "user_data" or timing != "tag-wide":
             raise RunValidationError(
@@ -1686,6 +1714,83 @@ def _validate_first_party_feature_contract(
         raise RunValidationError(f"{path}.{feature} requires ad_user_data consent")
 
 
+def _validate_first_party_consumer_bindings(
+    raw: Any,
+    *,
+    path: str,
+    feature: str,
+    consumers: set[str],
+    consumer_targets: dict[str, dict[str, Any]],
+) -> None:
+    records: set[str] = set()
+    for index, binding_raw in enumerate(_array(raw, f"{path}.consumer_bindings")):
+        binding_path = f"{path}.consumer_bindings[{index}]"
+        binding = _object(binding_raw, binding_path)
+        _exact_keys(
+            binding,
+            binding_path,
+            required={
+                "object_key",
+                "product",
+                "implementation",
+                "tag_type",
+                "template_identity",
+                "evidence",
+            },
+        )
+        object_key = _text(binding.get("object_key"), f"{binding_path}.object_key")
+        if object_key not in consumers or object_key in records:
+            raise RunValidationError(
+                f"{binding_path}.object_key is unknown or duplicated for this route"
+            )
+        records.add(object_key)
+        product = _normalized_token(_text(binding.get("product"), f"{binding_path}.product"))
+        expected_product = FIRST_PARTY_PRODUCTS.get(feature)
+        if expected_product is not None and product != _normalized_token(expected_product):
+            raise RunValidationError(
+                f"{binding_path}.product must identify {expected_product!r} for {feature}"
+            )
+        implementation = _text(binding.get("implementation"), f"{binding_path}.implementation")
+        if implementation not in {"native", "installed-template"}:
+            raise RunValidationError(f"{binding_path}.implementation is unsupported")
+        actual_type = _tag_type(consumer_targets[object_key], f"{binding_path}.consumer")
+        declared_type = _normalized_token(
+            _text(binding.get("tag_type"), f"{binding_path}.tag_type")
+        )
+        if declared_type != actual_type:
+            raise RunValidationError(
+                f"{binding_path}.tag_type differs from the bound saved tag type"
+            )
+        if actual_type in CUSTOM_CODE_TAG_TYPES:
+            raise RunValidationError(
+                f"{binding_path} cannot identify Custom HTML/Image as a product-native consumer"
+            )
+        template_identity = _optional_text(
+            binding.get("template_identity"), f"{binding_path}.template_identity"
+        )
+        if implementation == "native" and template_identity is not None:
+            raise RunValidationError(f"{binding_path}.native requires a null template_identity")
+        if implementation == "installed-template":
+            if template_identity is None:
+                raise RunValidationError(
+                    f"{binding_path}.installed-template requires template_identity"
+                )
+            if _normalized_token(template_identity) != actual_type:
+                raise RunValidationError(
+                    f"{binding_path}.template_identity differs from the bound saved tag type"
+                )
+        _unique_texts(
+            binding.get("evidence"),
+            f"{binding_path}.evidence",
+            allow_empty=False,
+        )
+    if records != consumers:
+        missing = sorted(consumers - records)
+        raise RunValidationError(
+            f"{path}.consumer_bindings must identify every consumer exactly; missing={missing}"
+        )
+
+
 def _validate_first_party_data_routes(
     raw: Any,
     *,
@@ -1693,6 +1798,7 @@ def _validate_first_party_data_routes(
     operations: dict[str, dict[str, Any]],
     external_dependencies: dict[str, dict[str, Any]],
     payload_mappings: list[dict[str, Any]],
+    schema_version: str,
 ) -> list[dict[str, Any]]:
     operation_by_key = {item["object_key"]: item for item in operations.values()}
     mapped_fields = {
@@ -1705,22 +1811,29 @@ def _validate_first_party_data_routes(
     for index, item_raw in enumerate(_array(raw, "$.first_party_data_routes")):
         path = f"$.first_party_data_routes[{index}]"
         item = _object(item_raw, path)
+        required_keys = {
+            "requirement_id",
+            "feature",
+            "destination_field",
+            "consumer_object_keys",
+            "source_priority",
+            "timing",
+            "hashing_owner",
+            "fields",
+            "consent_types",
+            "external_dependency_ids",
+            "evidence",
+        }
+        optional_keys: set[str] = set()
+        if schema_version == SCHEMA_VERSION:
+            required_keys.add("consumer_bindings")
+        else:
+            optional_keys.add("consumer_bindings")
         _exact_keys(
             item,
             path,
-            required={
-                "requirement_id",
-                "feature",
-                "destination_field",
-                "consumer_object_keys",
-                "source_priority",
-                "timing",
-                "hashing_owner",
-                "fields",
-                "consent_types",
-                "external_dependency_ids",
-                "evidence",
-            },
+            required=required_keys,
+            optional=optional_keys,
         )
         requirement_id = _text(item.get("requirement_id"), f"{path}.requirement_id")
         if requirement_id not in requirement_ids:
@@ -1747,7 +1860,7 @@ def _validate_first_party_data_routes(
                 allow_empty=False,
             )
         )
-        consumer_targets: list[dict[str, Any]] = []
+        consumer_targets: dict[str, dict[str, Any]] = {}
         for object_key in consumers:
             operation = operation_by_key.get(object_key)
             if operation is None or operation["object_type"] != "tag":
@@ -1768,7 +1881,15 @@ def _validate_first_party_data_routes(
                 raise RunValidationError(
                     f"{path}.consumer {object_key!r} does not configure {destination_field!r}"
                 )
-            consumer_targets.append(target)
+            consumer_targets[object_key] = target
+        if "consumer_bindings" in item:
+            _validate_first_party_consumer_bindings(
+                item["consumer_bindings"],
+                path=path,
+                feature=feature,
+                consumers=consumers,
+                consumer_targets=consumer_targets,
+            )
         source_priority = _text(item.get("source_priority"), f"{path}.source_priority")
         if source_priority not in {"data-layer", "controlled-javascript", "dom", "automatic"}:
             raise RunValidationError(f"{path}.source_priority is unsupported")
@@ -1822,7 +1943,7 @@ def _validate_first_party_data_routes(
             timing=timing,
             hashing_owner=hashing_owner,
             field_names=field_names,
-            consumer_targets=consumer_targets,
+            consumer_targets=list(consumer_targets.values()),
             dependency_ids=dependency_ids,
             consent_types=consent_types,
         )
@@ -2129,14 +2250,18 @@ def validate_document(value: Any) -> dict[str, Any]:
         raise RunValidationError(f"unexpected top-level key(s): {', '.join(unexpected)}")
     if missing:
         raise RunValidationError(f"missing top-level key(s): {', '.join(missing)}")
-    if document.get("schema_version") != SCHEMA_VERSION:
-        raise RunValidationError(f"$.schema_version must be {SCHEMA_VERSION!r}")
+    schema_version = document.get("schema_version")
+    if schema_version != SCHEMA_VERSION and schema_version not in LEGACY_SCHEMA_VERSIONS:
+        raise RunValidationError(
+            f"$.schema_version must be {SCHEMA_VERSION!r} or a supported legacy version"
+        )
 
     run, requirement_ids, status = _validate_run_header(document["run"])
     requirements = _validate_requirements(document["requirements"], requirement_ids)
     operations, _ = _validate_object_changes(
         document["object_changes"],
         requirement_ids=requirement_ids,
+        schema_version=schema_version,
     )
     payload_mappings = _validate_payload_mappings(
         document["payload_mappings"],
@@ -2175,6 +2300,7 @@ def validate_document(value: Any) -> dict[str, Any]:
         operations=operations,
         external_dependencies=external_dependencies,
         payload_mappings=payload_mappings,
+        schema_version=schema_version,
     )
     _validate_inventory_dispositions(
         document["inventory_dispositions"],
@@ -2185,11 +2311,28 @@ def validate_document(value: Any) -> dict[str, Any]:
     _validate_recovery_boundary(document["recovery_boundary"], required=status == "Partial")
 
     idempotency = _object(document["idempotency"], "$.idempotency")
+    if schema_version == SCHEMA_VERSION:
+        _exact_keys(
+            idempotency,
+            "$.idempotency",
+            required={"checked", "remaining_actions", "evidence"},
+        )
+    else:
+        _exact_keys(
+            idempotency,
+            "$.idempotency",
+            required={"checked", "remaining_actions"},
+            optional={"evidence"},
+        )
     if not isinstance(idempotency.get("checked"), bool):
         raise RunValidationError("$.idempotency.checked must be a boolean")
     remaining_actions = _unique_texts(
         idempotency.get("remaining_actions"),
         "$.idempotency.remaining_actions",
+    )
+    idempotency_evidence = _unique_texts(
+        idempotency.get("evidence", []),
+        "$.idempotency.evidence",
     )
     _validate_recette_handoff(document["recette_handoff"], requirement_ids)
 
@@ -2230,6 +2373,8 @@ def validate_document(value: Any) -> dict[str, Any]:
             raise RunValidationError(
                 "Configured requires checked idempotency with no remaining actions"
             )
+        if schema_version == SCHEMA_VERSION and not idempotency_evidence:
+            raise RunValidationError("Configured requires structured idempotency evidence")
         configured_requirement_ids = {
             requirement_id
             for requirement_id, item in requirements.items()
@@ -2270,6 +2415,69 @@ def load_document(path: Path) -> dict[str, Any]:
     except StrictJsonError as exc:
         raise RunValidationError(str(exc), error_code=exc.error_code) from exc
     return validate_document(value)
+
+
+def upgrade_document(document: dict[str, Any]) -> dict[str, Any]:
+    """Upgrade a safe v2.0 run to v2.1 without inventing missing mutation evidence."""
+    document = deepcopy(validate_document(document))
+    if document["schema_version"] == SCHEMA_VERSION:
+        return document
+    if document["run"]["status"] == "Configured":
+        raise RunValidationError(
+            "a finalized legacy run remains readable; do not rewrite its historical evidence"
+        )
+    unsafe_delta = [
+        item["operation_id"]
+        for item in document["object_changes"]
+        if item["action"] in DELTA_ACTIONS
+        and any(entry.get("state") == "in_progress" for entry in item["journal"])
+        and "pre_write_comparison" not in item
+    ]
+    if unsafe_delta:
+        raise RunValidationError(
+            "legacy delta mutation history lacks pre-write drift evidence: "
+            + ", ".join(unsafe_delta)
+        )
+    operations = {item["object_key"]: item for item in document["object_changes"]}
+    requirements = {item["id"]: item for item in document["requirements"]}
+    for route in document["first_party_data_routes"]:
+        if "consumer_bindings" in route:
+            continue
+        bindings = []
+        for object_key in route["consumer_object_keys"]:
+            target = _effective_target(operations[object_key], "legacy first-party consumer")
+            tag_type = _tag_type(target, "legacy first-party consumer")
+            if tag_type in CUSTOM_CODE_TAG_TYPES:
+                raise RunValidationError(
+                    f"legacy first-party route {route['requirement_id']!r} uses Custom HTML/Image; "
+                    "replace it with a verified native or installed-template consumer"
+                )
+            expected_product = FIRST_PARTY_PRODUCTS.get(route["feature"])
+            product = expected_product or requirements[route["requirement_id"]].get("destination")
+            if not isinstance(product, str) or not product.strip():
+                raise RunValidationError(
+                    f"legacy first-party route {route['requirement_id']!r} lacks product identity"
+                )
+            native_types = (
+                GOOGLE_CONFIGURATION_TAG_TYPES
+                | GA4_EVENT_TAG_TYPES
+                | GOOGLE_ADS_CONVERSION_TAG_TYPES
+            )
+            native = tag_type in native_types
+            bindings.append(
+                {
+                    "object_key": object_key,
+                    "product": product,
+                    "implementation": "native" if native else "installed-template",
+                    "tag_type": tag_type,
+                    "template_identity": None if native else tag_type,
+                    "evidence": ["legacy-v2.0-route", *route["evidence"]],
+                }
+            )
+        route["consumer_bindings"] = bindings
+    document["schema_version"] = SCHEMA_VERSION
+    document["idempotency"].setdefault("evidence", [])
+    return validate_document(document)
 
 
 def _utc_now() -> str:
@@ -2325,6 +2533,40 @@ def _field_mappings(requirement: dict[str, Any]) -> list[dict[str, Any]]:
     return mappings
 
 
+def _durable_risk_reasons(document: dict[str, Any]) -> list[str]:
+    operations = document["object_changes"]
+    reasons: list[str] = []
+    if any(item["action"] in {"remove", "replace"} for item in operations):
+        reasons.append("destructive object action")
+    if any(len(item["requirement_ids"]) > 1 for item in operations):
+        reasons.append("shared object across requirements")
+    high_impact_types = {
+        "zone",
+        "environment",
+        "destination",
+        "google tag configuration",
+        "container setting",
+        "template",
+    }
+    if any(item["object_type"] in high_impact_types for item in operations):
+        reasons.append("high-impact GTM resource")
+    products = {
+        _normalized_token(item["product"])
+        for item in document["consent_routes"]
+        if item.get("product")
+    }
+    if len(products) > 1:
+        reasons.append("multiple product consent routes")
+    page_view_destinations = {
+        item["destination"].strip().casefold()
+        for item in document["page_view_decisions"]
+        if isinstance(item.get("destination"), str)
+    }
+    if len(page_view_destinations) > 1:
+        reasons.append("multiple Google page-view destinations")
+    return reasons
+
+
 def _preflight_issues(
     document: dict[str, Any],
     requirement_ids: set[str],
@@ -2343,29 +2585,12 @@ def _preflight_issues(
         item["object_type"] == "tag" and item["action"] not in NON_EXECUTING_TAG_ACTIONS
         for item in linked_operations
     )
-    high_risk = any(
-        item["action"] in {"remove", "replace"}
-        or len(item["requirement_ids"]) > 1
-        or item["object_type"]
-        in {
-            "zone",
-            "environment",
-            "destination",
-            "google tag configuration",
-            "container setting",
-            "template",
-        }
-        for item in linked_operations
-    )
-    products = {
-        item["product"]
-        for item in document["consent_routes"]
-        if item["requirement_id"] in requirement_ids
-    }
-    if document["run"]["execution_mode"] == "isolated-lightweight" and (
-        high_risk or len(products) > 1
-    ):
-        issues.append("risk surface requires a durable configuration-run artifact")
+    durable_reasons = _durable_risk_reasons(document)
+    if document["run"]["execution_mode"] == "isolated-lightweight" and durable_reasons:
+        issues.append(
+            "risk surface requires a durable configuration-run artifact: "
+            + ", ".join(durable_reasons)
+        )
 
     for mapping in document["payload_mappings"]:
         if not has_executing_target_tag or mapping["requirement_id"] not in requirement_ids:
@@ -2608,7 +2833,7 @@ def create_from_contract(
             external_dependencies.append(dependency)
 
     workspace = contract["implementation"]["workspace"]
-    high_risk = any(
+    high_risk = route == "combined" or any(
         item["action"] in {"remove", "replace"}
         or item["object_type"]
         in {
@@ -2668,7 +2893,7 @@ def create_from_contract(
         "official_sources": official_sources,
         "external_dependencies": external_dependencies,
         "recovery_boundary": None,
-        "idempotency": {"checked": False, "remaining_actions": []},
+        "idempotency": {"checked": False, "remaining_actions": [], "evidence": []},
         "recette_handoff": {
             "manifest_version": "2.0",
             "requirements": [
@@ -2697,6 +2922,7 @@ def inspect_document(document: dict[str, Any]) -> dict[str, Any]:
     ready = []
     waiting: dict[str, list[str]] = {}
     preflight_blockers: dict[str, list[str]] = {}
+    preflight_cache: dict[frozenset[str], list[str]] = {}
     unsafe = []
     failed = []
     for item in document["object_changes"]:
@@ -2715,7 +2941,11 @@ def inspect_document(document: dict[str, Any]) -> dict[str, Any]:
         if pending_dependencies:
             waiting[operation_id] = pending_dependencies
         elif item["action"] in MUTATING_ACTIONS:
-            issues = _preflight_issues(document, set(item["requirement_ids"]))
+            requirement_key = frozenset(item["requirement_ids"])
+            issues = preflight_cache.get(requirement_key)
+            if issues is None:
+                issues = _preflight_issues(document, set(requirement_key))
+                preflight_cache[requirement_key] = issues
             if issues:
                 preflight_blockers[operation_id] = issues
             else:
@@ -2776,11 +3006,13 @@ def checkpoint_operation(
     timestamp: str | None = None,
     result: dict[str, Any] | None = None,
     comparison: dict[str, Any] | None = None,
+    pre_write_comparison: dict[str, Any] | None = None,
+    pre_write_saved: Any = _UNSET,
     saved: Any = _UNSET,
     error: str | None = None,
 ) -> dict[str, Any]:
     """Apply one validated state transition; callers persist only the returned document."""
-    document = validate_document(document)
+    document = upgrade_document(document)
     if state not in OPERATION_STATES:
         raise RunValidationError(f"unsupported checkpoint state {state!r}")
     operations = {item["operation_id"]: item for item in document["object_changes"]}
@@ -2803,6 +3035,22 @@ def checkpoint_operation(
     note = _text(note, "note")
     if state in {"saved", "verified"} and result is None:
         raise RunValidationError(f"{state} requires a saved result")
+    if pre_write_comparison is not None:
+        if operation["action"] not in DELTA_ACTIONS:
+            raise RunValidationError("pre-write comparison is accepted only for delta actions")
+        pre_write_comparison = validate_pre_write_comparison(
+            pre_write_comparison,
+            operation=operation,
+            saved=pre_write_saved,
+            require_pass=state != "failed",
+        )
+    elif pre_write_saved is not _UNSET:
+        raise RunValidationError("pre-write readback requires pre-write comparison evidence")
+    if current == "planned" and state == "in_progress" and operation["action"] in DELTA_ACTIONS:
+        if pre_write_comparison is None or pre_write_saved is _UNSET:
+            raise RunValidationError(
+                "delta mutation requires a fresh passing pre-write comparison and readback"
+            )
     if state == "verified":
         if saved is _UNSET:
             raise RunValidationError("verified requires authoritative saved readback")
@@ -2826,6 +3074,8 @@ def checkpoint_operation(
         operation["result"] = deepcopy(result)
     if comparison is not None:
         operation["comparison"] = deepcopy(comparison)
+    if pre_write_comparison is not None:
+        operation["pre_write_comparison"] = deepcopy(pre_write_comparison)
     if error is not None:
         operation["error"] = error
     if state == "verified":
@@ -2860,7 +3110,7 @@ def reopen_failed_operation(
     timestamp: str | None = None,
 ) -> dict[str, Any]:
     """Explicitly reopen a proved failed/no-write operation after its blocker is resolved."""
-    document = validate_document(document)
+    document = upgrade_document(document)
     operations = {item["operation_id"]: item for item in document["object_changes"]}
     if operation_id not in operations:
         raise RunValidationError(f"unknown operation_id {operation_id!r}")
@@ -2876,6 +3126,7 @@ def reopen_failed_operation(
     operation.pop("error", None)
     operation.pop("result", None)
     operation.pop("comparison", None)
+    operation.pop("pre_write_comparison", None)
     document["saved_readback"] = [
         item for item in document["saved_readback"] if item["operation_id"] != operation_id
     ]
@@ -2886,7 +3137,52 @@ def reopen_failed_operation(
     document["run"]["status"] = "In progress"
     document["run"]["updated_at"] = at
     document["recovery_boundary"] = None
-    document["idempotency"] = {"checked": False, "remaining_actions": []}
+    document["idempotency"] = {"checked": False, "remaining_actions": [], "evidence": []}
+    return validate_document(document)
+
+
+def finalize_document(
+    document: dict[str, Any],
+    *,
+    idempotency_evidence: list[str],
+    timestamp: str | None = None,
+) -> dict[str, Any]:
+    """Atomically derive Configured only from complete readback and rerun evidence."""
+    document = upgrade_document(document)
+    evidence = _unique_texts(
+        idempotency_evidence,
+        "idempotency_evidence",
+        allow_empty=False,
+    )
+    unfinished = [
+        item["operation_id"]
+        for item in document["object_changes"]
+        if item["state"] not in {"verified", "skipped"}
+    ]
+    if unfinished:
+        raise RunValidationError(
+            "finalization requires every operation verified or skipped: " + ", ".join(unfinished)
+        )
+    active_requirement_ids = {
+        item["id"] for item in document["requirements"] if item["status"] != "Deferred"
+    }
+    issues = _preflight_issues(document, active_requirement_ids)
+    if issues:
+        raise RunValidationError("finalization preflight is incomplete: " + "; ".join(issues))
+    at = timestamp or _utc_now()
+    _timestamp(at, "timestamp")
+    for requirement in document["requirements"]:
+        if requirement["status"] != "Deferred":
+            requirement["status"] = "Configured"
+    document["idempotency"] = {
+        "checked": True,
+        "remaining_actions": [],
+        "evidence": evidence,
+    }
+    document["recovery_boundary"] = None
+    document["run"]["phase"] = "complete"
+    document["run"]["status"] = "Configured"
+    document["run"]["updated_at"] = at
     return validate_document(document)
 
 
@@ -3244,15 +3540,24 @@ def main() -> int:
     inspect_parser = subparsers.add_parser("inspect")
     inspect_parser.add_argument("--run", type=Path, required=True)
 
+    upgrade_parser = subparsers.add_parser("upgrade")
+    upgrade_parser.add_argument("--run", type=Path, required=True)
+
     checkpoint_parser = subparsers.add_parser("checkpoint")
     checkpoint_parser.add_argument("--run", type=Path, required=True)
     checkpoint_parser.add_argument("--operation", required=True)
-    checkpoint_parser.add_argument("--state", choices=sorted(OPERATION_STATES), required=True)
+    checkpoint_parser.add_argument(
+        "--state",
+        choices=sorted(OPERATION_STATES - {"planned"}),
+        required=True,
+    )
     checkpoint_parser.add_argument("--note", required=True)
     checkpoint_parser.add_argument("--timestamp")
     checkpoint_parser.add_argument("--result", type=Path)
     checkpoint_parser.add_argument("--comparison", type=Path)
     checkpoint_parser.add_argument("--saved-readback", type=Path)
+    checkpoint_parser.add_argument("--pre-write-comparison", type=Path)
+    checkpoint_parser.add_argument("--pre-write-readback", type=Path)
     checkpoint_parser.add_argument("--error")
 
     reopen_parser = subparsers.add_parser("reopen")
@@ -3260,6 +3565,16 @@ def main() -> int:
     reopen_parser.add_argument("--operation", required=True)
     reopen_parser.add_argument("--note", required=True)
     reopen_parser.add_argument("--timestamp")
+
+    finalize_parser = subparsers.add_parser("finalize")
+    finalize_parser.add_argument("--run", type=Path, required=True)
+    finalize_parser.add_argument(
+        "--evidence",
+        action="append",
+        required=True,
+        help="Repeat for each idempotent-rerun/readback evidence locator.",
+    )
+    finalize_parser.add_argument("--timestamp")
 
     render_parser = subparsers.add_parser("render")
     render_parser.add_argument("--run", type=Path, required=True)
@@ -3294,9 +3609,24 @@ def main() -> int:
             _emit_json({"pass": True, "output": str(args.output.resolve())})
         elif args.command == "inspect":
             _emit_json(inspect_document(load_document(args.run)))
+        elif args.command == "upgrade":
+            with run_file_lock(args.run):
+                document = upgrade_document(load_document(args.run))
+                atomic_write(args.run, document)
+            _emit_json({"pass": True, "schema_version": document["schema_version"]})
         elif args.command == "checkpoint":
             result = _json_file(args.result, "result") if args.result else None
             comparison = _json_file(args.comparison, "comparison") if args.comparison else None
+            pre_write_comparison = (
+                _json_file(args.pre_write_comparison, "pre-write comparison")
+                if args.pre_write_comparison
+                else None
+            )
+            pre_write_saved = (
+                _json_value_file(args.pre_write_readback, "pre-write readback")
+                if args.pre_write_readback
+                else _UNSET
+            )
             saved = (
                 _json_value_file(args.saved_readback, "saved readback")
                 if args.saved_readback
@@ -3311,6 +3641,8 @@ def main() -> int:
                     timestamp=args.timestamp,
                     result=result,
                     comparison=comparison,
+                    pre_write_comparison=pre_write_comparison,
+                    pre_write_saved=pre_write_saved,
                     saved=saved,
                     error=args.error,
                 )
@@ -3326,14 +3658,22 @@ def main() -> int:
                 )
                 atomic_write(args.run, document)
             _emit_json({"pass": True, "operation": args.operation, "state": "planned"})
+        elif args.command == "finalize":
+            with run_file_lock(args.run):
+                document = finalize_document(
+                    load_document(args.run),
+                    idempotency_evidence=args.evidence,
+                    timestamp=args.timestamp,
+                )
+                atomic_write(args.run, document)
+            _emit_json({"pass": True, "status": "Configured"})
         else:
             rendered = render_markdown(
                 load_document(args.run),
                 embed_machine=args.embed_machine,
             )
             if args.output:
-                args.output.parent.mkdir(parents=True, exist_ok=True)
-                args.output.write_text(rendered, encoding="utf-8", newline="\n")
+                write_text_atomic(args.output, rendered)
                 _emit_json({"pass": True, "output": str(args.output.resolve())})
             else:
                 sys.stdout.reconfigure(encoding="utf-8", errors="backslashreplace")

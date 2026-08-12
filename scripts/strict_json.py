@@ -115,3 +115,21 @@ def write_json_atomic(path: Path, value: Any) -> None:
     finally:
         if temporary.exists():
             temporary.unlink()
+
+
+def write_text_atomic(path: Path, value: str) -> None:
+    """Write UTF-8 text atomically with the same durability boundary as JSON artifacts."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    handle, temporary_name = tempfile.mkstemp(
+        prefix=f".{path.name}.", suffix=".tmp", dir=path.parent
+    )
+    temporary = Path(temporary_name)
+    try:
+        with os.fdopen(handle, "w", encoding="utf-8", newline="\n") as stream:
+            stream.write(value)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, path)
+    finally:
+        if temporary.exists():
+            temporary.unlink()

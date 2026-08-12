@@ -18,6 +18,7 @@ INCLUDED = (
     "scripts/configuration_run.py",
     "scripts/diff_object_graph.py",
     "scripts/import_ga4_tracking_plan_handoff.py",
+    "scripts/run_model.py",
     "scripts/strict_json.py",
     "scripts/validate_configuration_contract.py",
     "scripts/validate_contract_conformance.py",

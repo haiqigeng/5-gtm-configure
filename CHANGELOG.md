@@ -1,5 +1,61 @@
 # Changelog
 
+## 8.1.0
+
+### Why This Release Matters
+
+- Closes correctness gaps found in v8.0 field and technical review without widening the skill into
+  runtime recette, rollback, publication, or generalized workflow orchestration.
+- Makes the saved GTM graph safer to mutate and the completed run harder to overclaim: delta writes
+  now require fresh pre-change proof, product-native first-party-data routes require positive
+  identity, and final status is derived only from locked saved-state evidence.
+
+### What Changed
+
+- Add a fresh pre-write comparison for update, replace, rename, pause, unpause, and remove
+  operations. Stop before mutation when current saved state has drifted from the approved
+  `pre_change` subset, and reject a create when its semantic identity already exists with different
+  content.
+- Accept DOM Ready and Window Loaded when they are the approved native page-load topology, while
+  retaining CMP-event trigger plus vendor-blocking-trigger defaults for strict/basic consent.
+- Classify durable execution risk across the complete run rather than per product, restrict pause
+  and unpause to tags, and require native product/template identity for first-party-data consumers;
+  Custom HTML and Custom Image cannot masquerade as product-native implementations.
+- Add transactional checkpoint and reopen behavior, an explicit evidence-bearing finalization step,
+  and a safe `configuration-run@2.0` to `configuration-run@2.1` migration for unfinished runs that
+  do not contain unsafe legacy delta progress.
+- Split stable run-model constants into a focused module, cache repeated contract preflight work,
+  write rendered Markdown atomically, validate the JSON Schema as Draft 2020-12 in CI, enforce
+  Python/schema enum parity, and reject unknown mutation fields.
+- Correct partial-failure wording to match the conservative all-stop behavior: after one failed
+  mutation, all remaining writes stop until explicit recovery.
+
+### What Users Should Do
+
+- Start new runs with `configuration-run@2.1`, retain the bound comparison evidence from every
+  authoritative pre-write read, and use `finalize` only after every intended object has
+  authoritative readback or explicit no-op evidence.
+- Upgrade an unfinished v2.0 artifact only through the supplied migration command. Keep completed
+  or already-mutated unsafe v2.0 artifacts as historical evidence rather than inventing the new
+  proof fields.
+
+### Validation
+
+- Add regressions for pre-write drift pass/fail paths, semantic create conflicts, transactional
+  object handling, locked finalization, safe legacy migration, page-load trigger validity,
+  whole-run durable risk, first-party product identity, invalid variable pause, accurate all-stop
+  reporting, schema validity, enum parity, and unknown-field rejection.
+- Run the complete unit, release, Draft 2020-12 schema, Ruff, compile, deterministic-package, and
+  whitespace checks for `v8.1.0`.
+
+### Known Limits
+
+- Adapter implementations must return an authoritative normalized saved object for pre-write and
+  post-write comparison; the controller cannot manufacture proof when an adapter omits fields.
+- Runtime consent timing, data quality, browser/network delivery, platform activation, publication,
+  server-container internals, CAPI, and browser/server deduplication remain outside this skill.
+- Unsafe or completed v2.0 artifacts remain readable history but are not automatically upgraded.
+
 ## 8.0.0
 
 ### Why This Release Matters

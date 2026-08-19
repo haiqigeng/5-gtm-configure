@@ -166,3 +166,15 @@ For each vendor tag, derive the expected static result:
 For a base/configuration tag, also prove statically that an initial grant and a later grant each have a valid configured initialization opportunity without repeated initialization.
 
 For explicitly approved advanced behavior, replace the strict non-fire expectation with the exact officially documented limited-data configuration expectation and label it clearly. Do not present it as an observed request.
+
+## Carry consent through a pipeline
+
+Keep the web CMP lifecycle and vendor blocks unchanged for direct browser tags. For a transporter,
+record whether it is blocked, always transports, or conditionally transports; do not attach the
+downstream vendor block mechanically. Forward only an approved documented CMP state or native
+Google consent signal.
+
+For a non-Google server gate, prove denied, granted, and unknown state on every transported event
+that can trigger the destination. State available only on page view does not protect a later
+conversion. CMP readiness is not grant, and a consent-update event must not replay a business
+conversion. Use one effective server mechanism and reject accidental equivalent double gates.

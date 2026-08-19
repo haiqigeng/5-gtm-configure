@@ -287,3 +287,27 @@ GA4 reporting behavior from saved configuration.
 | Measurement ID | `CST - GA4 measurement_id` |
 | Custom Event trigger | `CE - generate_lead` |
 | Consent exception | `Block - Didomi - GA4 denied` |
+
+## Route GA4 through a server container
+
+When a server endpoint is in scope, first inspect whether one compatible Google tag can own the
+measurement identity and transport endpoint. Create a dedicated transport Google tag only when
+identity, endpoint, consent, page-view ownership, environment routing, or lifecycle isolation
+requires it. A server URL variable is useful for reuse or deterministic environment routing, not a
+mandatory helper.
+
+Decide page-view ownership before setting `send_page_view`: automatic Google-tag page view,
+dedicated GA4 event, another proved owner, or intentionally none. Reconcile Enhanced Measurement,
+SPA behavior, hard-coded tags, and direct-browser versus server-routed destinations so one
+occurrence is not sent twice.
+
+Keep field ownership explicit. Stable Google-tag transport/configuration values belong in Google
+tag Configuration Settings when genuinely shared. GA4 event parameters belong in Event Settings
+or the event tag; GA4 user properties use the dedicated user-property area. `user_id` and
+`user_data` are not interchangeable, and `user_data` is never a GA4 user property. For a server
+enhanced-conversion route, follow the current Google feature procedure and transport approved
+event-scoped user data without attaching it globally by convenience.
+
+Configure and read back the server GA Client and server GA4 destination before a live endpoint
+cutover. Load `server/analytics-ga4.md` and the pipeline files for receiver, shape, consent, and
+rollout rules.

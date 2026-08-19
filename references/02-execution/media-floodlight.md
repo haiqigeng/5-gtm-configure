@@ -77,3 +77,9 @@ dynamic-tag settings, enhanced attribution, and platform validation separately. 
 Google/Floodlight tags, exact identifiers and fields, triggers, consent, linker, variables, folder,
 and references. `Configured` proves the saved workspace objects, not activity approval, platform
 receipt, counting behavior, or publication.
+
+## Server route
+
+When server delivery is requested, load `server/media-floodlight.md`. Choose Counter or Sales from
+the exact activity and reconcile any direct browser route through current Google migration rules,
+not a cross-vendor dedup pattern.

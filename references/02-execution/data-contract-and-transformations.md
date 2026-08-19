@@ -168,9 +168,22 @@ because a vector is invalid.
 Never generate a browser/server event ID, transaction-based deduplication map, or
 `gtm.start`/`gtm.uniqueEventId` Custom JavaScript variable in the current client-side-only scope. An
 explicit media brief may authorize mapping a supplied browser `event_id` when current official
-browser documentation and the installed template support that exact field. Keep all server-side
-delivery, ID generation, and deduplication architecture deferred.
+browser documentation and the installed template support that exact field. For a server or
+pipeline request, resolve its owner through the pipeline and server references; do not borrow the
+browser field name.
 Load `transformation-patterns.md` when the same source-to-destination projection pattern recurs,
 especially ecommerce item arrays, destination identifier arrays, scalar validation, or explicit
 mapping vectors. The pattern reference standardizes the function contract but current official
 destination documentation still establishes every output field.
+
+## Prove transport survivability
+
+For every transported field, record source, web resolved value, wire key/encoding, claiming Client,
+generated Event Data key/type, server owner, template field/type, missing behavior, and runtime verification note.
+The standard GA route documents `items` as an array and `user_data` as an object with nested paths.
+Do not generalize that into “only two arrays” or assume another nested dataLayer object survives.
+
+If a required shape is unsupported, block unless an explicitly approved serialization and named
+server parse owner exist. Never silently stringify, flatten, truncate, drop invalid items, or use a
+first-item shortcut. A server destination's `contents` or `content_ids` projection remains a
+destination mapping, not a dataLayer eligibility test.

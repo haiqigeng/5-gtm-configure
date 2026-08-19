@@ -20,7 +20,7 @@ class ReleaseChecksTest(unittest.TestCase):
                 sys.executable,
                 str(ROOT / "scripts" / "check_release.py"),
                 "--tag",
-                "v8.1.0",
+                "v9.0.0",
                 "--release-notes",
                 str(ROOT / "CHANGELOG.md"),
             ],
@@ -65,7 +65,7 @@ class ReleaseChecksTest(unittest.TestCase):
             notes = Path(temporary) / "CHANGELOG.md"
             notes.write_text(
                 "# Changelog\n\n"
-                "## 8.1.0\n\n"
+                "## 9.0.0\n\n"
                 "### Why This Release Matters\n\n"
                 "### What Changed\n\n"
                 "### What Users Should Do\n\n"
@@ -118,14 +118,28 @@ class ReleaseChecksTest(unittest.TestCase):
             ROOT / "SKILL.md",
             ROOT / "agents" / "openai.yaml",
             ROOT / "LICENSE",
+            ROOT / "scripts" / "action_contract.py",
             ROOT / "scripts" / "adapter_runtime.py",
+            ROOT / "scripts" / "adapter_runtime_web.py",
             ROOT / "scripts" / "configuration_run.py",
             ROOT / "scripts" / "diff_object_graph.py",
             ROOT / "scripts" / "import_ga4_tracking_plan_handoff.py",
+            ROOT / "scripts" / "redaction.py",
+            ROOT / "scripts" / "resource_registry.py",
             ROOT / "scripts" / "run_model.py",
+            ROOT / "scripts" / "run_model_web.py",
+            ROOT / "scripts" / "run_render.py",
+            ROOT / "scripts" / "run_state.py",
+            ROOT / "scripts" / "run_validation_core.py",
+            ROOT / "scripts" / "run_validation_pipeline.py",
+            ROOT / "scripts" / "run_validation_server.py",
+            ROOT / "scripts" / "run_validation_web.py",
             ROOT / "scripts" / "strict_json.py",
             ROOT / "scripts" / "validate_configuration_contract.py",
+            ROOT / "scripts" / "validate_configuration_contract_v5.py",
             ROOT / "scripts" / "validate_contract_conformance.py",
+            ROOT / "scripts" / "verification.py",
+            ROOT / "scripts" / "web_domain_validation.py",
         ]
         expected_sources.extend(sorted((ROOT / "references").rglob("*.md")))
         expected_sources.extend(sorted((ROOT / "schemas").rglob("*.json")))
@@ -160,6 +174,33 @@ class ReleaseChecksTest(unittest.TestCase):
                         self.assertEqual(info.external_attr >> 16, 0o644)
 
             self.assertEqual(archives[0].read_bytes(), archives[1].read_bytes())
+            extracted = Path(temporary) / "extracted"
+            with ZipFile(archives[0]) as package:
+                package.extractall(extracted)
+            scripts_path = extracted / "configure-gtm" / "scripts"
+            modules = sorted(
+                source.stem
+                for source in expected_sources
+                if source.parent == ROOT / "scripts" and source.suffix == ".py"
+            )
+            smoke = subprocess.run(
+                [
+                    sys.executable,
+                    "-I",
+                    "-c",
+                    (
+                        "import importlib,sys;sys.path.insert(0,sys.argv[1]);"
+                        "[importlib.import_module(name) for name in sys.argv[2:]]"
+                    ),
+                    str(scripts_path),
+                    *modules,
+                ],
+                cwd=extracted,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(smoke.returncode, 0, smoke.stdout + smoke.stderr)
 
 
 if __name__ == "__main__":

@@ -1,145 +1,177 @@
-# Configuration run, recovery, and machine handoff
+# Configuration run, recovery, and result
 
 ## Contents
 
-- [Use proportionate proof and one durable run artifact](#use-proportionate-proof-and-one-durable-run-artifact)
-- [Preserve stable requirement identity](#preserve-stable-requirement-identity)
-- [Render impact without adding a routine approval gate](#render-impact-without-adding-a-routine-approval-gate)
+- [Use one durable run artifact](#use-one-durable-run-artifact)
+- [Materialize deterministically](#materialize-deterministically)
 - [Checkpoint every write boundary](#checkpoint-every-write-boundary)
+- [Contain failures by dependency](#contain-failures-by-dependency)
 - [Resume only from proved state](#resume-only-from-proved-state)
 - [Finalize once from proved state](#finalize-once-from-proved-state)
-- [Use replace as one governed action](#use-replace-as-one-governed-action)
-- [Summarize template permission changes](#summarize-template-permission-changes)
-- [Hand off in three layers](#hand-off-in-three-layers)
+- [Handle secrets without false equality](#handle-secrets-without-false-equality)
+- [Machine-readable run record](#machine-readable-run-record)
 - [Commands](#commands)
 
-## Use proportionate proof and one durable run artifact
+## Use one durable run artifact
 
-For a refonte, destructive/replace action, shared consumer, template permission change,
-multi-product consent decision, multi-destination graph, or resumable multi-write operation,
-maintain one `configuration-run@2.1` JSON artifact from preflight through final readback. Its
-schema is [`../../schemas/configuration-run.schema.json`](../../schemas/configuration-run.schema.json).
-The v5 configuration contract owns approved requirements and intended actions; the run artifact
-owns execution order, evidence, recovery, idempotency, and recette handoff. Neither authorizes
-publication, runtime recette, site work, or external-platform administration.
+For every server or pipeline run, and for a web refonte, destructive/replace action, shared
+consumer, template permission change, multi-product consent decision, multi-destination graph, or
+resumable multi-write operation, maintain one `configuration-run@3.0` JSON artifact from preflight
+through final readback. Its schema is
+[`configuration-run.schema.json`](../../schemas/configuration-run.schema.json).
 
-An isolated low-risk run may use the same map in memory. Classify risk across the entire run, not
-one operation at a time. Promote to the durable artifact before any write when the complete graph
-contains the risks above. A durable artifact uses an exclusive per-artifact writer lock; this is
-not a GTM workspace lease or an extra approval gate.
+The v6 configuration contract owns approved requirements, authorized targets, pipeline design, and
+intended actions. The run owns execution state, per-target evidence, recovery, idempotency, and the
+configuration result. Neither authorizes publication, runtime recette, site/cloud work, or
+external-platform administration. An isolated low-risk web change may keep the same structure in
+memory; it does not receive weaker acceptance.
 
-`init` refuses an existing path unless `--replace-planned` is explicit and no saved history
-exists. Version 2.0 artifacts remain readable. `upgrade` converts only evidence-safe unfinished
-runs; it refuses finalized history, ambiguous Custom HTML first-party routes, or a delta whose
-write started without v2.1 pre-write proof.
+Versioned 2.0/2.1 web runs remain readable. `upgrade` moves a safe web-only artifact into the v3
+target-scoped envelope, preserves its object intention and legacy topology record, and never invents
+a server target. Ambiguous or unsafe history is rejected rather than guessed.
 
-## Preserve stable requirement identity
+## Materialize deterministically
 
-Use an immutable source ID when supplied; otherwise derive a stable business ID such as
-`GA4::generate_lead`. Keep mutable source locations separately. Multi-requirement objects list all
-consumer `requirement_ids`.
+`init` validates contract 6.0 and deterministically creates target-scoped operations and stable
+operation IDs. It refuses an existing path unless `--replace-planned` is explicit and no write
+history exists. The following active sections are contract-owned:
 
-## Render impact without adding a routine approval gate
+- requirements, except derived status;
+- immutable target identity (container type and account/container/workspace IDs; adapter
+  capabilities remain runtime-owned);
+- pipelines;
+- immutable object action, target, intention, dependency, and human-readable justification fields;
+- payload mappings;
+- consent topologies;
+- web execution topologies, page-view decisions, first-party-data routes, and inventory
+  dispositions;
+- dedup contracts;
+- official sources and external dependencies;
+- publication dependencies.
 
-Render impact from the same artifact without pausing routine authorized writes. Keep existing
-authority gates for destructive, permission-expanding, Default Workspace, unresolved shared, and
-high-impact actions.
-
-For strict/basic consent, keep the CMP event as the normal trigger when it supplies page-load
-timing and record the reusable blocking set independently. A verified vendor-wide Custom Event
-block defaults to `blocking_event_scope: "regex:.*"`; narrower scope needs a reason.
-
-The baseline records complete resource-family counts and semantic trigger identities/types.
-Active-tag topology references must equal the target `firingTriggerId` and
-`blockingTriggerId` arrays. This per-active-tag execution topology remains the declared firing
-authority. For refontes, keep refonte inventory dispositions aligned with the exact tag operations
-and before/after evidence. Page-view records bind real Google/GA4 tag types and effective
-`send_page_view`. First-party records bind each mapped field to a positive native or installed
-template identity for the exact product; a name or negative “not GA4” test is insufficient.
+Their fingerprints are revalidated on every load. Do not edit those sections by hand. Record each
+target's exhausted relevant-family baseline with the `baseline` command before its first mutation.
+The controller derives pre-write and saved-state comparisons from authoritative readback; adapters
+populate capabilities, journal, readback, result, and recovery state.
 
 ## Checkpoint every write boundary
 
-Immediately before a delta mutation, re-read the exact saved object and compare every approved
-`pre_change` field. Extra adapter metadata may be ignored, but a missing, changed, or type-different
-field is container drift: persist the failed comparison and do not write. A create whose semantic
-identity already exists with different state is a conflict, never an overwrite. Persist the passing
-pre-write comparison before `in_progress`.
+Immediately before a delta mutation, re-read the exact target object and compare every approved
+`pre_change` field. Missing, changed, or type-different state is drift: persist the failure and do
+not write. A create whose semantic identity already exists with different state is a conflict,
+never an overwrite.
 
-After one mutation, persist one accurate state:
+Persist the passing pre-write comparison before `in_progress`. After one mutation, record:
 
 | State | Meaning |
 | --- | --- |
-| `saved` | Adapter returned a saved object; authoritative comparison remains. |
-| `verified` | Authoritative readback has zero differences. |
-| `failed` | The write is proved absent/rejected; all remaining writes stop. |
-| `uncertain` | Whether the write saved is unknown; no retry is allowed. |
-| `skipped` | The approved graph intentionally omits the operation. |
+| `saved` | A save exists but authoritative equality remains unresolved. |
+| `verified` | Target readback matches all comparable intended fields and references. |
+| `failed` | The operation is proved absent/rejected; transitive dependents stop. |
+| `uncertain` | Whether it saved is unknown; no blind retry is allowed. |
+| `skipped` | The approved graph intentionally omits it. |
 
-`verified` requires structured comparison evidence: comparator identity, intended/saved SHA-256,
-every top-level intended field, and structured differences. Supply `--saved-readback` so the
-controller binds that proof to the immutable intention. JSON checkpoints and rendered handoffs are
-atomic.
+`verified` requires a target-scoped comparator, intended/saved SHA-256, structured differences,
+and authoritative readback. For `remove`, authoritative not-found after the write is the required
+saved state and is compared as object absence; it is not a missing-readback error. JSON checkpoints
+and render writes are atomic. A documented non-applied
+rate-limit response may retry within a strict bound; an ambiguous mutation must read before any
+further action.
+
+## Contain failures by dependency
+
+Each target has independent baseline, capability matrix, journal, readback, result, and recovery
+frontier. Execute only planned operations whose dependencies are `verified` or `skipped`.
+
+On failure or uncertainty, stop that operation and its transitive dependents while continuing
+independent safe subtrees. A failed or unproved claiming Client blocks dependent receiver tags and
+the web endpoint cutover. A failed Meta destination does not block an independent GA4 destination.
+An unsupported Transformation capability blocks only consumers that depend on it.
 
 ## Resume only from proved state
 
-Validate before calling an adapter. Resolve `in_progress` or `uncertain` by authoritative
-readback; never retry an ambiguous create/update/replace/import. Execute only `planned` operations
-whose dependencies are `verified` or `skipped`. A `failed` operation is not retried automatically;
-after its blocker and target identity are revalidated, `reopen` may return only
-that proved no-write operation to `planned`.
+Validate the artifact before calling an adapter. Resolve `in_progress` or `uncertain` by
+authoritative target readback; never retry an ambiguous create/update/replace/import. A known
+`failed` operation may be `reopen`ed only after its blocker and target identity are revalidated and
+the no-write outcome is proved. Reopen clears stale pre-write, saved-readback, and comparison
+evidence before returning the operation to `planned`; old proof never carries into a retry.
 
-Interpret inspection literally: `valid` is schema validity, `resumable` means automatic work is
-safe, and `successful`/`pass` require a finalized `Configured` run. The adapter helper bounds
-rate-limit retries, honors an in-bound `Retry-After`, resolves ambiguous responses by readback,
-and never blindly retries. MCP/API/UI adapters must preserve the same transitions.
+Interpret inspection literally: `valid` is schema validity, `resumable` means no unresolved write
+boundary, and `pass` requires finalized `Configured`. The recovery frontier names affected target,
+last verified operation, unsafe/dependent operations, and next authoritative readback.
 
 ## Finalize once from proved state
 
-Use the single locked `finalize` transition. It succeeds only when every operation is
-`verified`/`skipped`, verified operations have readback, preflight is complete, and at least
-one concrete no-op rerun/readback evidence locator is supplied. It atomically derives requirement
+Use one locked `finalize` transition. It succeeds only when every required operation is
+`verified`/`skipped`, every target baseline is complete, required cross-target invariants pass, and
+concrete identical-rerun no-op evidence is supplied. It atomically derives target and requirement
 statuses, checked idempotency, `phase: complete`, and `status: Configured`. Do not hand-edit
-those fields or use multiple section setters.
+status or idempotency.
 
-## Use replace as one governed action
+Open publication dependencies never block saved-configuration completion. A server-only run records
+server publication then server recette. A pipeline continues with web cutover publication, then web
+and end-to-end recette.
 
-Use `replace` only when a supported update cannot reach the same semantic target. Require stable
-`object_id`, exact `pre_change` and `intended`, a specific reason, destructive/high-impact
-authority where applicable, consumer tracing, recovery evidence, and post-create readback. Never
-use replace to bypass drift, rename, or simulate a missing adapter feature.
+## Handle secrets without false equality
 
-## Summarize template permission changes
+Redact credentials and raw user values before any baseline, contract, journal, error, diff,
+rendering, or result is persisted. Use exact template secret-field paths first, heuristic detection
+second, and resolve actual values only through ephemeral secure input.
 
-For template create/update/replace, record the inspected version and permission delta. Surface new
-domain, injection, API, storage, global, or data-access permission without inventing safety claims.
+Readback may prove matching secret-field presence and equality of every non-secret field, but it
+must report `present-not-compared` and `value_equality_claimed: false`. Two redacted markers are
+never proof of secret equality. A delta cannot claim unchanged secret value from markers alone;
+use a safe reference/version/rotation locator or stop the affected comparison. Parameter-table
+rows whose key names a credential are sensitive even when the literal lives in a generic `value`
+field. This includes a bare `authorization` field, a `Bearer`/`Basic` literal, and GTM's flattened
+`name=Authorization` plus adjacent `value=...` header rows. Governance booleans such as destructive
+authorization are not credentials.
 
-## Hand off in three layers
+## Machine-readable run record
 
-Generate all layers from the validated `configuration-run@2.1` artifact:
-
-1. **Executive:** status, stable target, counts, consent, blocker/recovery, no publication.
-2. **Analyst/developer:** requirement/object actions, payload mappings, normal/block triggers,
-   permissions, readback, and external owners.
-3. **Machine/recette:** complete JSON with stable requirement IDs, expected tags/triggers,
-   consent states, user-data keys/network cues, and explicit
-   `runtime_validation_performed: false`.
-
-This handoff does not prove browser, dataLayer, network, CMP-journey, or vendor behavior.
+The validated `configuration-run@3.0` artifact is the machine-readable configuration result. It
+exists for deterministic mutation, recovery, saved-state proof, and human result rendering. It is
+not a recette input or acceptance authority; runtime recette independently uses the tracking plan
+and live GTM/Preview evidence.
 
 ## Commands
 
 ~~~powershell
-python scripts/configuration_run.py init --contract contract.json --run-id RUN-001 --source-locator "Tracking Plan / Events" --output configuration-run.json
+python scripts/validate_configuration_contract.py --contract contract.json
+python scripts/configuration_run.py init --contract contract.json --run-id RUN-001 --source-locator "Approved input" --output configuration-run.json
 python scripts/configuration_run.py upgrade --run configuration-run.json
 python scripts/configuration_run.py validate --run configuration-run.json
 python scripts/configuration_run.py inspect --run configuration-run.json
-python scripts/configuration_run.py checkpoint --run configuration-run.json --operation OP-001 --state in_progress --note "Fresh pre-change readback matched" --pre-write-readback before.json --pre-write-comparison pre-write-comparison.json
-python scripts/configuration_run.py checkpoint --run configuration-run.json --operation OP-001 --state verified --note "Saved readback matched" --result saved-result.json --saved-readback saved-object.json --comparison comparison.json
-python scripts/configuration_run.py reopen --run configuration-run.json --operation OP-003 --note "Authentication renewed; target revalidated."
+python scripts/configuration_run.py baseline --run configuration-run.json --target web-main --resources web-resources.json --workspace-changes web-workspace-changes.json --captured-at 2026-08-19T10:00:00Z
+python scripts/configuration_run.py checkpoint --run configuration-run.json --operation OP-001 --state in_progress --note "Fresh pre-change readback matched" --pre-write-readback before.json
+python scripts/configuration_run.py checkpoint --run configuration-run.json --operation OP-001 --state verified --note "Saved readback matched" --result saved-result.json --saved-readback saved-object.json
+python scripts/configuration_run.py reopen --run configuration-run.json --operation OP-003 --note "Blocker resolved and target revalidated."
 python scripts/configuration_run.py finalize --run configuration-run.json --evidence "Second adapter pass returned zero mutations."
-python scripts/configuration_run.py render --run configuration-run.json --output handoff.md
+python scripts/configuration_run.py render --run configuration-run.json --output configuration-result.md
 ~~~
 
-Only delta actions need the pre-write files. `verified` always needs `--result`, authoritative
-`--saved-readback`, and v1 comparison evidence. The controller rejects duplicate JSON keys,
-non-finite values, excessive nesting, unsafe transitions, and unsafe overwrite.
+`web-resources.json` maps every exhausted relevant resource family to its complete item array;
+`web-workspace-changes.json` is the complete pre-existing workspace-change array. Only delta
+actions need `before.json`: it is the raw authoritative target object and must include its current
+`name`; server-generated IDs and fingerprints are tolerated but the name remains drift-sensitive.
+
+A verified `saved-object.json` is a target-scoped graph:
+
+~~~json
+{
+  "objects": [
+    {
+      "target_id": "web-main",
+      "object_type": "tag",
+      "name": "GA4 - purchase"
+    }
+  ]
+}
+~~~
+
+Include every comparable intended field in that object. The controller builds and binds both
+comparisons; externally supplied comparison files are optional compatibility inputs, not required
+operator work. A verified remove represents readback as JSON `null`. The controller acquires the
+run lock before loading a checkpoint source and returns coded JSON errors for invalid graph shape,
+duplicate JSON keys, non-finite values, excessive nesting, unsafe transitions, materialization
+drift, and unsafe overwrite.

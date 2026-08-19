@@ -11,7 +11,7 @@
 - [Govern the GA4 user ID lifecycle](#govern-the-ga4-user-id-lifecycle)
 - [Apply consent independently](#apply-consent-independently)
 - [Validate and hand off without leaking data](#validate-and-hand-off-without-leaking-data)
-- [Keep the client-side boundary](#keep-the-client-side-boundary)
+- [Keep the route boundary explicit](#keep-the-route-boundary-explicit)
 - [Official Google entry points](#official-google-entry-points)
 
 ## Classify the feature before mapping data
@@ -198,17 +198,19 @@ Use synthetic identities. Saved readback must prove:
 - external account/property actions remain honestly separated;
 - no resolved PII appears in the machine artifact or human change log.
 
-The recette handoff names expected keys, consent states, and network cues without recording values.
+The configuration result names expected keys, consent states, and unresolved runtime dependencies without recording values.
 For Google Ads/GA4 enhanced matching, include the documented `em` request cue and the empty-data cue
 such as `tv.1~em` only where current Google documentation applies. Treat Diagnostics and match-rate
 reporting as external platform evidence, not static GTM proof.
 
-## Keep the client-side boundary
+## Keep the route boundary explicit
 
-Configure only the requested browser feature. Do not create server-side GTM transformations,
-Conversions API, enhanced conversions for leads uploads, offline conversion uploads, CRM jobs, or
-browser/server deduplication. A browser Google tag routed through `server_container_url` remains in
-scope, but the receiving server container remains external.
+For a `web` route, configure only the requested browser feature. Do not create server-side GTM
+transformations, Conversions API, enhanced conversions for leads uploads, offline conversion
+uploads, CRM jobs, or browser/server deduplication. A browser Google tag routed through
+`server_container_url` remains in web scope, but the receiver is external unless the user separately
+authorizes a `server` or `pipeline` target. In an authorized pipeline, keep every web and server
+consumer explicit rather than treating transport as authority.
 
 ## Official Google entry points
 
@@ -225,3 +227,25 @@ cached field catalogue:
 - Google Ads enhanced-conversion setup and formatting: https://support.google.com/google-ads/answer/13258081
 - Google customer-data policies: https://support.google.com/google-ads/answer/7475709
 - Google Consent Mode: https://developers.google.com/tag-platform/security/concepts/consent-mode
+
+## Extend first-party data through the server pipeline
+
+For every approved server consumer, record the complete ownership chain:
+
+`approved source -> web normalization/hash owner -> transported user_data field -> claiming Client
+-> Event Data path -> optional scoped server redaction/augmentation -> destination template`
+
+`user_id` identifies an authenticated analytics user; `user_data` carries feature-specific
+matching fields. Neither belongs in GA4 user properties. Keep Google tag Configuration Settings,
+Event Settings, user properties, and the user-provided-data variable/field separate according to
+their official purpose and inspected tag surface.
+
+Scope user data to approved events and consumers. Do not attach it globally because one server
+destination can consume it. Prove whether the web or destination template normalizes/hashes each
+field and prevent double hashing. If Google documentation requires event-scoped `user_data` to
+reach the GA Client route, send it on those events deliberately. Use a narrowly scoped server
+Transformation only when an unauthorized destination must be prevented from receiving a field.
+
+Credentials are not first-party matching data. Resolve tokens through ephemeral secure input,
+store them only in supported secret/template fields, redact before persistence, and report
+`present-not-compared`; never treat redacted markers as equality.

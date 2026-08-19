@@ -20,6 +20,8 @@ ROOT_METADATA_KEYS = {
     "tagId",
     "triggerId",
     "variableId",
+    "clientId",
+    "transformationId",
     "folderId",
     "templateId",
     "zoneId",
@@ -39,6 +41,8 @@ ID_FIELDS = {
     "templateId": "template",
     "zoneId": "zone",
     "environmentId": "environment",
+    "clientId": "client",
+    "transformationId": "transformation",
 }
 BUILT_IN_TRIGGER_IDS = frozenset(
     {
@@ -51,6 +55,8 @@ REFERENCE_FIELDS = {
     "firingTriggerId": "triggerId",
     "blockingTriggerId": "triggerId",
     "parentFolderId": "folderId",
+    "claimingClientId": "clientId",
+    "transformationId": "transformationId",
 }
 SEQUENCING_KEYS = {"setupTag", "teardownTag"}
 STANDALONE_PARAMETER_FIELDS = frozenset(
@@ -181,32 +187,57 @@ def _normalized_object_type(value: str) -> str:
     return "".join(character for character in value.casefold() if character.isalnum())
 
 
+def _target_id(item: dict[str, Any], path: str) -> str | None:
+    value = item.get("target_id")
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value.strip():
+        raise GraphError(f"{path}.target_id must be a non-empty string")
+    return value.strip()
+
+
+def _semantic_name(target_id: str | None, semantic_type: str, name: str) -> str:
+    prefix = f"{target_id}::" if target_id else ""
+    return f"{prefix}{semantic_type}::{name}"
+
+
+def _mapping_key(target_id: str | None, raw_id: str) -> str:
+    return f"{target_id}::{raw_id}" if target_id else raw_id
+
+
 def _reference_maps(
     objects: list[dict[str, Any]],
+    target_types: dict[str, str] | None = None,
 ) -> tuple[dict[str, dict[str, str]], dict[str, set[str]]]:
     maps = {field: {} for field in ID_FIELDS}
     identities = {semantic_type: set() for semantic_type in ID_FIELDS.values()}
-    for trigger_id in BUILT_IN_TRIGGER_IDS:
-        semantic = f"trigger::builtin::{trigger_id}"
-        maps["triggerId"][trigger_id] = semantic
-        identities["trigger"].add(semantic)
+    target_ids = {_target_id(item, "$.objects[]") for item in objects}
+    for target_id in target_ids:
+        if target_types is not None and target_types.get(target_id) != "web":
+            continue
+        for trigger_id in BUILT_IN_TRIGGER_IDS:
+            semantic = _semantic_name(target_id, "trigger", f"builtin::{trigger_id}")
+            maps["triggerId"][_mapping_key(target_id, trigger_id)] = semantic
+            identities["trigger"].add(semantic)
     for index, item in enumerate(objects):
         object_type, name = _identity(item, f"$.objects[{index}]")
+        target_id = _target_id(item, f"$.objects[{index}]")
         normalized_type = _normalized_object_type(object_type)
         if normalized_type in identities:
-            identities[normalized_type].add(f"{normalized_type}::{name}")
+            identities[normalized_type].add(_semantic_name(target_id, normalized_type, name))
         for field, semantic_type in ID_FIELDS.items():
             raw_id = item.get(field)
             if raw_id is None:
                 continue
             if not isinstance(raw_id, str) or not raw_id.strip():
                 raise GraphError(f"$.objects[{index}].{field} must be a non-empty string")
-            semantic = f"{semantic_type}::{name}"
+            semantic = _semantic_name(target_id, semantic_type, name)
             identities[semantic_type].add(semantic)
-            previous = maps[field].get(raw_id)
+            key = _mapping_key(target_id, raw_id)
+            previous = maps[field].get(key)
             if previous is not None and previous != semantic:
                 raise GraphError(f"duplicate {field} {raw_id!r} for {previous!r} and {semantic!r}")
-            maps[field][raw_id] = semantic
+            maps[field][key] = semantic
     return maps, identities
 
 
@@ -217,15 +248,26 @@ def _semantic_reference(
     identities: set[str],
     semantic_type: str,
     path: str,
+    target_id: str | None = None,
     allow_name: bool = False,
 ) -> Any:
     if isinstance(value, str):
         candidates: set[str] = set()
-        if value in mapping:
+        semantic_prefix = f"{target_id}::{semantic_type}::" if target_id else None
+        if (
+            semantic_prefix
+            and value.startswith(semantic_prefix)
+            and len(value) > len(semantic_prefix)
+        ):
+            candidates.add(value)
+        scoped_value = _mapping_key(target_id, value)
+        if scoped_value in mapping:
+            candidates.add(mapping[scoped_value])
+        if target_id is None and value in mapping:
             candidates.add(mapping[value])
         if value in identities:
             candidates.add(value)
-        named = f"{semantic_type}::{value}"
+        named = _semantic_name(target_id, semantic_type, value)
         if allow_name and named in identities:
             candidates.add(named)
         if not candidates:
@@ -247,6 +289,7 @@ def _semantic_reference(
                 identities=identities,
                 semantic_type=semantic_type,
                 path=f"{path}[{index}]",
+                target_id=target_id,
                 allow_name=allow_name,
             )
             for index, item in enumerate(value)
@@ -261,6 +304,7 @@ def _translate_references(
     identities: dict[str, set[str]],
     parent_key: str | None = None,
     path: str = "$",
+    target_id: str | None = None,
 ) -> Any:
     """Replace server IDs with semantic references and reject incomplete reference graphs."""
     if isinstance(value, dict):
@@ -275,6 +319,7 @@ def _translate_references(
                     identities=identities[semantic_type],
                     semantic_type=semantic_type,
                     path=f"{path}.{key}",
+                    target_id=target_id,
                 )
             elif key == "tagName" and parent_key in SEQUENCING_KEYS:
                 translated[key] = _semantic_reference(
@@ -283,6 +328,7 @@ def _translate_references(
                     identities=identities["tag"],
                     semantic_type="tag",
                     path=f"{path}.{key}",
+                    target_id=target_id,
                     allow_name=True,
                 )
             else:
@@ -292,6 +338,7 @@ def _translate_references(
                     identities=identities,
                     parent_key=key,
                     path=f"{path}.{key}",
+                    target_id=target_id,
                 )
         return translated
     if isinstance(value, list):
@@ -302,13 +349,16 @@ def _translate_references(
                 identities=identities,
                 parent_key=parent_key,
                 path=f"{path}[{index}]",
+                target_id=target_id,
             )
             for index, item in enumerate(value)
         ]
     return value
 
 
-def _normalize_graph(value: Any) -> dict[str, dict[str, Any]]:
+def _normalize_graph(
+    value: Any, *, target_types: dict[str, str] | None = None
+) -> dict[str, dict[str, Any]]:
     """Return semantic objects with server IDs translated in cross-object references."""
     if isinstance(value, dict):
         objects = value.get("objects")
@@ -325,12 +375,13 @@ def _normalize_graph(value: Any) -> dict[str, dict[str, Any]]:
         _identity(raw, path)
         raw_objects.append(raw)
 
-    maps, identities = _reference_maps(raw_objects)
+    maps, identities = _reference_maps(raw_objects, target_types)
     normalized: dict[str, dict[str, Any]] = {}
     for index, raw in enumerate(raw_objects):
         path = f"$.objects[{index}]"
         object_type, name = _identity(raw, path)
-        key = f"{object_type}::{name}"
+        target_id = _target_id(raw, path)
+        key = _semantic_name(target_id, object_type, name)
         if key in normalized:
             raise GraphError(f"duplicate semantic object identity {key!r}")
         cleaned = {field: value for field, value in raw.items() if field not in ROOT_METADATA_KEYS}
@@ -342,16 +393,19 @@ def _normalize_graph(value: Any) -> dict[str, dict[str, Any]]:
                 maps=maps,
                 identities=identities,
                 path=path,
+                target_id=target_id,
             ),
             path=path,
         )
     return {key: normalized[key] for key in sorted(normalized)}
 
 
-def normalize_graph(value: Any) -> dict[str, dict[str, Any]]:
+def normalize_graph(
+    value: Any, *, target_types: dict[str, str] | None = None
+) -> dict[str, dict[str, Any]]:
     """Normalize one graph and turn excessive nesting into an explicit graph error."""
     try:
-        return _normalize_graph(value)
+        return _normalize_graph(value, target_types=target_types)
     except RecursionError as exc:
         raise GraphError("graph nesting exceeds the supported safety limit") from exc
 
@@ -379,9 +433,14 @@ def differences(expected: Any, actual: Any, path: str = "$") -> list[dict[str, A
     return []
 
 
-def compare_graphs(expected: Any, saved: Any) -> dict[str, Any]:
-    normalized_expected = normalize_graph(expected)
-    normalized_saved = normalize_graph(saved)
+def compare_graphs(
+    expected: Any,
+    saved: Any,
+    *,
+    target_types: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    normalized_expected = normalize_graph(expected, target_types=target_types)
+    normalized_saved = normalize_graph(saved, target_types=target_types)
     expected_keys = set(normalized_expected)
     saved_keys = set(normalized_saved)
     field_differences: list[dict[str, Any]] = []

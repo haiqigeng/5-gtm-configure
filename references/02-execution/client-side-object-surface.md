@@ -7,7 +7,7 @@
 - [Cover the complete applicable web surface](#cover-the-complete-applicable-web-surface)
 - [Apply mutation authority by risk](#apply-mutation-authority-by-risk)
 - [Handle workspace and shared-object integrity](#handle-workspace-and-shared-object-integrity)
-- [Keep non-web resources outside scope](#keep-non-web-resources-outside-scope)
+- [Keep non-web resources outside a web-only route](#keep-non-web-resources-outside-a-web-only-route)
 - [Verify the saved surface](#verify-the-saved-surface)
 
 ## Purpose
@@ -38,7 +38,9 @@ and preserve its browser transport field, measurement/destination identity, cons
 owner, and consent topology. The setting routes the browser request to the supplied endpoint; it
 does not by itself create a second independent client request to the normal Google endpoint. The
 receiving server container's clients, transformations, tags, routing, and deduplication remain
-external to this skill.
+external in a `web`-only run. For an explicitly authorized `pipeline` run, load the server and
+pipeline references and model those receiving objects as a separate target; web authority never
+grants receiver authority implicitly.
 
 ## Cover the complete applicable web surface
 
@@ -90,9 +92,9 @@ Do not use a container-wide object listing as a cleanup opportunity. A Zone, env
 or destination discovered during configuration is integration evidence, not automatic mutation
 scope.
 
-## Keep non-web resources outside scope
+## Keep non-web resources outside a web-only route
 
-Do not configure:
+In a `web`-only run, do not configure:
 
 - server-container clients or server Transformation objects;
 - server-side tags, Conversions API, event-ID, or browser/server deduplication;
@@ -107,3 +109,10 @@ For every touched or reused object family, read back stable identity, full store
 folder, consent, consumers, environment scope, template/version, and fingerprint when available.
 Confirm that required built-ins are enabled, every reference resolves, high-impact families remain
 untouched unless explicitly authorized, and an identical recomputation is a no-op.
+
+## Keep the server surface separate
+
+This file remains authoritative for web containers. For a server target, load
+`server/object-surface-and-ingress.md`: Clients and Transformations are server families, server
+triggers evaluate Event Data, and browser built-ins/DOM/dataLayer lifecycle objects do not exist.
+Use target-scoped identity so equally named web and server tags never collide.

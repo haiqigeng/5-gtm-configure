@@ -153,3 +153,9 @@ publication explicitly separate.
 - https://support.google.com/google-ads/answer/7305793
 - https://support.google.com/google-ads/answer/13262500
 - https://developers.google.com/tag-platform/security/concepts/consent-mode
+
+## Server route
+
+When server delivery is requested, load `server/media-google-ads.md`. Reconcile native Google
+server migration, Conversion Linker, enhanced conversions, and any retained browser conversion;
+do not impose a generic CAPI `event_id` rule.

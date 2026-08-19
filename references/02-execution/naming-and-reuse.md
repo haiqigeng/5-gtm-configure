@@ -114,4 +114,17 @@ mutation and verify the saved folder reference.
 
 Use object notes/descriptions when supported to record a critical source event, vendor schema decision, consent exception, template dependency, or temporary blocker. Keep notes concise and free of client secrets or personal data.
 
-Do not duplicate the entire handoff inside every object.
+Do not duplicate the entire configuration result inside every object.
+
+## Name target ownership without duplicating semantics
+
+Keep existing web naming defaults. For server objects, make the family and destination role clear,
+for example `Client - GA4 - Web transport`, `EDV - transaction_id`, `Server - Meta - Purchase`, or
+`Transformation - Meta - Item projection`. Use target-scoped semantic keys internally rather than
+forcing target IDs into every visible name.
+
+Reuse one compatible Client for a request class and one Event Data variable for an identical path;
+do not create one Client per web tag. Use a shared endpoint Constant/LUT only when it provides real
+reuse or environment routing, and LUT/RLT for deterministic routing rather than decorative
+machinery. Keep folders shallow and destination-oriented. Never reuse a broad Transformation or
+secret-bearing template merely because its name looks compatible.

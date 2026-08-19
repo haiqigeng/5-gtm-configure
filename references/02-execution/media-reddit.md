@@ -42,3 +42,8 @@ Read back pixel identity, base/event separation, event and parameter set, item s
 template/version, triggers, consent, automatic behavior, consumers, and duplicates. Record Reddit
 Events Manager conversion setup, audiences, catalog, runtime diagnostics, and publication as
 external dependencies.
+
+## Server route
+
+For Reddit CAPI, load `server/media-reddit.md`. Map current CAPI match keys, products, token, and
+`conversion_id`; no dedup contract is needed when only one ingestion type sends the occurrence.

@@ -97,7 +97,7 @@ When any denied-state request, field, storage, or revocation behavior remains un
 
 ## Record and validate the decision
 
-For each product, add a consent-capability row to the handoff:
+For each product, add a consent-capability row to the configuration result:
 
 | Product | Official mode | Selected classification | Loads denied | Request denied | Storage denied | Consent API/types | CMP/template | Approval | Static status / optional supplied evidence |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -118,3 +118,15 @@ Use exact documented language for denied-state transmission. Label the final res
 - https://help.piwik.pro/support/questions/how-can-i-collect-anonymous-visitor-data-if-i-dont-use-piwik-pro-tag-manager-and-consent-manager/
 - https://ads.tiktok.com/help/article/how-to-use-cookies-with-tiktok-pixel
 - https://help.pinterest.com/en/business/article/install-the-base-code
+
+## Non-Google server destinations
+
+Do not infer a universal advanced consent mode from Google or Microsoft. For each server media
+product, inspect whether its installed template has a native consent field/check and whether the
+official server product supports limited, anonymous, cookieless, opt-out, or suppression behavior.
+Use that exact mechanism only with explicit policy and evidence.
+
+Otherwise forward an approved CMP state and apply one server blocking trigger that fails unknown
+state closed. Prove event coverage for every destination trigger. Do not invent grant events such
+as `microsoft_ads_consent_granted`; use the verified CMP lifecycle/state and current product
+mechanics.

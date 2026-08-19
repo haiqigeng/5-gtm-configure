@@ -227,9 +227,14 @@ After mutation, re-read and compare:
 Record platform-side conversion, optimization, catalog, audience, or account work separately. A
 saved browser tag does not prove that those objects exist or that runtime delivery succeeded.
 
-## Current client-side boundary
+## Choose browser, server, or dual delivery deliberately
 
-Never generate an event ID or design browser/server deduplication for a browser-only request. When
-an explicit media brief supplies an approved browser `event_id`, map it only if current official
-browser documentation and the installed template support that browser field. Record server-side
-GTM, Conversions API, and deduplication architecture as deferred.
+For a browser-only request, never generate an event ID or design browser/server deduplication. Map
+an approved browser identifier only when the current exact product and installed template support
+it. For a server or pipeline request, load the matching file under `server/` and map the server
+product independently; browser fields are not a CAPI schema.
+
+Classify each destination event as browser-only, server-only/replacement, dual with a shared
+documented ID, or template-native dedup. Record an overlap decision before retaining two routes.
+The same business event name is not proof that two requests deduplicate, and an official API is not
+proof that a supported GTM server template exists.

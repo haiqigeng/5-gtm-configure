@@ -31,7 +31,7 @@ Create a different trigger type only when:
 - the analyst approves the fallback;
 - an approved site contract, supplied implementation artifact, or authoritative human decision establishes that the chosen signal represents the action;
 - the selector, URL, history state, visibility rule, or timing is stable;
-- the handoff records the resulting fragility and external site dependency.
+- the configuration result records the resulting fragility and external site dependency.
 
 Do not create click, form, timer, scroll, visibility, DOM, or URL triggers merely because GTM supports them. A click is not automatically a successful form submission, purchase, or lead.
 

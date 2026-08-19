@@ -132,3 +132,8 @@ Custom Conversion, optimization, and publication dependencies separately and mak
 ## Official entry point
 
 - https://developers.facebook.com/docs/meta-pixel/reference/
+
+## Server route
+
+For Meta Conversions API, load `server/media-meta.md`. Map CAPI independently, preserve complete
+item cardinality, and record Pixel/CAPI overlap with one current Meta-documented occurrence ID.

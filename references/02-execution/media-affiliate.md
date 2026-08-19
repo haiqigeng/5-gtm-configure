@@ -67,3 +67,8 @@ Read back advertiser/program identity, base and conversion tags, every field and
 template/version, triggers, consent, firing options, duplicate owner, consumers, and external
 platform dependencies. `Configured` proves the saved browser graph, not affiliate attribution,
 commission calculation, network receipt, or server postback behavior.
+
+## Server route
+
+For a partner postback/server pixel, load `server/media-affiliate.md` and require the exact official
+partner contract. There is no universal affiliate server payload or dedup rule.

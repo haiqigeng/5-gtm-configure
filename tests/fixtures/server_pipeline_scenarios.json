@@ -1,0 +1,90 @@
+{
+  "schema_version": "1.0",
+  "platform_scenarios": [
+    {
+      "platform": "google-ads",
+      "server_route": "native",
+      "official_entry_point": "https://developers.google.com/tag-platform/tag-manager/server-side/ads-setup",
+      "overlap_rule": "Use current Google server migration behavior; do not impose generic event_id."
+    },
+    {
+      "platform": "floodlight",
+      "server_route": "native",
+      "official_entry_point": "https://developers.google.com/tag-platform/tag-manager/server-side/fl-setup",
+      "overlap_rule": "Keep Counter/Sales and current Google migration semantics distinct."
+    },
+    {
+      "platform": "microsoft-ads",
+      "server_route": "template-required",
+      "official_entry_point": "https://learn.microsoft.com/en-us/advertising/guides/uet-conversion-api-integration",
+      "overlap_rule": "Prove current eventId support and the paired ID Sync dependency."
+    },
+    {
+      "platform": "meta",
+      "server_route": "template-required",
+      "official_entry_point": "https://developers.facebook.com/docs/marketing-api/conversions-api/",
+      "overlap_rule": "Pixel and CAPI use the same occurrence event_id and compatible event name."
+    },
+    {
+      "platform": "tiktok",
+      "server_route": "vendor-supported",
+      "official_entry_point": "https://ads.tiktok.com/help/article/how-to-set-up-events-api-for-server-side-tagging-in-google-tag-manager",
+      "overlap_rule": "Inspect the vendor-generated owner or prove one shared event_id."
+    },
+    {
+      "platform": "snapchat",
+      "server_route": "template-required",
+      "official_entry_point": "https://developers.snap.com/marketing-api/Conversions-API/Deduplication",
+      "overlap_rule": "Map current client_dedup_id/event_id and purchase companion fields exactly."
+    },
+    {
+      "platform": "linkedin",
+      "server_route": "template-required",
+      "official_entry_point": "https://learn.microsoft.com/en-us/linkedin/marketing/conversions/deduplication",
+      "overlap_rule": "Use the current occurrence-level eventId for the relevant conversion rule."
+    },
+    {
+      "platform": "pinterest",
+      "server_route": "template-required",
+      "official_entry_point": "https://developers.pinterest.com/docs/track-conversions/track-conversions-in-the-api/",
+      "overlap_rule": "Map the required API event_id and current Tag eventID companion fields."
+    },
+    {
+      "platform": "x",
+      "server_route": "template-required",
+      "official_entry_point": "https://docs.x.com/x-ads-api/measurement/web-conversions",
+      "overlap_rule": "Prove conversion_id behavior for the exact X conversion product."
+    },
+    {
+      "platform": "reddit",
+      "server_route": "template-required",
+      "official_entry_point": "https://ads-api.reddit.com/docs/v3/guides/programs/capi",
+      "overlap_rule": "Use current conversion_id only when Pixel and CAPI overlap."
+    },
+    {
+      "platform": "criteo",
+      "server_route": "exact-product-required",
+      "official_entry_point": "https://developers.criteo.com/",
+      "overlap_rule": "Do not infer a generic CAPI or dedup rule across Criteo products."
+    },
+    {
+      "platform": "affiliate",
+      "server_route": "partner-contract-required",
+      "official_entry_point": "partner-specific",
+      "overlap_rule": "Block until the exact partner postback and duplicate contract are supplied."
+    }
+  ],
+  "v8_wrongness_scenario": {
+    "event": "add_to_cart",
+    "delivery": "dual",
+    "stable_site_id_available": false,
+    "approved_fallback": "one shared GTM event-scoped variable",
+    "forbidden": [
+      "browser-only generation",
+      "separate browser and transporter generators",
+      "server-side regeneration",
+      "payload eligibility trigger",
+      "purchase fallback"
+    ]
+  }
+}

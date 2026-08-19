@@ -119,3 +119,9 @@ the GTM completion claim.
 - https://learn.microsoft.com/en-us/advertising/msa-help/hlp_ba_conc_uet_dynamicconsentgtm
 - https://learn.microsoft.com/en-us/clarity/setup-and-installation/consent-mode
 - https://learn.microsoft.com/en-us/clarity/setup-and-installation/cmp-integration-guide
+
+## Server route
+
+When the exact Microsoft Conversions API product is requested, load
+`server/media-microsoft-ads.md`. Inspect the supported server template and ID Sync dependency; do
+not copy UET fields or invent a consent-grant dataLayer event.

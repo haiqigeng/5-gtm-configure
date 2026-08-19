@@ -160,3 +160,16 @@ Record the configured route as `strict/basic blocked` or `advanced consent-aware
 - https://developers.google.com/tag-platform/security/guides/privacy
 - https://support.google.com/tagmanager/answer/10718549
 - https://developers.google.com/tag-platform/security/guides/consent-debugging
+
+## Server pipeline ownership
+
+Configure Google Consent Mode in the web container through one documented default/update owner.
+The Google tag carries the relevant consent state with requests, and consent-aware Google tags in
+the server container process it according to current Google documentation. Record this as
+`incoming-google-consent-native`; do not invent a second gtag consent implementation in the server
+container and do not translate a non-Google vendor grant into Google consent by analogy.
+
+Basic mode may block a web request before transport; advanced mode may send documented limited
+requests. Preserve the explicitly approved mode and prove web timing, signal propagation, and each
+server Google tag's native behavior. A server blocking trigger is not a substitute for Google
+Consent Mode unless current product documentation explicitly requires a separate condition.

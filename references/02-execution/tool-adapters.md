@@ -103,7 +103,7 @@ Do not mutate from an informal prose summary. If the adapter cannot represent a 
 preserve the intended type/shape, stop that object and use another authorized adapter or mark the
 affected configuration `Blocked`.
 
-For analytics, use the strict v5 configuration-contract validation, normalized collection contract,
+For analytics, use the strict v6 configuration-contract validation, normalized collection contract,
 and zero-difference conformance result as adapter preconditions. Keep technical infrastructure fields
 separate so the adapter does not mistake a required GTM reference for an approved outgoing
 parameter.
@@ -263,3 +263,25 @@ required outcome.
 - https://developers.google.com/tag-platform/tag-manager/api/reference/rest/v2/accounts.containers.workspaces.tags
 - https://developers.google.com/tag-platform/tag-manager/api/reference/rest
 - https://support.google.com/tagmanager/answer/6106997
+
+## Route adapters by target and family
+
+Bind one authenticated adapter/session to each stable `target_id`. Discover list/get/create/update/
+remove support per resource family and exhaust pagination per target. Server capability discovery
+must include Clients and Transformations when those objects are in scope; support for server tags
+does not imply support for Client claim changes.
+
+Block only the unsupported family and its dependency subtree. An existing compatible Client may
+allow independent tag work after authoritative readback; an unconfigurable required Client blocks
+its consumers and cutover. Redact secret and PII-bearing fields before a response, error, baseline,
+or diff is persisted.
+
+Prefer GTM MCP, then API, then authorized complete export/import, then signed-in UI for an operation
+the semantic adapters cannot express. Do not silently switch to browser automation or synthesize
+unknown API/template fields. Keep bounded non-applied rate-limit retries and read-before-retry for
+ambiguous responses.
+
+Official server families:
+
+- https://developers.google.com/tag-platform/tag-manager/api/reference/rest/v2/accounts.containers.workspaces.clients
+- https://developers.google.com/tag-platform/tag-manager/api/reference/rest/v2/accounts.containers.workspaces.transformations

@@ -108,7 +108,7 @@ tag rather than borrowing a OneTrust, Didomi, or Axeptio pattern.
 
 ## Saved-state acceptance
 
-Complete the consent truth table in the handoff reference. Read back every CMP tag, default/update
+Complete the consent truth table in the configuration result. Read back every CMP tag, default/update
 setting, normal trigger, exception/additional-consent check, predicate, event scope, firing option,
 and consumer. Confirm that unknown and denial fail closed for basic routes, explicit advanced routes
 remain unblocked as designed, repeated events cannot duplicate initialization, and revocation does

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Adapter-neutral pagination and mutation safety state machine for configure-gtm."""
+"""Target-aware adapter execution with dependency-only failure containment."""
 
 from __future__ import annotations
 
@@ -7,684 +7,506 @@ import random
 import time
 from collections.abc import Callable
 from copy import deepcopy
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
 
+import adapter_runtime_web as legacy
 from configuration_run import (
-    RunConflictError,
     atomic_write,
     build_pre_write_comparison,
-    canonical_sha256,
+    build_verification_comparison,
     checkpoint_operation,
     inspect_document,
     load_document,
     run_file_lock,
-    validate_verification_comparison,
 )
+from redaction import (
+    SecretProvider,
+    SecretResolutionError,
+    redact_for_persistence,
+    resolve_for_mutation,
+    scrub_sensitive_text,
+)
+from resource_registry import capability_matrix, unsupported_operation_reason
+from run_state import build_target_baseline as build_target_baseline
+
+AdapterExecutionError = legacy.AdapterExecutionError
+RateLimitError = legacy.RateLimitError
+AuthenticationError = legacy.AuthenticationError
+AmbiguousWriteError = legacy.AmbiguousWriteError
+ConfigurationAdapter = legacy.ConfigurationAdapter
+collect_paginated = legacy.collect_paginated
+collect_resource_baseline = legacy.collect_resource_baseline
+build_container_baseline = legacy.build_container_baseline
 
 
-class AdapterExecutionError(RuntimeError):
-    """Raised when adapter behavior cannot be interpreted safely."""
-
-    def __init__(self, message: str, *, code: str = "adapter_error") -> None:
-        super().__init__(message)
-        self.code = code
-
-
-class RateLimitError(AdapterExecutionError):
-    """A documented rejection that did not apply the requested operation."""
-
-    def __init__(self, message: str, *, retry_after_seconds: float | None = None) -> None:
-        super().__init__(message, code="rate_limited")
-        if retry_after_seconds is not None and retry_after_seconds < 0:
-            raise ValueError("retry_after_seconds must be non-negative")
-        self.retry_after_seconds = retry_after_seconds
-
-
-class AuthenticationError(AdapterExecutionError):
-    """Authentication expired or resolved to the wrong account/container."""
-
-    def __init__(self, message: str) -> None:
-        super().__init__(message, code="authentication_error")
-
-
-class AmbiguousWriteError(AdapterExecutionError):
-    """The adapter cannot prove whether the requested mutation was saved."""
-
-    def __init__(self, message: str) -> None:
-        super().__init__(message, code="ambiguous_write")
-
-
-class ConfigurationAdapter(Protocol):
-    """Small semantic boundary implemented by a programmatic GTM adapter."""
+class TargetAdapter(Protocol):
+    """Semantic adapter bound to exactly one authorized GTM target."""
 
     def read(self, operation: dict[str, Any]) -> dict[str, Any] | None: ...
-
-    def compare(
-        self,
-        operation: dict[str, Any],
-        saved: dict[str, Any] | None,
-    ) -> dict[str, Any]: ...
 
     def mutate(self, operation: dict[str, Any]) -> dict[str, Any] | None: ...
 
 
-def _retry_delay(
-    error: RateLimitError,
-    retry_index: int,
-    *,
-    base_delay_seconds: float,
-    max_delay_seconds: float,
-    random_value: Callable[[], float],
-) -> float | None:
-    if error.retry_after_seconds is not None:
-        if error.retry_after_seconds > max_delay_seconds:
-            return None
-        return error.retry_after_seconds
-    cap = min(base_delay_seconds * (2**retry_index), max_delay_seconds)
-    return max(0.0, min(1.0, random_value())) * cap
+@dataclass(frozen=True)
+class TargetBinding:
+    adapter: TargetAdapter
+    capabilities: dict[str, dict[str, bool]]
+    secret_provider: SecretProvider | None
 
 
-def collect_paginated(
-    fetch_page: Callable[[str | None], dict[str, Any]],
-    *,
-    max_pages: int = 1000,
-    max_rate_limit_retries: int = 2,
-    base_retry_delay_seconds: float = 0.5,
-    max_retry_delay_seconds: float = 8.0,
-    sleep: Callable[[float], None] = time.sleep,
-    random_value: Callable[[], float] = random.random,
-) -> list[dict[str, Any]]:
-    """Exhaust cursor pagination; reject loops, malformed pages, and unbounded retries."""
-    if (
-        max_pages < 1
-        or max_rate_limit_retries < 0
-        or base_retry_delay_seconds < 0
-        or max_retry_delay_seconds < 0
-    ):
-        raise ValueError("page/retry limits and retry delays must be non-negative")
-    cursor: str | None = None
-    seen_cursors: set[str] = set()
-    items: list[dict[str, Any]] = []
-    for _ in range(max_pages):
-        retries = 0
-        while True:
-            try:
-                page = fetch_page(cursor)
-                break
-            except RateLimitError as exc:
-                if retries >= max_rate_limit_retries:
-                    raise
-                delay = _retry_delay(
-                    exc,
-                    retries,
-                    base_delay_seconds=base_retry_delay_seconds,
-                    max_delay_seconds=max_retry_delay_seconds,
-                    random_value=random_value,
-                )
-                if delay is None:
-                    raise
-                retries += 1
-                sleep(delay)
-        if not isinstance(page, dict) or not isinstance(page.get("items"), list):
-            raise AdapterExecutionError("adapter page must contain an items array")
-        for index, item in enumerate(page["items"]):
-            if not isinstance(item, dict):
-                raise AdapterExecutionError(f"adapter page item {index} must be an object")
-            items.append(item)
-        next_cursor = page.get("next_cursor")
-        if next_cursor is None:
-            return items
-        if not isinstance(next_cursor, str) or not next_cursor:
-            raise AdapterExecutionError("next_cursor must be a non-empty string or null")
-        if next_cursor in seen_cursors:
-            raise AdapterExecutionError(f"pagination cursor loop at {next_cursor!r}")
-        seen_cursors.add(next_cursor)
-        cursor = next_cursor
-    raise AdapterExecutionError(f"pagination exceeded the {max_pages}-page safety limit")
+class TargetAdapterRegistry:
+    """Bind adapters and discovered capabilities to stable run target IDs."""
 
+    def __init__(self) -> None:
+        self._bindings: dict[str, TargetBinding] = {}
 
-def collect_resource_baseline(
-    fetch_page: Callable[[str, str | None], dict[str, Any]],
-    resource_families: list[str],
-    *,
-    max_pages_per_family: int = 1000,
-    max_rate_limit_retries: int = 2,
-    base_retry_delay_seconds: float = 0.5,
-    max_retry_delay_seconds: float = 8.0,
-    sleep: Callable[[float], None] = time.sleep,
-    random_value: Callable[[], float] = random.random,
-) -> dict[str, list[dict[str, Any]]]:
-    """Collect each requested resource family exactly once through complete pagination."""
-    normalized = []
-    for index, family in enumerate(resource_families):
-        if not isinstance(family, str) or not family.strip():
-            raise ValueError(f"resource_families[{index}] must be a non-empty string")
-        normalized.append(family.strip())
-    if not normalized:
-        raise ValueError("resource_families must not be empty")
-    if len(set(normalized)) != len(normalized):
-        raise ValueError("resource_families must not contain duplicates")
-
-    baseline: dict[str, list[dict[str, Any]]] = {}
-    for family in normalized:
-        baseline[family] = collect_paginated(
-            lambda cursor, selected=family: fetch_page(selected, cursor),
-            max_pages=max_pages_per_family,
-            max_rate_limit_retries=max_rate_limit_retries,
-            base_retry_delay_seconds=base_retry_delay_seconds,
-            max_retry_delay_seconds=max_retry_delay_seconds,
-            sleep=sleep,
-            random_value=random_value,
+    def register(
+        self,
+        target: dict[str, Any],
+        adapter: TargetAdapter,
+        capabilities: dict[str, Any],
+        *,
+        secret_provider: SecretProvider | None = None,
+    ) -> None:
+        target_id = target["target_id"]
+        if target_id in self._bindings:
+            raise AdapterExecutionError(f"duplicate target adapter {target_id!r}")
+        self._bindings[target_id] = TargetBinding(
+            adapter=adapter,
+            capabilities=capability_matrix(target, capabilities),
+            secret_provider=secret_provider,
         )
-    return baseline
+
+    def binding(self, target_id: str) -> TargetBinding:
+        try:
+            return self._bindings[target_id]
+        except KeyError as exc:
+            raise AdapterExecutionError(
+                f"no adapter is registered for target {target_id!r}", code="target_unavailable"
+            ) from exc
+
+    def discovered_capabilities(self, target_id: str) -> dict[str, dict[str, bool]] | None:
+        """Return a copy of a registered target's normalized capability matrix."""
+        binding = self._bindings.get(target_id)
+        return deepcopy(binding.capabilities) if binding else None
 
 
-def build_container_baseline(
-    resources: dict[str, list[dict[str, Any]]],
-    *,
-    strategy: str,
-    captured_at: str,
-    in_scope_tag_keys: list[str],
-    preexisting_workspace_changes: int,
-) -> dict[str, Any]:
-    """Build the bound run-baseline record from one completed paginated collection."""
-    if strategy not in {"relevant-families", "full-paginated"}:
-        raise ValueError("strategy must be relevant-families or full-paginated")
-    if not isinstance(resources, dict) or not resources:
-        raise ValueError("resources must contain at least one collected family")
-    for family, items in resources.items():
-        if not isinstance(family, str) or not family.strip() or not isinstance(items, list):
-            raise ValueError("resources must map non-empty family names to item arrays")
-        if any(not isinstance(item, dict) for item in items):
-            raise ValueError(f"resources.{family} contains a non-object item")
-    trigger_index = []
-    for index, trigger in enumerate(resources.get("trigger", [])):
-        if not isinstance(trigger, dict):
-            raise ValueError(f"resources.trigger[{index}] must be an object")
-        trigger_id = trigger.get("triggerId")
-        object_key = trigger.get("object_key")
-        if isinstance(trigger_id, str) and trigger_id in {
-            "2147479553",
-            "2147479572",
-            "2147479573",
-        }:
-            continue
-        if not isinstance(object_key, str) or not object_key.startswith("trigger::"):
-            name = trigger.get("name")
-            if isinstance(name, str) and name.strip():
-                object_key = f"trigger::{name.strip()}"
-            else:
-                raise ValueError(f"resources.trigger[{index}] needs a semantic object key or name")
-        trigger_type = trigger.get("type")
-        if not isinstance(trigger_type, str) or not trigger_type.strip():
-            raise ValueError(f"resources.trigger[{index}].type must be a non-empty string")
-        fingerprint = trigger.get("fingerprint")
-        if fingerprint is not None and not isinstance(fingerprint, str):
-            raise ValueError(f"resources.trigger[{index}].fingerprint must be a string or null")
-        if isinstance(fingerprint, str):
-            if len(fingerprint) != 71 or not fingerprint.startswith("sha256:"):
-                raise ValueError(
-                    f"resources.trigger[{index}].fingerprint must be a sha256 fingerprint"
-                )
-            try:
-                int(fingerprint.removeprefix("sha256:"), 16)
-            except ValueError as exc:
-                raise ValueError(
-                    f"resources.trigger[{index}].fingerprint must be a sha256 fingerprint"
-                ) from exc
-        trigger_index.append(
-            {
-                "object_key": object_key,
-                "type": trigger_type,
-                "fingerprint": fingerprint,
-            }
-        )
-    return {
-        "strategy": strategy,
-        "captured_at": captured_at,
-        "complete": True,
-        "resource_families": list(resources),
-        "family_counts": {family: len(items) for family, items in resources.items()},
-        "in_scope_tag_keys": list(in_scope_tag_keys),
-        "trigger_index": trigger_index,
-        "preexisting_workspace_changes": preexisting_workspace_changes,
-        "fingerprint": canonical_sha256(resources),
-    }
-
-
-def _result(saved: dict[str, Any] | None, response: dict[str, Any] | None) -> dict[str, Any]:
-    source = saved or response or {}
-    return {
-        "object_id": source.get("object_id")
-        or source.get("tagId")
-        or source.get("triggerId")
-        or source.get("variableId")
-        or source.get("folderId")
-        or source.get("templateId")
-        or source.get("zoneId")
-        or source.get("environmentId"),
-        "fingerprint": source.get("fingerprint"),
-    }
-
-
-def _save(path: Path, document: dict[str, Any]) -> None:
-    atomic_write(path, document)
-
-
-def _operation(document: dict[str, Any], operation_id: str) -> dict[str, Any]:
-    by_id = {item["operation_id"]: item for item in document["object_changes"]}
-    try:
-        return by_id[operation_id]
-    except KeyError as exc:
-        raise AdapterExecutionError(
-            f"run artifact no longer contains operation {operation_id!r}",
-            code="invalid_run",
-        ) from exc
-
-
-def _read(adapter: ConfigurationAdapter, operation: dict[str, Any]) -> dict[str, Any] | None:
+def _read(adapter: TargetAdapter, operation: dict[str, Any]) -> dict[str, Any] | None:
     saved = adapter.read(deepcopy(operation))
     if saved is not None and not isinstance(saved, dict):
         raise AdapterExecutionError(
-            "adapter.read must return an object or null",
+            "target adapter read must return an object or null",
             code="adapter_schema_error",
         )
-    return deepcopy(saved)
+    return saved
 
 
-def _compare(
-    adapter: ConfigurationAdapter,
-    operation: dict[str, Any],
-    saved: dict[str, Any] | None,
-) -> dict[str, Any]:
-    comparison = adapter.compare(deepcopy(operation), deepcopy(saved))
-    try:
-        return validate_verification_comparison(
-            comparison,
-            operation=operation,
-            saved=saved,
-        )
-    except ValueError as exc:
-        raise AdapterExecutionError(
-            f"adapter comparison evidence is invalid: {exc}",
-            code="adapter_schema_error",
-        ) from exc
-
-
-def _execute_ready_operations_locked(
-    run_path: Path,
-    adapter: ConfigurationAdapter,
+def _call_with_rate_limit(
+    callback: Callable[[], Any],
     *,
-    max_rate_limit_retries: int = 2,
-    timestamp: Callable[[], str] | None = None,
-    base_retry_delay_seconds: float = 0.5,
-    max_retry_delay_seconds: float = 8.0,
-    sleep: Callable[[float], None] = time.sleep,
-    random_value: Callable[[], float] = random.random,
+    max_retries: int,
+    base_delay_seconds: float,
+    max_delay_seconds: float,
+    sleep: Callable[[float], None],
+    random_value: Callable[[], float],
+) -> Any:
+    """Retry only a documented non-applied rate-limit response within a strict bound."""
+    for retry_index in range(max_retries + 1):
+        try:
+            return callback()
+        except RateLimitError as exc:
+            if retry_index >= max_retries:
+                raise
+            delay = legacy._retry_delay(
+                exc,
+                retry_index,
+                base_delay_seconds=base_delay_seconds,
+                max_delay_seconds=max_delay_seconds,
+                random_value=random_value,
+            )
+            if delay is None:
+                raise
+            sleep(delay)
+    raise AssertionError("bounded retry loop exhausted without returning or raising")
+
+
+def _save(path: Path, document: dict[str, Any]) -> None:
+    atomic_write(path, redact_for_persistence(document))
+
+
+def _operation(document: dict[str, Any], operation_id: str) -> dict[str, Any]:
+    for operation in document["object_changes"]:
+        if operation["operation_id"] == operation_id:
+            return operation
+    raise AdapterExecutionError(f"unknown operation {operation_id!r}")
+
+
+def _target(document: dict[str, Any], target_id: str) -> dict[str, Any]:
+    for target in document["run"]["targets"]:
+        if target["target_id"] == target_id:
+            return target
+    raise AdapterExecutionError(f"unknown target {target_id!r}")
+
+
+def _execute_v3_locked(
+    run_path: Path,
+    registry: TargetAdapterRegistry,
+    *,
+    timestamp: Callable[[], str],
+    max_rate_limit_retries: int,
+    base_delay_seconds: float,
+    max_delay_seconds: float,
+    sleep: Callable[[float], None],
+    random_value: Callable[[], float],
 ) -> dict[str, Any]:
-    """Execute currently ready operations with durable checkpoints and no blind write retry."""
     document = load_document(run_path)
-    if max_rate_limit_retries < 0 or base_retry_delay_seconds < 0 or max_retry_delay_seconds < 0:
-        raise ValueError("retry limits and retry delays must be non-negative")
-    inspection = inspect_document(document)
-    if not inspection["resumable"]:
-        raise AdapterExecutionError(
-            "run contains failed, in-progress, or uncertain operations; resolve or explicitly "
-            "reopen them before execution",
-            code="unsafe_resume",
-        )
-    now = timestamp or (lambda: None)
-
-    while True:
-        inspection = inspect_document(document)
-        if inspection["unsafe_operations"]:
-            break
-        if not inspection["ready_operations"]:
-            break
-        operation_id = inspection["ready_operations"][0]
-        operation = _operation(document, operation_id)
-        at = now()
-        try:
-            existing = _read(adapter, operation)
-        except AuthenticationError as exc:
-            document = checkpoint_operation(
-                document,
-                operation_id=operation_id,
-                state="failed",
-                note="Authentication failed before mutation; no write attempted.",
-                timestamp=at,
-                error=str(exc),
-            )
-            _save(run_path, document)
-            break
-        except AdapterExecutionError as exc:
-            document = checkpoint_operation(
-                document,
-                operation_id=operation_id,
-                state="failed",
-                note="Adapter read failed before mutation; no write attempted.",
-                timestamp=at,
-                error=f"{exc.code}: {exc}",
-            )
-            _save(run_path, document)
-            break
-
-        try:
-            comparison = _compare(adapter, operation, existing)
-        except AdapterExecutionError as exc:
-            document = checkpoint_operation(
-                document,
-                operation_id=operation_id,
-                state="failed",
-                note="Adapter comparison failed before mutation; no write attempted.",
-                timestamp=at,
-                error=f"{exc.code}: {exc}",
-            )
-            _save(run_path, document)
-            break
-        if comparison["pass"]:
-            document = checkpoint_operation(
-                document,
-                operation_id=operation_id,
-                state="verified",
-                note="Existing saved state already matches; mutation skipped.",
-                timestamp=at,
-                result=_result(existing, None),
-                comparison=comparison,
-                saved=existing,
-            )
-            _save(run_path, document)
-            continue
-
-        if operation["action"] in {"reuse", "untouched"}:
-            document = checkpoint_operation(
-                document,
-                operation_id=operation_id,
-                state="failed",
-                note="Expected reusable object does not match saved state.",
-                timestamp=at,
-                error="semantic readback mismatch",
-            )
-            _save(run_path, document)
-            break
-
-        if operation["action"] == "create" and existing is not None:
-            document = checkpoint_operation(
-                document,
-                operation_id=operation_id,
-                state="failed",
-                note="Create target already exists with different saved state; no write attempted.",
-                timestamp=at,
-                error="create_conflict: semantic object identity is already occupied",
-            )
-            _save(run_path, document)
-            break
-
-        pre_write_comparison = None
-        if operation["action"] in {"update", "replace", "rename", "pause", "unpause", "remove"}:
-            try:
-                pre_write_comparison = build_pre_write_comparison(operation, existing)
-            except ValueError as exc:
-                document = checkpoint_operation(
-                    document,
-                    operation_id=operation_id,
-                    state="failed",
-                    note="Pre-write drift comparison could not be built; no write attempted.",
-                    timestamp=at,
-                    error=f"adapter_schema_error: {exc}",
-                )
-                _save(run_path, document)
-                break
-            if not pre_write_comparison["pass"]:
-                document = checkpoint_operation(
-                    document,
-                    operation_id=operation_id,
-                    state="failed",
-                    note="Saved object drifted from pre_change; no write attempted.",
-                    timestamp=at,
-                    pre_write_comparison=pre_write_comparison,
-                    pre_write_saved=existing,
-                    error="container_drift: live saved state differs from approved pre_change",
-                )
-                _save(run_path, document)
-                break
-
-        pre_write_checkpoint = {}
-        if pre_write_comparison is not None:
-            pre_write_checkpoint = {
-                "pre_write_comparison": pre_write_comparison,
-                "pre_write_saved": existing,
-            }
-        document = checkpoint_operation(
-            document,
-            operation_id=operation_id,
-            state="in_progress",
-            note="Read-before-write completed; starting one mutation.",
-            timestamp=at,
-            **pre_write_checkpoint,
-        )
+    capabilities_changed = False
+    for target in document["run"]["targets"]:
+        discovered = registry.discovered_capabilities(target["target_id"])
+        if discovered is not None and target["adapter_capabilities"] != discovered:
+            target["adapter_capabilities"] = discovered
+            capabilities_changed = True
+    if capabilities_changed:
         _save(run_path, document)
 
-        response: dict[str, Any] | None = None
-        retries = 0
-        while True:
+    while True:
+        document = load_document(run_path)
+        inspection = inspect_document(document)
+        ready = inspection["ready_operations"]
+        if not ready:
+            return inspection
+        progress = False
+        for operation_id in ready:
+            document = load_document(run_path)
+            operation = _operation(document, operation_id)
+            _target(document, operation["target_id"])
             try:
-                response = adapter.mutate(deepcopy(operation))
-                if response is not None and not isinstance(response, dict):
-                    raise AdapterExecutionError(
-                        "adapter.mutate must return an object or null",
-                        code="adapter_schema_error",
-                    )
-                response = deepcopy(response)
-                break
-            except RateLimitError as exc:
-                if retries >= max_rate_limit_retries:
-                    document = checkpoint_operation(
-                        document,
-                        operation_id=operation_id,
-                        state="failed",
-                        note="Bounded rate-limit retries exhausted; all remaining writes stopped.",
-                        timestamp=now(),
-                        error=str(exc),
-                    )
-                    _save(run_path, document)
-                    break
-                delay = _retry_delay(
-                    exc,
-                    retries,
-                    base_delay_seconds=base_retry_delay_seconds,
-                    max_delay_seconds=max_retry_delay_seconds,
-                    random_value=random_value,
-                )
-                if delay is None:
-                    document = checkpoint_operation(
-                        document,
-                        operation_id=operation_id,
-                        state="failed",
-                        note="Server retry window exceeds the configured bound; no retry attempted.",
-                        timestamp=now(),
-                        error=str(exc),
-                    )
-                    _save(run_path, document)
-                    break
-                retries += 1
-                sleep(delay)
-            except AuthenticationError as exc:
-                document = checkpoint_operation(
-                    document,
-                    operation_id=operation_id,
-                    state="failed",
-                    note="Authentication failed during mutation; all remaining writes stopped.",
-                    timestamp=now(),
-                    error=str(exc),
-                )
-                _save(run_path, document)
-                break
-            except AmbiguousWriteError as exc:
-                try:
-                    saved = _read(adapter, operation)
-                except AuthenticationError as readback_exc:
-                    document = checkpoint_operation(
-                        document,
-                        operation_id=operation_id,
-                        state="uncertain",
-                        note="Ambiguous response could not be resolved because readback authentication failed.",
-                        timestamp=now(),
-                        error=f"{exc}; authoritative readback failed: {readback_exc}",
-                    )
-                    _save(run_path, document)
-                    break
-                except AdapterExecutionError as readback_exc:
-                    document = checkpoint_operation(
-                        document,
-                        operation_id=operation_id,
-                        state="uncertain",
-                        note="Ambiguous response could not be resolved by authoritative readback.",
-                        timestamp=now(),
-                        error=f"{exc}; {readback_exc.code}: {readback_exc}",
-                    )
-                    _save(run_path, document)
-                    break
-                try:
-                    comparison = _compare(adapter, operation, saved)
-                except AdapterExecutionError as compare_exc:
-                    document = checkpoint_operation(
-                        document,
-                        operation_id=operation_id,
-                        state="uncertain",
-                        note="Ambiguous response could not be resolved because comparison evidence was invalid.",
-                        timestamp=now(),
-                        error=f"{exc}; {compare_exc.code}: {compare_exc}",
-                    )
-                    _save(run_path, document)
-                    break
-                if comparison["pass"]:
-                    document = checkpoint_operation(
-                        document,
-                        operation_id=operation_id,
-                        state="verified",
-                        note="Ambiguous response resolved by matching authoritative readback.",
-                        timestamp=now(),
-                        result=_result(saved, response),
-                        comparison=comparison,
-                        saved=saved,
-                    )
-                else:
-                    document = checkpoint_operation(
-                        document,
-                        operation_id=operation_id,
-                        state="uncertain",
-                        note="Ambiguous response was not resolved; mutation was not retried.",
-                        timestamp=now(),
-                        error=str(exc),
-                    )
-                _save(run_path, document)
-                break
+                binding = registry.binding(operation["target_id"])
             except AdapterExecutionError as exc:
                 document = checkpoint_operation(
                     document,
                     operation_id=operation_id,
-                    state="uncertain",
-                    note="The adapter response was invalid after the mutation call; no retry attempted.",
-                    timestamp=now(),
-                    error=f"{exc.code}: {exc}",
+                    state="failed",
+                    note="Target adapter is unavailable; dependents remain stopped.",
+                    timestamp=timestamp(),
+                    error=str(exc),
                 )
                 _save(run_path, document)
-                break
-        current_state = _operation(document, operation_id)["state"]
-        if current_state in {"failed", "uncertain", "verified"}:
-            if current_state != "verified":
-                break
-            continue
-
-        try:
-            saved = _read(adapter, operation)
-        except AuthenticationError as exc:
-            document = checkpoint_operation(
-                document,
-                operation_id=operation_id,
-                state="uncertain",
-                note="Mutation returned but authoritative readback failed; no retry attempted.",
-                timestamp=now(),
-                error=str(exc),
-            )
-            _save(run_path, document)
-            break
-        except AdapterExecutionError as exc:
-            document = checkpoint_operation(
-                document,
-                operation_id=operation_id,
-                state="uncertain",
-                note="Mutation returned but authoritative readback was invalid; no retry attempted.",
-                timestamp=now(),
-                error=f"{exc.code}: {exc}",
-            )
-            _save(run_path, document)
-            break
-        try:
-            comparison = _compare(adapter, operation, saved)
-        except AdapterExecutionError as exc:
-            document = checkpoint_operation(
-                document,
-                operation_id=operation_id,
-                state="uncertain",
-                note="Mutation returned but comparison evidence was invalid; no retry attempted.",
-                timestamp=now(),
-                error=f"{exc.code}: {exc}",
-            )
-            _save(run_path, document)
-            break
-        if comparison["pass"]:
-            document = checkpoint_operation(
-                document,
-                operation_id=operation_id,
-                state="verified",
-                note="Authoritative saved readback matches the intended object.",
-                timestamp=now(),
-                result=_result(saved, response),
-                comparison=comparison,
-                saved=saved,
-            )
-        else:
-            document = checkpoint_operation(
-                document,
-                operation_id=operation_id,
-                state="uncertain",
-                note="Mutation returned but saved readback does not match; no retry attempted.",
-                timestamp=now(),
-                error="saved readback mismatch",
-            )
-        _save(run_path, document)
-        if _operation(document, operation_id)["state"] != "verified":
-            break
-
-    return inspect_document(document)
+                progress = True
+                continue
+            reason = unsupported_operation_reason(operation, binding.capabilities)
+            if reason:
+                document = checkpoint_operation(
+                    document,
+                    operation_id=operation_id,
+                    state="failed",
+                    note="Required adapter family capability is unavailable.",
+                    timestamp=timestamp(),
+                    error=reason,
+                )
+                _save(run_path, document)
+                progress = True
+                continue
+            ephemeral_values: set[str] = set()
+            try:
+                current = _call_with_rate_limit(
+                    lambda: _read(binding.adapter, operation),
+                    max_retries=max_rate_limit_retries,
+                    base_delay_seconds=base_delay_seconds,
+                    max_delay_seconds=max_delay_seconds,
+                    sleep=sleep,
+                    random_value=random_value,
+                )
+                if operation["action"] == "create" and current is not None:
+                    comparison, safe_current = build_verification_comparison(operation, current)
+                    if comparison["pass"]:
+                        document = checkpoint_operation(
+                            document,
+                            operation_id=operation_id,
+                            state="verified",
+                            note="Existing semantic object already matches; no write performed.",
+                            timestamp=timestamp(),
+                            comparison=comparison,
+                            saved=safe_current,
+                        )
+                    else:
+                        document = checkpoint_operation(
+                            document,
+                            operation_id=operation_id,
+                            state="failed",
+                            note="Create conflict; existing semantic object was not overwritten.",
+                            timestamp=timestamp(),
+                            error="create_conflict",
+                        )
+                    _save(run_path, document)
+                    progress = True
+                    continue
+                if operation["action"] in {"reuse", "untouched"}:
+                    if current is None:
+                        document = checkpoint_operation(
+                            document,
+                            operation_id=operation_id,
+                            state="failed",
+                            note="Required existing object was not found; no write performed.",
+                            timestamp=timestamp(),
+                            error="existing_object_missing",
+                        )
+                    else:
+                        comparison, safe_current = build_verification_comparison(operation, current)
+                        if comparison["pass"]:
+                            document = checkpoint_operation(
+                                document,
+                                operation_id=operation_id,
+                                state="verified",
+                                note="Existing object compatibility verified; no write performed.",
+                                timestamp=timestamp(),
+                                comparison=comparison,
+                                saved=safe_current,
+                            )
+                        else:
+                            document = checkpoint_operation(
+                                document,
+                                operation_id=operation_id,
+                                state="failed",
+                                note="Existing object does not match the approved reuse contract.",
+                                timestamp=timestamp(),
+                                error="reuse_mismatch",
+                            )
+                    _save(run_path, document)
+                    progress = True
+                    continue
+                kwargs: dict[str, Any] = {}
+                if operation["action"] in {
+                    "update",
+                    "replace",
+                    "rename",
+                    "pause",
+                    "unpause",
+                    "remove",
+                }:
+                    pre_write_comparison, safe_current = build_pre_write_comparison(
+                        operation, current
+                    )
+                    if not pre_write_comparison["pass"]:
+                        document = checkpoint_operation(
+                            document,
+                            operation_id=operation_id,
+                            state="failed",
+                            note="Fresh target state differs from the approved pre-change snapshot; no write performed.",
+                            timestamp=timestamp(),
+                            error="container_drift",
+                        )
+                        _save(run_path, document)
+                        progress = True
+                        continue
+                    kwargs = {
+                        "pre_write_comparison": pre_write_comparison,
+                        "pre_write_saved": safe_current,
+                    }
+                try:
+                    mutation_operation, ephemeral_values = resolve_for_mutation(
+                        operation, binding.secret_provider
+                    )
+                except SecretResolutionError as exc:
+                    document = checkpoint_operation(
+                        document,
+                        operation_id=operation_id,
+                        state="failed",
+                        note="Secure mutation input could not be resolved.",
+                        timestamp=timestamp(),
+                        error=str(exc),
+                    )
+                    _save(run_path, document)
+                    progress = True
+                    continue
+                document = checkpoint_operation(
+                    document,
+                    operation_id=operation_id,
+                    state="in_progress",
+                    note="Write boundary entered after fresh target readback.",
+                    timestamp=timestamp(),
+                    **kwargs,
+                )
+                _save(run_path, document)
+                operation = _operation(document, operation_id)
+                try:
+                    _call_with_rate_limit(
+                        lambda: binding.adapter.mutate(deepcopy(mutation_operation)),
+                        max_retries=max_rate_limit_retries,
+                        base_delay_seconds=base_delay_seconds,
+                        max_delay_seconds=max_delay_seconds,
+                        sleep=sleep,
+                        random_value=random_value,
+                    )
+                except AmbiguousWriteError as exc:
+                    saved = _call_with_rate_limit(
+                        lambda: _read(binding.adapter, operation),
+                        max_retries=max_rate_limit_retries,
+                        base_delay_seconds=base_delay_seconds,
+                        max_delay_seconds=max_delay_seconds,
+                        sleep=sleep,
+                        random_value=random_value,
+                    )
+                    if saved is None and operation["action"] != "remove":
+                        document = checkpoint_operation(
+                            document,
+                            operation_id=operation_id,
+                            state="uncertain",
+                            note="Mutation outcome is ambiguous; no retry was attempted.",
+                            timestamp=timestamp(),
+                            error=scrub_sensitive_text(str(exc), ephemeral_values)
+                            or "ambiguous_write",
+                        )
+                    else:
+                        comparison, safe_saved = build_verification_comparison(operation, saved)
+                        if comparison["pass"]:
+                            document = checkpoint_operation(
+                                document,
+                                operation_id=operation_id,
+                                state="verified",
+                                note="Ambiguous response resolved by authoritative readback.",
+                                timestamp=timestamp(),
+                                comparison=comparison,
+                                saved=safe_saved,
+                            )
+                        else:
+                            document = checkpoint_operation(
+                                document,
+                                operation_id=operation_id,
+                                state="uncertain",
+                                note="Ambiguous response did not match saved target; no retry.",
+                                timestamp=timestamp(),
+                                error="ambiguous_write_mismatch",
+                            )
+                    _save(run_path, document)
+                    progress = True
+                    continue
+                saved = _call_with_rate_limit(
+                    lambda: _read(binding.adapter, operation),
+                    max_retries=max_rate_limit_retries,
+                    base_delay_seconds=base_delay_seconds,
+                    max_delay_seconds=max_delay_seconds,
+                    sleep=sleep,
+                    random_value=random_value,
+                )
+                if saved is None and operation["action"] != "remove":
+                    document = checkpoint_operation(
+                        document,
+                        operation_id=operation_id,
+                        state="uncertain",
+                        note="Write returned without authoritative readback; no retry.",
+                        timestamp=timestamp(),
+                        error="missing_readback",
+                    )
+                else:
+                    comparison, safe_saved = build_verification_comparison(operation, saved)
+                    if comparison["pass"]:
+                        document = checkpoint_operation(
+                            document,
+                            operation_id=operation_id,
+                            state="verified",
+                            note="Saved object verified by target readback.",
+                            timestamp=timestamp(),
+                            comparison=comparison,
+                            saved=safe_saved,
+                        )
+                    else:
+                        document = checkpoint_operation(
+                            document,
+                            operation_id=operation_id,
+                            state="uncertain",
+                            note="Saved readback differs from the intended object; no retry.",
+                            timestamp=timestamp(),
+                            error="saved_readback_mismatch",
+                        )
+                _save(run_path, document)
+                progress = True
+            except AuthenticationError as exc:
+                latest = load_document(run_path)
+                operation = _operation(latest, operation_id)
+                state = "failed" if operation["state"] == "planned" else "uncertain"
+                latest = checkpoint_operation(
+                    latest,
+                    operation_id=operation_id,
+                    state=state,
+                    note="Authentication failed for this target; independent targets may continue.",
+                    timestamp=timestamp(),
+                    error=scrub_sensitive_text(str(exc), ephemeral_values),
+                )
+                _save(run_path, latest)
+                progress = True
+            except RateLimitError as exc:
+                latest = load_document(run_path)
+                operation = _operation(latest, operation_id)
+                state = "failed" if operation["state"] == "planned" else "uncertain"
+                latest = checkpoint_operation(
+                    latest,
+                    operation_id=operation_id,
+                    state=state,
+                    note="Rate limit stopped this operation without a blind retry.",
+                    timestamp=timestamp(),
+                    error=scrub_sensitive_text(str(exc), ephemeral_values),
+                )
+                _save(run_path, latest)
+                progress = True
+            except AdapterExecutionError as exc:
+                latest = load_document(run_path)
+                operation = _operation(latest, operation_id)
+                state = "failed" if operation["state"] == "planned" else "uncertain"
+                latest = checkpoint_operation(
+                    latest,
+                    operation_id=operation_id,
+                    state=state,
+                    note="Target adapter rejected the operation; dependents remain stopped.",
+                    timestamp=timestamp(),
+                    error=scrub_sensitive_text(str(exc), ephemeral_values),
+                )
+                _save(run_path, latest)
+                progress = True
+        if not progress:
+            return inspect_document(load_document(run_path))
 
 
 def execute_ready_operations(
     run_path: Path,
-    adapter: ConfigurationAdapter,
-    *,
-    max_rate_limit_retries: int = 2,
-    timestamp: Callable[[], str] | None = None,
-    base_retry_delay_seconds: float = 0.5,
-    max_retry_delay_seconds: float = 8.0,
-    sleep: Callable[[float], None] = time.sleep,
-    random_value: Callable[[], float] = random.random,
+    adapter: ConfigurationAdapter | TargetAdapterRegistry,
+    **kwargs: Any,
 ) -> dict[str, Any]:
-    """Execute one run under an exclusive artifact lock."""
+    """Dispatch legacy web runs or execute independent v3 target subtrees."""
+    document = load_document(run_path)
+    if document.get("schema_version") != "3.0":
+        return legacy.execute_ready_operations(run_path, adapter, **kwargs)
+    if not isinstance(adapter, TargetAdapterRegistry):
+        raise AdapterExecutionError("configuration-run@3.0 requires a TargetAdapterRegistry")
+    timestamp = kwargs.pop("timestamp", None) or (
+        lambda: time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    )
+    max_rate_limit_retries = kwargs.pop("max_rate_limit_retries", 2)
+    base_delay_seconds = kwargs.pop("base_delay_seconds", 0.25)
+    max_delay_seconds = kwargs.pop("max_delay_seconds", 2.0)
+    sleep = kwargs.pop("sleep", time.sleep)
+    random_value = kwargs.pop("random_value", random.random)
+    if max_rate_limit_retries < 0:
+        raise AdapterExecutionError("max_rate_limit_retries must be non-negative")
+    if base_delay_seconds < 0 or max_delay_seconds < 0:
+        raise AdapterExecutionError("rate-limit delays must be non-negative")
+    if kwargs:
+        raise AdapterExecutionError(
+            "unsupported v3 adapter option(s): " + ", ".join(sorted(kwargs))
+        )
     try:
         with run_file_lock(run_path):
-            return _execute_ready_operations_locked(
+            return _execute_v3_locked(
                 run_path,
                 adapter,
-                max_rate_limit_retries=max_rate_limit_retries,
                 timestamp=timestamp,
-                base_retry_delay_seconds=base_retry_delay_seconds,
-                max_retry_delay_seconds=max_retry_delay_seconds,
+                max_rate_limit_retries=max_rate_limit_retries,
+                base_delay_seconds=base_delay_seconds,
+                max_delay_seconds=max_delay_seconds,
                 sleep=sleep,
                 random_value=random_value,
             )
-    except RunConflictError as exc:
+    except legacy.RunConflictError as exc:
         raise AdapterExecutionError(str(exc), code="run_conflict") from exc

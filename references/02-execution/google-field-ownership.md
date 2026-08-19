@@ -80,8 +80,9 @@ the tag does not send one independent copy to the normal Google endpoint and ano
 endpoint merely because both the measurement ID and transport URL are present.
 
 Inspect and preserve the client tag, transport setting, consumers, and page-view ownership when
-authorized. Treat the server container's clients, transformations, tags, routing, and
-browser/server deduplication as external or future work.
+authorized. In a web-only run, treat the server container's clients, transformations, tags,
+routing, and browser/server deduplication as external. In an authorized pipeline run, model and
+verify them as separate server-target objects; never infer server authority from the web setting.
 
 ## Verify inherited fields
 
@@ -89,3 +90,15 @@ Before saving, expand every inherited Configuration Settings and Event Settings 
 consumer's effective payload. Verify no event receives an unintended parameter, user property,
 ecommerce object, identifier, user-data field, destination, or consent behavior. Read back both the
 settings variable and every changed/reused consumer.
+
+## Add transport ownership without mixing field layers
+
+For a server route, add one owner for the Google tag's server endpoint and one owner for effective
+`send_page_view`. Configuration Settings may own stable transport/config values shared by their
+consumers. Event Settings may own genuinely shared event parameters, but must not become a global
+bucket for event-specific data. Put GA4 user properties in their dedicated section; keep
+`user_data` in the current feature-specific user-provided-data route and never in user properties.
+
+Expand inherited settings through every web sender and prove the resulting wire field, claiming
+Client Event Data path, and server consumer. Do not assume that a value visible in the web tag UI
+survives the Client unchanged.

@@ -1,5 +1,15 @@
 # Template governance
 
+## Contents
+
+- [Choose the safest supported implementation](#choose-the-safest-supported-implementation)
+- [Inspect before adding or updating](#inspect-before-adding-or-updating)
+- [Map documentation to the installed fields](#map-documentation-to-the-installed-fields)
+- [Avoid Custom HTML for consent and supported products](#avoid-custom-html-for-consent-and-supported-products)
+- [Verify after mutation](#verify-after-mutation)
+- [Official entry points](#official-entry-points)
+- [Govern server templates](#govern-server-templates)
+
 ## Choose the safest supported implementation
 
 Use this preference order when it satisfies current official vendor requirements:
@@ -89,7 +99,7 @@ Re-read the saved tag and template. Confirm:
 - automatic events or matching features remain disabled unless explicitly selected;
 - consent settings and triggers reference the intended objects.
 
-Record the template in the handoff even when no template change occurred.
+Record the template in the configuration result even when no template change occurred.
 
 ## Official entry points
 
@@ -97,3 +107,16 @@ Record the template in the handoff even when no template change occurred.
 - https://developers.google.com/tag-platform/tag-manager/templates
 - https://developers.google.com/tag-platform/tag-manager/templates/permissions
 - https://support.google.com/tagmanager/answer/7647043
+
+## Govern server templates
+
+For each server template, inspect publisher, exact version, field schema, defaults, permissions,
+allowed network hosts, secret fields, automatic Event Data mapping, hashing, batching, response,
+and dedup behavior. An official vendor API does not make a community template official or
+compatible. Import, upgrade, code edit, host/permission expansion, or custom server template
+requires explicit high-impact authority.
+
+There is no browser Custom HTML/Custom JavaScript escape hatch in a server container. A generic
+HTTP Request or custom server template is last resort: require the exact official destination
+contract, credential owner, network permission, response and retry behavior, consent, dedup, and no
+supported safer route.

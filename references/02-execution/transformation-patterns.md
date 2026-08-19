@@ -118,3 +118,13 @@ Do not add generic truncation, automatic type coercion, first-item selection, de
 fallback catalogue ID, partial-item filtering, hidden PII normalization, broad try/catch suppression,
 or one cross-vendor transformation object. A deterministic pattern reduces repeated coding; it does
 not authorize guessed business logic.
+
+## Choose the server owner narrowly
+
+In a server container prefer, in order: native destination/Event Data mapping, direct Event Data
+variable, installed-template mapping table or item projection, narrow supported server variable,
+then a scoped Transformation. Use a broad Transformation only when the approved rule genuinely
+applies to all affected consumers and explicit high-impact authority covers its blast radius.
+
+Do not create one shared Transformation merely to convert GA4 `items` into one media vendor's
+schema. Keep platform-specific projection inside that destination tag/template when supported.

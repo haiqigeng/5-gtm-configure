@@ -69,7 +69,7 @@ account identifiers, fine-grained location, health/financial values, and PII emb
 titles.
 
 Do not treat a broad regex scan as proof that data is safe. Do not emit sensitive sample values into
-the configuration map, logs, source manifest, or handoff. If a required source could contain PII and
+the configuration map, logs, source manifest, or result. If a required source could contain PII and
 the approved safe contract is not established, block the affected GA4 field. Keep advertising
 matching fields isolated from GA4 even when the same source is approved for another destination.
 

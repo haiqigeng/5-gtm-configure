@@ -125,3 +125,16 @@ Include at least:
 
 Compute executive counts from these rows. Do not claim final workspace tag totals as current-run
 creations.
+
+## Reconcile browser-to-server migration
+
+When the refonte changes delivery architecture, add a disposition per existing browser and server
+route: retain browser-only, add transporter, server replaces browser, retain dual with shared ID,
+update server consumer, pause/remove with explicit authority, or leave untouched. Do not delete a
+browser media tag merely because a server tag is planned; first establish the exact destination
+overlap and dedup/replacement strategy.
+
+Configure and verify the receiving Client and server destinations before a live web endpoint
+cutover. Inventory output must show before/after transport endpoint, page-view owner, normal and
+blocking triggers, Event Data mappings, server consumer, consent topology, dedup identity, and
+external rollout order for every affected tag.

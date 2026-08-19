@@ -19,15 +19,14 @@ from configuration_run import (  # noqa: E402
     SCHEMA_VERSION,
     RunValidationError,
     checkpoint_operation,
+    create_from_contract,
     upgrade_document,
     validate_document,
 )
-from validate_configuration_contract import (  # noqa: E402
-    ACTIONS,
-    OBJECT_RESOURCE_FAMILIES,
-)
+from run_model import ACTIONS, RESOURCE_FAMILIES  # noqa: E402
 
 from tests.test_configuration_run import ready_run_document  # noqa: E402
+from tests.v9_support import valid_pipeline_contract  # noqa: E402
 
 
 def schema() -> dict:
@@ -36,29 +35,48 @@ def schema() -> dict:
     )
 
 
+def legacy_schema() -> dict:
+    return json.loads(
+        (ROOT / "schemas" / "configuration-run-2.1.schema.json").read_text(encoding="utf-8")
+    )
+
+
 class ConfigurationRunSchemaTest(unittest.TestCase):
     def test_schema_is_valid_draft_2020_12_and_accepts_current_run(self) -> None:
         value = schema()
         Draft202012Validator.check_schema(value)
-        errors = list(Draft202012Validator(value).iter_errors(ready_run_document()))
+        current = create_from_contract(
+            valid_pipeline_contract(),
+            run_id="RUN-SCHEMA",
+            source_locator="approved input",
+            timestamp="2026-08-18T00:00:00Z",
+        )
+        errors = list(Draft202012Validator(value).iter_errors(current))
         self.assertEqual(errors, [], "\n".join(error.message for error in errors))
 
     def test_schema_and_python_authority_enums_stay_in_sync(self) -> None:
         value = schema()
         properties = value["properties"]
-        operation = properties["object_changes"]["items"]["properties"]
-        run = properties["run"]["properties"]
-        first_party = properties["first_party_data_routes"]["items"]["properties"]
+        operation = value["$defs"]["operation"]["properties"]
+        run = value["$defs"]["run"]["properties"]
+        first_party = legacy_schema()["properties"]["first_party_data_routes"]["items"][
+            "properties"
+        ]
         self.assertEqual(properties["schema_version"]["const"], SCHEMA_VERSION)
         self.assertEqual(set(operation["action"]["enum"]), ACTIONS)
-        self.assertEqual(set(operation["object_type"]["enum"]), OBJECT_RESOURCE_FAMILIES)
+        self.assertEqual(set(operation["resource_family"]["enum"]), RESOURCE_FAMILIES)
         self.assertEqual(set(operation["state"]["enum"]), OPERATION_STATES)
         self.assertEqual(set(run["phase"]["enum"]), RUN_PHASES)
-        self.assertEqual(set(run["status"]["enum"]), RUN_STATUSES)
+        self.assertEqual(set(value["$defs"]["status"]["enum"]), RUN_STATUSES)
         self.assertEqual(set(first_party["feature"]["enum"]), FIRST_PARTY_FEATURES)
 
     def test_schema_and_python_reject_unknown_mutation_fields(self) -> None:
-        document = ready_run_document()
+        document = create_from_contract(
+            valid_pipeline_contract(),
+            run_id="RUN-UNKNOWN",
+            source_locator="approved input",
+            timestamp="2026-08-18T00:00:00Z",
+        )
         document["object_changes"][0]["unreviewed_mutation_flag"] = True
         errors = list(Draft202012Validator(schema()).iter_errors(document))
         self.assertTrue(any("Additional properties" in error.message for error in errors))
@@ -66,14 +84,19 @@ class ConfigurationRunSchemaTest(unittest.TestCase):
             validate_document(document)
 
     def test_schema_and_python_reject_pause_for_non_tag_objects(self) -> None:
-        document = ready_run_document()
+        document = create_from_contract(
+            valid_pipeline_contract(),
+            run_id="RUN-PAUSE",
+            source_locator="approved input",
+            timestamp="2026-08-18T00:00:00Z",
+        )
         operation = document["object_changes"][0]
         operation.update(
             {
                 "action": "pause",
-                "object_type": "variable",
+                "resource_family": "variable",
                 "name": "DLV - test",
-                "object_key": "variable::DLV - test",
+                "object_key": "web-main::variable::DLV - test",
                 "pre_change": {"name": "DLV - test", "type": "v"},
             }
         )
@@ -88,7 +111,8 @@ class ConfigurationRunSchemaTest(unittest.TestCase):
         document["idempotency"].pop("evidence")
         self.assertEqual(validate_document(document)["schema_version"], "2.0")
         upgraded = upgrade_document(deepcopy(document))
-        self.assertEqual(upgraded["schema_version"], "2.1")
+        self.assertEqual(upgraded["schema_version"], "3.0")
+        self.assertEqual(upgraded["run"]["targets"][0]["container_type"], "web")
         checkpointed = checkpoint_operation(
             deepcopy(document),
             operation_id="OP-001",

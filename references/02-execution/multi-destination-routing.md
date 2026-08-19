@@ -91,3 +91,14 @@ Read back every selector, mapping row, no-match value, destination reference, co
 route, and environment condition. Use static vectors covering every approved route plus unknown,
 empty, and overlapping inputs. Confirm that no route can send test traffic, first-party data, or an
 event to an unintended production destination and that an identical rerun makes no change.
+
+## Route tagging endpoints by environment
+
+When web senders use different server endpoints, route by an approved stable environment or host
+with an explicit no-match result. Unknown traffic must never fall through to production. Record the
+endpoint owner, all sender consumers, and the receiver target for every route. Endpoint cutover is
+high impact and occurs only after the corresponding server graph is read back and verified.
+
+Do not confuse one server endpoint with one destination: one claiming Client event may fan out to
+several server tags, while one web container may intentionally use more than one receiver only when
+the architecture and environment isolation require it.

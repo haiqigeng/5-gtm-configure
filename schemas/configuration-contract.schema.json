@@ -1,0 +1,454 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/haiqigeng/gtm-configure/schemas/configuration-contract.schema.json",
+  "title": "configure-gtm configuration-contract@6.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "mode",
+    "route",
+    "scope",
+    "requirements",
+    "targets",
+    "pipelines",
+    "consent_topologies",
+    "dedup_contracts",
+    "execution_topologies",
+    "page_view_decisions",
+    "first_party_data_routes",
+    "inventory_dispositions",
+    "implementation",
+    "evidence",
+    "external_dependencies"
+  ],
+  "properties": {
+    "schema_version": {"const": "6.0"},
+    "mode": {"enum": ["web", "server", "pipeline"]},
+    "route": {"enum": ["analytics", "media", "consent", "combined"]},
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["included", "reference_only", "excluded"],
+      "properties": {
+        "included": {"$ref": "#/$defs/uniqueStrings"},
+        "reference_only": {"$ref": "#/$defs/uniqueStrings"},
+        "excluded": {"$ref": "#/$defs/uniqueStrings"}
+      }
+    },
+    "requirements": {"type": "array", "items": {"type": "object"}},
+    "targets": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/target"}},
+    "pipelines": {"type": "array", "items": {"$ref": "#/$defs/pipeline"}},
+    "consent_topologies": {"type": "array", "items": {"$ref": "#/$defs/consent"}},
+    "dedup_contracts": {"type": "array", "items": {"$ref": "#/$defs/dedup"}},
+    "execution_topologies": {"type": "array", "items": {"type": "object"}},
+    "page_view_decisions": {"type": "array", "items": {"type": "object"}},
+    "first_party_data_routes": {"type": "array", "items": {"type": "object"}},
+    "inventory_dispositions": {"type": "array", "items": {"type": "object"}},
+    "implementation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["execution_mode", "objects"],
+      "properties": {
+        "execution_mode": {
+          "enum": ["isolated-lightweight", "isolated-durable", "refonte-durable"]
+        },
+        "objects": {"type": "array", "items": {"$ref": "#/$defs/objectAction"}}
+      }
+    },
+    "evidence": {"type": "array", "items": {"$ref": "#/$defs/evidence"}},
+    "external_dependencies": {
+      "type": "array",
+      "items": {"type": ["string", "object"]}
+    }
+  },
+  "$defs": {
+    "nonEmpty": {"type": "string", "minLength": 1},
+    "uniqueStrings": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/nonEmpty"},
+      "uniqueItems": true
+    },
+    "authority": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["grade", "locator"],
+      "properties": {
+        "grade": {
+          "enum": ["approved-input", "official-current", "container-confirmed", "contract-sample"]
+        },
+        "locator": {"$ref": "#/$defs/nonEmpty"},
+        "note": {"type": "string"}
+      }
+    },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "target_id",
+        "container_type",
+        "account_id",
+        "container_id",
+        "workspace_id",
+        "authority"
+      ],
+      "properties": {
+        "target_id": {"$ref": "#/$defs/nonEmpty"},
+        "container_type": {"enum": ["web", "server"]},
+        "account_id": {"$ref": "#/$defs/nonEmpty"},
+        "container_id": {"$ref": "#/$defs/nonEmpty"},
+        "workspace_id": {"$ref": "#/$defs/nonEmpty"},
+        "authority": {"$ref": "#/$defs/authority"}
+      }
+    },
+    "objectAction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "target_id",
+        "resource_family",
+        "name",
+        "object_key",
+        "action",
+        "requirement_ids",
+        "depends_on",
+        "justification",
+        "evidence",
+        "risk"
+      ],
+      "properties": {
+        "target_id": {"$ref": "#/$defs/nonEmpty"},
+        "resource_family": {"$ref": "#/$defs/nonEmpty"},
+        "name": {"$ref": "#/$defs/nonEmpty"},
+        "object_key": {"$ref": "#/$defs/nonEmpty"},
+        "action": {
+          "enum": [
+            "create",
+            "update",
+            "replace",
+            "rename",
+            "pause",
+            "unpause",
+            "reuse",
+            "untouched",
+            "remove"
+          ]
+        },
+        "requirement_ids": {"$ref": "#/$defs/uniqueStrings"},
+        "depends_on": {"$ref": "#/$defs/uniqueStrings"},
+        "justification": {"$ref": "#/$defs/nonEmpty"},
+        "evidence": {"$ref": "#/$defs/uniqueStrings"},
+        "risk": {"enum": ["routine", "high-impact"]},
+        "explicit_authority": {"type": "boolean"},
+        "intended": {},
+        "pre_change": {},
+        "object_id": {"type": "string"},
+        "new_name": {"type": "string"},
+        "destructive_authorization": {"type": "boolean"},
+        "replacement_reason": {"type": "string"},
+        "permission_delta": {},
+        "scope": {"type": "string"}
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "action": {
+                "enum": ["create", "update", "replace", "rename", "pause", "unpause", "reuse", "untouched"]
+              }
+            },
+            "required": ["action"]
+          },
+          "then": {"required": ["intended"]}
+        },
+        {
+          "if": {
+            "properties": {
+              "action": {"enum": ["update", "replace", "rename", "pause", "unpause", "remove"]}
+            },
+            "required": ["action"]
+          },
+          "then": {"required": ["object_id", "pre_change"]}
+        },
+        {
+          "if": {"properties": {"action": {"const": "rename"}}, "required": ["action"]},
+          "then": {"required": ["new_name"]}
+        },
+        {
+          "if": {
+            "properties": {"action": {"enum": ["remove", "replace"]}},
+            "required": ["action"]
+          },
+          "then": {
+            "required": ["destructive_authorization"],
+            "properties": {"destructive_authorization": {"const": true}}
+          }
+        },
+        {
+          "if": {"properties": {"action": {"const": "replace"}}, "required": ["action"]},
+          "then": {"required": ["replacement_reason"]}
+        },
+        {
+          "if": {
+            "properties": {
+              "resource_family": {"const": "template"},
+              "action": {"enum": ["create", "update", "replace", "rename", "pause", "unpause", "remove"]}
+            },
+            "required": ["resource_family", "action"]
+          },
+          "then": {"required": ["permission_delta"]}
+        },
+        {
+          "if": {
+            "properties": {
+              "resource_family": {"const": "client"},
+              "action": {"enum": ["create", "update", "replace", "reuse"]}
+            },
+            "required": ["resource_family", "action"]
+          },
+          "then": {
+            "required": ["intended"],
+            "properties": {
+              "intended": {
+                "type": "object",
+                "required": ["type", "claim_criteria", "priority"],
+                "properties": {
+                  "type": {"$ref": "#/$defs/nonEmpty"},
+                  "claim_criteria": {"$ref": "#/$defs/nonEmpty"},
+                  "priority": {"type": "integer"}
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "shapeNode": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "shape"],
+      "properties": {
+        "path": {"$ref": "#/$defs/nonEmpty"},
+        "shape": {"enum": ["scalar", "array", "object"]}
+      }
+    },
+    "fieldFlow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "requirement_ids",
+        "source",
+        "wire",
+        "event_data",
+        "destination"
+      ],
+      "properties": {
+        "status": {"enum": ["proved", "blocked", "external"]},
+        "requirement_ids": {"$ref": "#/$defs/uniqueStrings"},
+        "source": {"$ref": "#/$defs/shapeNode"},
+        "wire": {"$ref": "#/$defs/shapeNode"},
+        "event_data": {"$ref": "#/$defs/shapeNode"},
+        "destination": {"$ref": "#/$defs/shapeNode"},
+        "claiming_client_proof": {"type": "string"},
+        "receiver_owner": {"type": "string"},
+        "transformation_owner": {"type": "string"},
+        "blocker": {"type": "string"},
+        "external_dependency": {"type": "string"},
+        "missing_behavior": {"type": "string"},
+        "runtime_verification_note": {"type": "string"}
+      }
+    },
+    "pipeline": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "pipeline_id",
+        "sending_target_ids",
+        "receiving_target_id",
+        "request_class",
+        "transport_owner",
+        "endpoint_reference",
+        "claiming_client",
+        "page_view_ownership",
+        "event_flows",
+        "field_flows",
+        "consent_topology_ids",
+        "dedup_contract_ids",
+        "operation_dependencies"
+      ],
+      "properties": {
+        "pipeline_id": {"$ref": "#/$defs/nonEmpty"},
+        "sending_target_ids": {"$ref": "#/$defs/uniqueStrings"},
+        "receiving_target_id": {"$ref": "#/$defs/nonEmpty"},
+        "request_class": {"$ref": "#/$defs/nonEmpty"},
+        "transport_owner": {"$ref": "#/$defs/nonEmpty"},
+        "endpoint_reference": {"$ref": "#/$defs/nonEmpty"},
+        "claiming_client": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["object_key", "claim_criteria"],
+          "properties": {
+            "object_key": {"$ref": "#/$defs/nonEmpty"},
+            "claim_criteria": {"$ref": "#/$defs/nonEmpty"}
+          }
+        },
+        "page_view_ownership": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["owner", "send_page_view"],
+          "properties": {
+            "owner": {"$ref": "#/$defs/nonEmpty"},
+            "send_page_view": {"type": "boolean"}
+          }
+        },
+        "event_flows": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "requirement_id",
+              "source_event",
+              "transported_event",
+              "server_consumer_keys"
+            ],
+            "properties": {
+              "requirement_id": {"$ref": "#/$defs/nonEmpty"},
+              "source_event": {"$ref": "#/$defs/nonEmpty"},
+              "transported_event": {"$ref": "#/$defs/nonEmpty"},
+              "server_consumer_keys": {"$ref": "#/$defs/uniqueStrings"}
+            }
+          }
+        },
+        "field_flows": {"type": "array", "items": {"$ref": "#/$defs/fieldFlow"}},
+        "consent_topology_ids": {"$ref": "#/$defs/uniqueStrings"},
+        "dedup_contract_ids": {"$ref": "#/$defs/uniqueStrings"},
+        "operation_dependencies": {"$ref": "#/$defs/uniqueStrings"},
+        "cutover_operation_key": {"type": "string"}
+      }
+    },
+    "consent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "consent_topology_id",
+        "destination",
+        "requirement_ids",
+        "consent_mode",
+        "transport_behavior",
+        "web_enforcement",
+        "server_enforcement",
+        "signal_authority",
+        "signal_source",
+        "unknown_state_behavior",
+        "event_coverage",
+        "intentional_double_gate",
+        "server_tag_keys",
+        "transporter_tag_keys",
+        "transporter_destination_vendor_block"
+      ],
+      "properties": {
+        "consent_topology_id": {"$ref": "#/$defs/nonEmpty"},
+        "destination": {"$ref": "#/$defs/nonEmpty"},
+        "requirement_ids": {"$ref": "#/$defs/uniqueStrings"},
+        "consent_mode": {
+          "enum": ["strict-basic", "advanced-native", "product-specific"]
+        },
+        "transport_behavior": {
+          "enum": ["blocked", "always-transported", "conditionally-transported"]
+        },
+        "web_enforcement": {"type": "object"},
+        "server_enforcement": {
+          "type": "object",
+          "properties": {
+            "mechanism": {"type": "string"},
+            "template_support": {"type": "string"},
+            "blocking_trigger_key": {"type": "string"}
+          }
+        },
+        "signal_authority": {
+          "enum": ["google-consent-mode", "third-party-cmp", "product-native", "none"]
+        },
+        "signal_source": {"$ref": "#/$defs/nonEmpty"},
+        "server_signal_path": {"type": "string"},
+        "unknown_state_behavior": {
+          "enum": ["deny", "native-product-behavior", "explicit-policy"]
+        },
+        "event_coverage": {"$ref": "#/$defs/uniqueStrings"},
+        "intentional_double_gate": {"type": "boolean"},
+        "double_gate_justification": {"type": "string"},
+        "server_tag_keys": {"$ref": "#/$defs/uniqueStrings"},
+        "transporter_tag_keys": {"$ref": "#/$defs/uniqueStrings"},
+        "transporter_destination_vendor_block": {"type": "boolean"}
+      }
+    },
+    "dedup": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "dedup_contract_id",
+        "requirement_id",
+        "event_name",
+        "destination",
+        "strategy",
+        "source_type"
+      ],
+      "properties": {
+        "dedup_contract_id": {"$ref": "#/$defs/nonEmpty"},
+        "requirement_id": {"$ref": "#/$defs/nonEmpty"},
+        "event_name": {"$ref": "#/$defs/nonEmpty"},
+        "destination": {"$ref": "#/$defs/nonEmpty"},
+        "strategy": {
+          "enum": [
+            "single-channel",
+            "server-replaces-browser",
+            "dual-shared-id",
+            "platform-native",
+            "not-applicable"
+          ]
+        },
+        "source_type": {
+          "enum": [
+            "transaction-id",
+            "stable-occurrence-id",
+            "approved-event-id",
+            "gtm-event-scoped-fallback",
+            "template-native",
+            "none"
+          ]
+        },
+        "source_reference": {"type": "string"},
+        "source_variable_key": {"type": "string"},
+        "browser_reference": {"type": "string"},
+        "transporter_reference": {"type": "string"},
+        "browser_consumer_keys": {"$ref": "#/$defs/uniqueStrings"},
+        "transporter_consumer_keys": {"$ref": "#/$defs/uniqueStrings"},
+        "transported_parameter": {"type": "string"},
+        "server_event_data_path": {"type": "string"},
+        "server_generates_id": {"type": "boolean"},
+        "same_gtm_event": {"type": "boolean"},
+        "runtime_verification_note": {"type": "string"},
+        "browser_field": {"type": "string"},
+        "server_field": {"type": "string"},
+        "occurrence_scope": {"type": "string"},
+        "companion_fields": {"type": "array"},
+        "compatibility_classification": {"type": "string"}
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "required": ["grade", "locator"],
+      "properties": {
+        "grade": {
+          "enum": ["approved-input", "official-current", "container-confirmed", "contract-sample"]
+        },
+        "locator": {"$ref": "#/$defs/nonEmpty"},
+        "title": {"type": "string"},
+        "accessed_on": {"type": "string", "format": "date"},
+        "supports": {"type": "array"}
+      }
+    }
+  }
+}

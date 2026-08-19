@@ -90,3 +90,9 @@ publication work separate.
 - https://ads.tiktok.com/help/article/pixel-release-notes
 - https://ads.tiktok.com/help/article/how-to-use-cookies-with-tiktok-pixel
 - https://ads.tiktok.com/help/article/advanced-matching-web
+
+## Server route
+
+For TikTok Events API, load `server/media-tiktok.md`. Prefer and inspect the vendor-generated GTM
+web/server integration when applicable; otherwise prove one shared dedup owner across the exact
+browser and server templates.

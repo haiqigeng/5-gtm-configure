@@ -49,3 +49,9 @@ Read back partner/conversion identity, base/event separation, template/version, 
 page/environment scope, consent, matching data, consumers, and duplicates. Record Campaign Manager
 conversion creation, domain/source validation, audiences, runtime status, and publication as
 external work.
+
+## Server route
+
+For LinkedIn Conversions API, load `server/media-linkedin.md`. The server conversion rule, user
+matching, click identity, token, and dedup fields come from the current CAPI contract, not the
+browser Insight Tag label.

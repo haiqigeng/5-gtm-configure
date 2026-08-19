@@ -49,3 +49,8 @@ Read back Tag ID, base/event separation, official event, full parameters, produc
 and privacy fields, sequencing, triggers, consent, template version, folder, and references. Record
 Pinterest account conversion setup, catalog/feed work, Test Events, runtime receipt, and publication
 as external dependencies.
+
+## Server route
+
+For Pinterest Conversions API, load `server/media-pinterest.md`. Prove token handling, current
+required `event_id`, source, user-data hashing, contents projection, and Tag+CAPI overlap.

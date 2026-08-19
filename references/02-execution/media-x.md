@@ -50,3 +50,9 @@ other route.
 Read back base/event tags, pixel and event identities, template/version, fields, item shape,
 triggers, consent, matching, automatic behavior, folder, and references. Keep Events Manager setup,
 audiences, catalog, Test Events/Pixel Helper, runtime receipt, and publication external.
+
+## Server route
+
+For the exact X Conversion API product, load `server/media-x.md`. Prove account access, installed
+template, request schema, `conversion_id` behavior, and browser overlap rather than inferring API
+support from the Pixel.

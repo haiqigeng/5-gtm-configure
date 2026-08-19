@@ -1,5 +1,98 @@
 # Changelog
 
+## 9.0.0
+
+### Why This Release Matters
+
+- Extends the skill's saved-object-graph north star from web-only GTM configuration to explicitly
+  authorized server containers and connected web-to-server pipelines, while preserving v8.1 web
+  behavior as the compatibility baseline.
+- Makes the useful unit of work the complete authorized pipeline: sender, claiming Client, Event
+  Data, server consumers, consent, data shape, and overlap strategy—without absorbing cloud
+  provisioning, runtime recette, publication, or external API development.
+
+### What Changed
+
+- Add routed `web`, `server`, and `pipeline` modes, target-scoped authority and semantic identity,
+  receiver-first/cutover-last execution, and dependency-only failure containment.
+- Add server object, GA4, first-party-data, consent, Transformation, and media-destination guidance,
+  including one concise server counterpart for every existing media playbook and current official
+  entry points.
+- Introduce `configuration-contract@6.0` and `configuration-run@3.0`, with deterministic
+  materialization, per-target baselines/results, publication dependencies, and explicit
+  v5/run-2.1 web compatibility.
+- Add field-flow proof across source, wire, claiming Client, Event Data, server owner, template, and
+  destination; preserve `items` as an array and `user_data` as an object instead of encoding a
+  universal nested-data rule.
+- Add per-destination consent topology with five distinct server mechanisms and rejection of
+  accidental equivalent double gates or incomplete event coverage.
+- Replace the browser-only blanket event-ID prohibition with a narrow pipeline rule: purchase uses
+  approved transaction/order identity, while a guarded shared GTM event-scoped fallback is allowed
+  only for a documented non-purchase dual route with no stable ID and an explicit runtime
+  verification note.
+- Split the legacy run controller into preserved web validation plus focused core/server/pipeline,
+  state, render, verification, redaction, resource-registry, and target-adapter modules. Add
+  ephemeral secret injection, redaction-before-persistence, non-secret comparison, and an explicit
+  prohibition on treating redacted markers as value equality.
+- Carry v8.1 execution topology, page-view ownership, first-party-data routing, refonte inventory,
+  and execution-mode decisions as required contract-owned v9 fields; bind them to target-scoped
+  object intention and include them in the immutable materialization fingerprint.
+- Enforce action-specific mutation evidence, authoritative saved-readback/comparison pairing,
+  absence proof for removal, per-object container-drift containment, evidence clearing on reopen,
+  lock-before-load checkpoints, and nested/template-row secret and PII redaction.
+- Bind pipeline transport, page-view, Client, Event Data, consent, and receiver ownership to actual
+  target operations; reject web built-in trigger IDs in server objects and reject generic shared-ID
+  deduplication for Google Ads/Floodlight where product-specific mechanisms are required.
+- Replace the flat, client-only release checker with recursive conditional-reference routing,
+  runtime-package closure, an isolated clean-archive import smoke, v9 artifact/version checks,
+  concise platform-pointer checks, and a mandatory-core load diagnostic without arbitrary
+  file-size gates.
+- Keep the v5 contract and run@2.1 machinery as read/migration compatibility surfaces only, while
+  retaining the existing web validator as the active web-domain authority for both compatibility
+  runs and target-scoped run@3 validation.
+- Add governed baseline ingestion and controller-built pre-write/saved comparisons for MCP/UI
+  execution; accept server-generated Client/Transformation IDs while keeping object names
+  drift-sensitive, and return coded errors for malformed readback graphs.
+- Keep runtime recette fully independent: it uses the tracking plan and live GTM/Preview evidence,
+  not a document or adapter contract produced by configure-gtm.
+- Fix declared server-template `secret_fields` so declaration paths remain inspectable while their
+  referenced values are resolved only ephemerally and redacted before persistence.
+
+### What Users Should Do
+
+- Name and authorize each web and server target independently, select `web`, `server`, or
+  `pipeline`, and provide approved analytics requirements or an explicit media brief. A discovered
+  endpoint does not grant server authority.
+- For pipeline work, configure and verify the receiver before a live sender cutover, record exact
+  consent and field-flow ownership, and define deduplication only where the same destination event
+  can arrive twice.
+- Continue using the existing web route for browser-only work; server facts and playbooks are not
+  required for a web-only run.
+
+### Validation
+
+- Preserve the full v8.1 web regression corpus and add contract/run/schema tests for web, server,
+  and pipeline modes, deterministic materialization, legacy migration, target identity, consent,
+  shapes, deduplication, secrets, configuration results, Client/Transformation graph handling, adapter
+  capability isolation, failure containment, and receiver-first cutover.
+- Validate every media server counterpart, the explicit case where v8's browser-only event-ID rule
+  would be wrong for an approved dual non-purchase route, deterministic packaging, Ruff, compile,
+  release structure, and whitespace.
+- Retain all 170 v8.1 regression tests and add focused regressions for web-decision materialization,
+  action contracts, forged verification, removal by absence, pre-write drift isolation, redaction,
+  reopen hygiene, malformed pipeline records, server trigger namespaces, and Google dedup routes.
+
+### Known Limits
+
+- The skill configures GTM objects only. Cloud tagging-server provisioning, DNS/CDN, direct vendor
+  API code, token generation, external account activation, publication, and runtime validation stay
+  outside its authority.
+- Runtime client/server recette remains a separate workflow driven by the tracking plan and live
+  GTM/Preview evidence; configuration output is supporting human context only, never acceptance
+  evidence.
+- Measurement Protocol, mobile-app, CRM, offline, and arbitrary backend ingress are not introduced
+  in v9.0.0.
+
 ## 8.1.0
 
 ### Why This Release Matters

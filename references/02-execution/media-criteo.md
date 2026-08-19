@@ -49,3 +49,8 @@ identity fields opt-in, source-approved, and isolated from analytics.
 Read back OneTag initialization, account identity, page/event tags, full product/transaction shape,
 template/version, triggers, consent, environment, consumers, and duplicates. Record feed/account
 setup, audiences, platform-side rules, runtime validation, and publication as external work.
+
+## Server route
+
+Load `server/media-criteo.md` only after the brief names the exact Criteo server product. Do not
+infer a generic CAPI from OneTag, another Criteo program, or a community template name.

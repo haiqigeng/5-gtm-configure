@@ -1,855 +1,566 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/haiqigeng/gtm-configure/schemas/configuration-run.schema.json",
-  "title": "configure-gtm configuration run",
-  "description": "Adapter-neutral saved-state, recovery, and recette handoff contract for one client-side GTM configuration run.",
-  "$defs": {
-    "verificationComparison": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "schema_version",
-        "comparator",
-        "pass",
-        "intended_sha256",
-        "saved_sha256",
-        "compared_fields",
-        "differences"
-      ],
-      "properties": {
-        "schema_version": {"const": "1.0"},
-        "comparator": {"type": "string", "minLength": 1},
-        "pass": {"type": "boolean"},
-        "intended_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
-        "saved_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
-        "compared_fields": {
-          "type": "array",
-          "description": "Every top-level intended field covered by the saved-state comparison.",
-          "minItems": 1,
-          "uniqueItems": true,
-          "items": {"type": "string", "minLength": 1}
-        },
-        "differences": {
-          "type": "array",
-          "items": {"type": "object", "minProperties": 1}
-        }
-      },
-      "allOf": [
-        {
-          "if": {"properties": {"pass": {"const": true}}, "required": ["pass"]},
-          "then": {"properties": {"differences": {"maxItems": 0}}},
-          "else": {"properties": {"differences": {"minItems": 1}}}
-        }
-      ]
-    }
-  },
+  "title": "configure-gtm configuration-run@3.0",
+  "description": "Multi-target saved-state and recovery contract.",
   "type": "object",
   "additionalProperties": false,
   "required": [
     "schema_version",
     "run",
     "requirements",
+    "pipelines",
     "object_changes",
     "payload_mappings",
-    "consent_routes",
-    "container_baseline",
+    "consent_topologies",
     "execution_topologies",
     "page_view_decisions",
     "first_party_data_routes",
     "inventory_dispositions",
+    "container_baselines",
+    "dedup_contracts",
     "saved_readback",
+    "target_results",
     "official_sources",
     "external_dependencies",
+    "publication_dependencies",
     "recovery_boundary",
-    "idempotency",
-    "recette_handoff"
+    "idempotency"
   ],
   "properties": {
-    "schema_version": {"const": "2.1"},
+    "schema_version": {"const": "3.0"},
+    "run": {"$ref": "#/$defs/run"},
+    "requirements": {"type": "array", "items": {"$ref": "#/$defs/requirement"}},
+    "pipelines": {"type": "array", "items": {"$ref": "#/$defs/pipeline"}},
+    "object_changes": {"type": "array", "items": {"$ref": "#/$defs/operation"}},
+    "payload_mappings": {"type": "array", "items": {"type": "object"}},
+    "consent_topologies": {"type": "array", "items": {"$ref": "#/$defs/consent"}},
+    "execution_topologies": {"type": "array", "items": {"type": "object"}},
+    "page_view_decisions": {"type": "array", "items": {"type": "object"}},
+    "first_party_data_routes": {"type": "array", "items": {"type": "object"}},
+    "inventory_dispositions": {"type": "array", "items": {"type": "object"}},
+    "container_baselines": {"type": "array", "items": {"$ref": "#/$defs/baseline"}},
+    "dedup_contracts": {"type": "array", "items": {"$ref": "#/$defs/dedup"}},
+    "saved_readback": {"type": "array", "items": {"type": "object"}},
+    "target_results": {"type": "array", "items": {"$ref": "#/$defs/targetResult"}},
+    "official_sources": {"type": "array", "items": {"type": "object"}},
+    "external_dependencies": {"type": "array", "items": {"type": "object"}},
+    "publication_dependencies": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/publicationDependency"}
+    },
+    "recovery_boundary": {"type": ["object", "null"]},
+    "idempotency": {"$ref": "#/$defs/idempotency"}
+  },
+  "$defs": {
+    "nonEmpty": {"type": "string", "minLength": 1},
+    "uniqueStrings": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/nonEmpty"},
+      "uniqueItems": true
+    },
+    "status": {
+      "enum": ["In progress", "Configured", "Partial", "Blocked", "Deferred"]
+    },
     "run": {
       "type": "object",
+      "additionalProperties": false,
       "required": [
         "id",
+        "mode",
+        "execution_mode",
         "phase",
         "status",
         "started_at",
         "updated_at",
-        "target",
+        "targets",
         "contract",
-        "execution_mode",
-        "publication"
+        "publication",
+        "materialization"
       ],
       "properties": {
-        "id": {"type": "string", "minLength": 1},
+        "id": {"$ref": "#/$defs/nonEmpty"},
+        "mode": {"enum": ["web", "server", "pipeline"]},
+        "execution_mode": {
+          "enum": ["isolated-lightweight", "isolated-durable", "refonte-durable"]
+        },
         "phase": {"enum": ["preflight", "mutation", "readback", "complete"]},
-        "status": {
-          "enum": ["In progress", "Configured", "Partial", "Blocked", "Deferred"]
-        },
-        "started_at": {"type": "string", "format": "date-time"},
-        "updated_at": {"type": "string", "format": "date-time"},
-        "target": {
-          "type": "object",
-          "required": ["account_id", "container_id", "workspace_id", "container_type"],
-          "properties": {
-            "account_id": {"type": "string", "minLength": 1},
-            "container_id": {"type": "string", "minLength": 1},
-            "workspace_id": {"type": "string", "minLength": 1},
-            "container_type": {"const": "web"}
-          }
-        },
+        "status": {"$ref": "#/$defs/status"},
+        "started_at": {"$ref": "#/$defs/nonEmpty"},
+        "updated_at": {"$ref": "#/$defs/nonEmpty"},
+        "targets": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/target"}},
         "contract": {
           "type": "object",
           "required": ["schema_version", "requirement_ids", "source_locator", "fingerprint"],
           "properties": {
-            "schema_version": {"type": "string", "minLength": 1},
-            "requirement_ids": {
-              "type": "array",
-              "minItems": 1,
-              "uniqueItems": true,
-              "items": {"type": "string", "minLength": 1}
-            },
-            "source_locator": {"type": "string", "minLength": 1},
-            "fingerprint": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+            "schema_version": {"$ref": "#/$defs/nonEmpty"},
+            "requirement_ids": {"$ref": "#/$defs/uniqueStrings"},
+            "source_locator": {"$ref": "#/$defs/nonEmpty"},
+            "fingerprint": {"$ref": "#/$defs/nonEmpty"}
           }
         },
-        "execution_mode": {"enum": ["isolated-lightweight", "isolated-durable", "refonte-durable"]},
         "publication": {
-          "type": "object",
-          "required": ["performed", "version_created"],
-          "properties": {
-            "performed": {"const": false},
-            "version_created": {"const": false}
-          }
-        }
-      }
-    },
-    "requirements": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "required": [
-          "id",
-          "kind",
-          "source_locator",
-          "source_event",
-          "destination",
-          "status",
-          "object_keys"
-        ],
-        "properties": {
-          "id": {"type": "string", "minLength": 1},
-          "kind": {"enum": ["analytics", "media", "consent"]},
-          "source_locator": {"type": "string", "minLength": 1},
-          "source_event": {"type": ["string", "null"]},
-          "destination": {"type": ["string", "null"]},
-          "status": {
-            "enum": ["In progress", "Configured", "Partial", "Blocked", "Deferred"]
-          },
-          "object_keys": {
-            "type": "array",
-            "uniqueItems": true,
-            "items": {"type": "string", "minLength": 1}
-          }
-        }
-      }
-    },
-    "object_changes": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": [
-          "operation_id",
-          "requirement_ids",
-          "action",
-          "object_type",
-          "name",
-          "object_key",
-          "dependencies",
-          "state",
-          "evidence",
-          "journal"
-        ],
-        "properties": {
-          "operation_id": {"type": "string", "minLength": 1},
-          "requirement_ids": {
-            "type": "array",
-            "minItems": 1,
-            "uniqueItems": true,
-            "items": {"type": "string", "minLength": 1}
-          },
-          "action": {
-            "enum": [
-              "create",
-              "update",
-              "replace",
-              "rename",
-              "pause",
-              "unpause",
-              "reuse",
-              "untouched",
-              "remove"
-            ]
-          },
-          "object_type": {
-            "enum": [
-              "built-in variable",
-              "container setting",
-              "destination",
-              "environment",
-              "folder",
-              "google tag configuration",
-              "tag",
-              "template",
-              "trigger",
-              "variable",
-              "workspace",
-              "zone"
-            ]
-          },
-          "name": {"type": "string", "minLength": 1},
-          "object_key": {"type": "string", "minLength": 1},
-          "object_id": {"type": "string", "minLength": 1},
-          "dependencies": {
-            "type": "array",
-            "uniqueItems": true,
-            "items": {"type": "string", "minLength": 1}
-          },
-          "intended": {"type": ["object", "null"]},
-          "pre_change": {"type": "object"},
-          "replacement_reason": {"type": "string", "minLength": 1},
-          "destructive_authorization": {"type": "boolean"},
-          "permission_delta": {
-            "type": "object",
-            "additionalProperties": false,
-            "required": ["added", "removed", "evidence_locator"],
-            "properties": {
-              "added": {"type": "array", "uniqueItems": true, "items": {"type": "string"}},
-              "removed": {"type": "array", "uniqueItems": true, "items": {"type": "string"}},
-              "evidence_locator": {"type": "string", "minLength": 1}
-            }
-          },
-          "state": {
-            "enum": [
-              "planned",
-              "in_progress",
-              "saved",
-              "verified",
-              "failed",
-              "uncertain",
-              "skipped"
-            ]
-          },
-          "evidence": {
-            "type": "array",
-            "minItems": 1,
-            "uniqueItems": true,
-            "items": {"type": "string", "minLength": 1}
-          },
-          "journal": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "additionalProperties": false,
-              "required": ["state", "at", "note"],
-              "properties": {
-                "state": {
-                  "enum": [
-                    "planned",
-                    "in_progress",
-                    "saved",
-                    "verified",
-                    "failed",
-                    "uncertain",
-                    "skipped"
-                  ]
-                },
-                "at": {"type": "string", "format": "date-time"},
-                "note": {"type": "string", "minLength": 1}
-              }
-            }
-          },
-          "result": {"type": "object"},
-          "comparison": {"$ref": "#/$defs/verificationComparison"},
-          "pre_write_comparison": {"$ref": "#/$defs/verificationComparison"},
-          "error": {"type": "string", "minLength": 1}
+          "const": {"performed": false, "version_created": false}
         },
-        "allOf": [
-          {
-            "if": {
-              "properties": {"action": {"enum": ["pause", "unpause"]}},
-              "required": ["action"]
+        "materialization": {
+          "type": "object",
+          "required": [
+            "method",
+            "owned_sections",
+            "contract_fingerprint",
+            "section_fingerprints"
+          ],
+          "properties": {
+            "method": {"$ref": "#/$defs/nonEmpty"},
+            "owned_sections": {"$ref": "#/$defs/uniqueStrings"},
+            "contract_fingerprint": {"$ref": "#/$defs/nonEmpty"},
+            "section_fingerprints": {
+              "type": "object",
+              "additionalProperties": {"$ref": "#/$defs/nonEmpty"}
             },
-            "then": {"properties": {"object_type": {"const": "tag"}}}
-          },
-          {
-            "if": {"properties": {"state": {"const": "verified"}}, "required": ["state"]},
-            "then": {
-              "required": ["result", "comparison"],
-              "properties": {
-                "comparison": {
-                  "allOf": [
-                    {"$ref": "#/$defs/verificationComparison"},
-                    {"properties": {"pass": {"const": true}}}
-                  ]
-                }
-              }
-            }
-          }
-        ]
-      }
-    },
-    "payload_mappings": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": [
-          "requirement_id",
-          "field_scope",
-          "destination_field",
-          "source",
-          "gtm_resolution",
-          "template_field",
-          "status",
-          "provenance_locator"
-        ],
-        "properties": {
-          "requirement_id": {"type": "string", "minLength": 1},
-          "field_scope": {"enum": ["event-parameter", "user-property", "item-parameter"]},
-          "destination_field": {"type": "string", "minLength": 1},
-          "source": {"type": ["string", "null"]},
-          "source_authority_grade": {"type": ["string", "null"]},
-          "source_authority_locator": {"type": ["string", "null"]},
-          "source_shape": {"type": ["string", "null"]},
-          "destination_shape": {"type": ["string", "null"]},
-          "shape_compatibility": {
-            "type": ["string", "null"],
-            "enum": ["compatible", "conversion-required", null]
-          },
-          "mapping_method": {
-            "type": ["string", "null"],
-            "enum": [
-              "constant",
-              "custom-javascript",
-              "direct-dlv",
-              "lookup-table",
-              "native-template",
-              "regex-table",
-              "settings-variable",
-              null
-            ]
-          },
-          "gtm_resolution": {"type": ["string", "null"]},
-          "template_field": {"type": ["string", "null"]},
-          "missing_behavior": {"type": ["string", "null"]},
-          "status": {
-            "enum": ["pending", "mapped", "intentionally-omitted", "external", "blocked"]
-          },
-          "provenance_locator": {"type": "string", "minLength": 1}
-        }
-      }
-    },
-    "consent_routes": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": [
-          "requirement_id",
-          "product",
-          "mode",
-          "mechanism",
-          "normal_trigger",
-          "blocking_triggers",
-          "built_in_consent_checks",
-          "additional_consent_checks",
-          "unknown_behavior",
-          "evidence"
-        ],
-        "properties": {
-          "requirement_id": {"type": "string", "minLength": 1},
-          "product": {"type": "string", "minLength": 1},
-          "mode": {"enum": ["strict-basic", "advanced-native"]},
-          "mechanism": {"enum": ["blocking-trigger", "grant-event", "native-advanced"]},
-          "normal_trigger": {"type": "string", "pattern": "^(trigger::.+|2147479553|2147479572|2147479573)$"},
-          "blocking_triggers": {
-            "type": "array",
-            "uniqueItems": true,
-            "items": {"type": "string", "pattern": "^(trigger::.+|2147479553|2147479572|2147479573)$"}
-          },
-          "built_in_consent_checks": {
-            "type": "array",
-            "uniqueItems": true,
-            "items": {"type": "string", "minLength": 1}
-          },
-          "additional_consent_checks": {
-            "type": "array",
-            "uniqueItems": true,
-            "items": {"type": "string", "minLength": 1}
-          },
-          "blocking_event_scope": {"type": ["string", "null"]},
-          "scope_exception_reason": {"type": ["string", "null"]},
-          "unknown_behavior": {"type": "string", "minLength": 1},
-          "evidence": {
-            "type": "array",
-            "minItems": 1,
-            "uniqueItems": true,
-            "items": {"type": "string", "minLength": 1}
+            "legacy_sections": {"type": "object"}
           }
         }
       }
     },
-    "container_baseline": {
+    "target": {
       "type": "object",
       "additionalProperties": false,
       "required": [
+        "target_id",
+        "container_type",
+        "account_id",
+        "container_id",
+        "workspace_id",
+        "adapter_capabilities"
+      ],
+      "properties": {
+        "target_id": {"$ref": "#/$defs/nonEmpty"},
+        "container_type": {"enum": ["web", "server"]},
+        "account_id": {"$ref": "#/$defs/nonEmpty"},
+        "container_id": {"$ref": "#/$defs/nonEmpty"},
+        "workspace_id": {"$ref": "#/$defs/nonEmpty"},
+        "adapter_capabilities": {"type": "object"}
+      }
+    },
+    "requirement": {
+      "type": "object",
+      "required": ["id", "kind", "source_locator", "status", "object_keys"],
+      "properties": {
+        "id": {"$ref": "#/$defs/nonEmpty"},
+        "kind": {"$ref": "#/$defs/nonEmpty"},
+        "source_locator": {"$ref": "#/$defs/nonEmpty"},
+        "source_event": {"type": ["string", "null"]},
+        "destination": {"type": ["string", "null"]},
+        "status": {"$ref": "#/$defs/status"},
+        "object_keys": {"$ref": "#/$defs/uniqueStrings"}
+      }
+    },
+    "operation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "operation_id",
+        "target_id",
+        "container_type",
+        "resource_family",
+        "name",
+        "object_key",
+        "action",
+        "requirement_ids",
+        "dependencies",
+        "justification",
+        "evidence",
+        "risk",
+        "explicit_authority",
+        "state",
+        "journal"
+      ],
+      "properties": {
+        "operation_id": {"$ref": "#/$defs/nonEmpty"},
+        "target_id": {"$ref": "#/$defs/nonEmpty"},
+        "container_type": {"enum": ["web", "server"]},
+        "resource_family": {
+          "enum": [
+            "built-in variable",
+            "client",
+            "container setting",
+            "destination",
+            "environment",
+            "folder",
+            "google tag configuration",
+            "tag",
+            "template",
+            "transformation",
+            "trigger",
+            "variable",
+            "workspace",
+            "zone"
+          ]
+        },
+        "name": {"$ref": "#/$defs/nonEmpty"},
+        "object_key": {"$ref": "#/$defs/nonEmpty"},
+        "action": {
+          "enum": [
+            "create",
+            "update",
+            "replace",
+            "rename",
+            "pause",
+            "unpause",
+            "reuse",
+            "untouched",
+            "remove"
+          ]
+        },
+        "requirement_ids": {"$ref": "#/$defs/uniqueStrings"},
+        "dependencies": {"$ref": "#/$defs/uniqueStrings"},
+        "justification": {"$ref": "#/$defs/nonEmpty"},
+        "intended": {},
+        "pre_change": {},
+        "object_id": {"$ref": "#/$defs/nonEmpty"},
+        "new_name": {"$ref": "#/$defs/nonEmpty"},
+        "destructive_authorization": {"type": "boolean"},
+        "replacement_reason": {"$ref": "#/$defs/nonEmpty"},
+        "permission_delta": {},
+        "scope": {"$ref": "#/$defs/nonEmpty"},
+        "evidence": {"$ref": "#/$defs/uniqueStrings"},
+        "risk": {"enum": ["routine", "high-impact"]},
+        "explicit_authority": {"type": "boolean"},
+        "state": {
+          "enum": [
+            "planned",
+            "in_progress",
+            "saved",
+            "verified",
+            "failed",
+            "uncertain",
+            "skipped"
+          ]
+        },
+        "journal": {"type": "array", "items": {"type": "object"}},
+        "comparison": {"type": "object"},
+        "saved_readback": {},
+        "pre_write_readback": {},
+        "pre_write_comparison": {"type": "object"}
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "action": {
+                "enum": ["create", "update", "replace", "rename", "pause", "unpause", "reuse", "untouched"]
+              }
+            },
+            "required": ["action"]
+          },
+          "then": {"required": ["intended"]}
+        },
+        {
+          "if": {
+            "properties": {
+              "action": {"enum": ["update", "replace", "rename", "pause", "unpause", "remove"]}
+            },
+            "required": ["action"]
+          },
+          "then": {"required": ["object_id", "pre_change"]}
+        },
+        {
+          "if": {"properties": {"action": {"const": "rename"}}, "required": ["action"]},
+          "then": {"required": ["new_name"]}
+        },
+        {
+          "if": {
+            "properties": {"action": {"enum": ["remove", "replace"]}},
+            "required": ["action"]
+          },
+          "then": {
+            "required": ["destructive_authorization"],
+            "properties": {"destructive_authorization": {"const": true}}
+          }
+        },
+        {
+          "if": {"properties": {"action": {"const": "replace"}}, "required": ["action"]},
+          "then": {"required": ["replacement_reason"]}
+        },
+        {
+          "if": {
+            "properties": {
+              "resource_family": {"const": "template"},
+              "action": {"enum": ["create", "update", "replace", "rename", "pause", "unpause", "remove"]}
+            },
+            "required": ["resource_family", "action"]
+          },
+          "then": {"required": ["permission_delta"]}
+        },
+        {
+          "if": {"properties": {"state": {"const": "verified"}}, "required": ["state"]},
+          "then": {"required": ["comparison", "saved_readback"]}
+        },
+        {
+          "if": {"properties": {"action": {"enum": ["pause", "unpause"]}}},
+          "then": {"properties": {"resource_family": {"const": "tag"}}}
+        }
+      ]
+    },
+    "shapeNode": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "shape"],
+      "properties": {
+        "path": {"$ref": "#/$defs/nonEmpty"},
+        "shape": {"enum": ["scalar", "array", "object"]}
+      }
+    },
+    "fieldFlow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "requirement_ids",
+        "source",
+        "wire",
+        "event_data",
+        "destination"
+      ],
+      "properties": {
+        "status": {"enum": ["proved", "blocked", "external"]},
+        "requirement_ids": {"$ref": "#/$defs/uniqueStrings"},
+        "source": {"$ref": "#/$defs/shapeNode"},
+        "wire": {"$ref": "#/$defs/shapeNode"},
+        "event_data": {"$ref": "#/$defs/shapeNode"},
+        "destination": {"$ref": "#/$defs/shapeNode"},
+        "claiming_client_proof": {"type": "string"},
+        "receiver_owner": {"type": "string"},
+        "transformation_owner": {"type": "string"},
+        "blocker": {"type": "string"},
+        "external_dependency": {"type": "string"},
+        "missing_behavior": {"type": "string"},
+        "runtime_verification_note": {"type": "string"}
+      }
+    },
+    "pipeline": {
+      "type": "object",
+      "required": [
+        "pipeline_id",
+        "sending_target_ids",
+        "receiving_target_id",
+        "request_class",
+        "transport_owner",
+        "endpoint_reference",
+        "claiming_client_operation_id",
+        "page_view_ownership",
+        "event_flows",
+        "field_flows",
+        "consent_topology_ids",
+        "dedup_contract_ids",
+        "operation_dependencies"
+      ],
+      "properties": {
+        "pipeline_id": {"$ref": "#/$defs/nonEmpty"},
+        "sending_target_ids": {"$ref": "#/$defs/uniqueStrings"},
+        "receiving_target_id": {"$ref": "#/$defs/nonEmpty"},
+        "request_class": {"$ref": "#/$defs/nonEmpty"},
+        "transport_owner": {"$ref": "#/$defs/nonEmpty"},
+        "endpoint_reference": {"$ref": "#/$defs/nonEmpty"},
+        "claiming_client_operation_id": {"$ref": "#/$defs/nonEmpty"},
+        "page_view_ownership": {
+          "type": "object",
+          "required": ["owner", "send_page_view"],
+          "properties": {
+            "owner": {"$ref": "#/$defs/nonEmpty"},
+            "send_page_view": {"type": "boolean"}
+          }
+        },
+        "event_flows": {"type": "array", "minItems": 1, "items": {"type": "object"}},
+        "field_flows": {"type": "array", "items": {"$ref": "#/$defs/fieldFlow"}},
+        "consent_topology_ids": {"$ref": "#/$defs/uniqueStrings"},
+        "dedup_contract_ids": {"$ref": "#/$defs/uniqueStrings"},
+        "operation_dependencies": {"$ref": "#/$defs/uniqueStrings"},
+        "cutover_operation_id": {"$ref": "#/$defs/nonEmpty"}
+      }
+    },
+    "consent": {
+      "type": "object",
+      "required": [
+        "consent_topology_id",
+        "destination",
+        "requirement_ids",
+        "consent_mode",
+        "transport_behavior",
+        "web_enforcement",
+        "server_enforcement",
+        "signal_authority",
+        "signal_source",
+        "unknown_state_behavior",
+        "event_coverage",
+        "intentional_double_gate",
+        "server_tag_keys",
+        "transporter_tag_keys",
+        "transporter_destination_vendor_block"
+      ],
+      "properties": {
+        "consent_topology_id": {"$ref": "#/$defs/nonEmpty"},
+        "destination": {"$ref": "#/$defs/nonEmpty"},
+        "requirement_ids": {"$ref": "#/$defs/uniqueStrings"},
+        "consent_mode": {
+          "enum": ["strict-basic", "advanced-native", "product-specific"]
+        },
+        "transport_behavior": {
+          "enum": ["blocked", "always-transported", "conditionally-transported"]
+        },
+        "web_enforcement": {
+          "type": "object",
+          "required": ["mechanism"],
+          "properties": {
+            "mechanism": {
+              "enum": [
+                "cmp-lifecycle-plus-vendor-block",
+                "business-trigger-plus-vendor-block",
+                "transport-trigger-only",
+                "google-consent-mode",
+                "product-native",
+                "none",
+                "not-applicable"
+              ]
+            }
+          }
+        },
+        "server_enforcement": {
+          "type": "object",
+          "required": ["mechanism"],
+          "properties": {
+            "mechanism": {
+              "enum": [
+                "incoming-google-consent-native",
+                "server-template-native-consent",
+                "server-additional-consent-check",
+                "server-blocking-trigger",
+                "none"
+              ]
+            },
+            "template_support": {"type": "string"},
+            "blocking_trigger_key": {"type": "string"}
+          }
+        },
+        "signal_authority": {
+          "enum": ["google-consent-mode", "third-party-cmp", "product-native", "none"]
+        },
+        "signal_source": {"$ref": "#/$defs/nonEmpty"},
+        "server_signal_path": {"type": "string"},
+        "unknown_state_behavior": {
+          "enum": ["deny", "native-product-behavior", "explicit-policy"]
+        },
+        "event_coverage": {"$ref": "#/$defs/uniqueStrings"},
+        "intentional_double_gate": {"type": "boolean"},
+        "double_gate_justification": {"type": "string"},
+        "server_tag_keys": {"$ref": "#/$defs/uniqueStrings"},
+        "transporter_tag_keys": {"$ref": "#/$defs/uniqueStrings"},
+        "transporter_destination_vendor_block": {"type": "boolean"}
+      }
+    },
+    "dedup": {
+      "type": "object",
+      "required": [
+        "dedup_contract_id",
+        "requirement_id",
+        "event_name",
+        "destination",
         "strategy",
+        "source_type"
+      ],
+      "properties": {
+        "dedup_contract_id": {"$ref": "#/$defs/nonEmpty"},
+        "requirement_id": {"$ref": "#/$defs/nonEmpty"},
+        "event_name": {"type": "string"},
+        "destination": {"type": "string"},
+        "strategy": {
+          "enum": [
+            "single-channel",
+            "server-replaces-browser",
+            "dual-shared-id",
+            "platform-native",
+            "not-applicable"
+          ]
+        },
+        "source_type": {
+          "enum": [
+            "transaction-id",
+            "stable-occurrence-id",
+            "approved-event-id",
+            "gtm-event-scoped-fallback",
+            "template-native",
+            "none"
+          ]
+        },
+        "source_reference": {"type": "string"},
+        "source_variable_key": {"type": "string"},
+        "browser_reference": {"type": "string"},
+        "transporter_reference": {"type": "string"},
+        "browser_consumer_keys": {"$ref": "#/$defs/uniqueStrings"},
+        "transporter_consumer_keys": {"$ref": "#/$defs/uniqueStrings"},
+        "transported_parameter": {"type": "string"},
+        "server_event_data_path": {"type": "string"},
+        "server_generates_id": {"type": "boolean"},
+        "same_gtm_event": {"type": "boolean"},
+        "runtime_verification_note": {"type": "string"},
+        "browser_field": {"type": "string"},
+        "server_field": {"type": "string"},
+        "occurrence_scope": {"type": "string"},
+        "companion_fields": {"type": "array"},
+        "compatibility_classification": {"type": "string"}
+      }
+    },
+    "baseline": {
+      "type": "object",
+      "required": [
+        "target_id",
         "captured_at",
         "complete",
         "resource_families",
         "family_counts",
-        "in_scope_tag_keys",
-        "trigger_index",
         "preexisting_workspace_changes",
         "fingerprint"
       ],
       "properties": {
-        "strategy": {"enum": ["relevant-families", "full-paginated"]},
-        "captured_at": {"type": ["string", "null"], "format": "date-time"},
+        "target_id": {"$ref": "#/$defs/nonEmpty"},
+        "captured_at": {"type": ["string", "null"]},
         "complete": {"type": "boolean"},
-        "resource_families": {
-          "type": "array",
-          "uniqueItems": true,
-          "items": {"type": "string", "minLength": 1}
+        "resource_families": {"$ref": "#/$defs/uniqueStrings"},
+        "family_counts": {"type": "object"},
+        "preexisting_workspace_changes": {},
+        "fingerprint": {"type": ["string", "null"]}
+      }
+    },
+    "targetResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["target_id", "status", "last_verified_operation_id", "recovery_boundary"],
+      "properties": {
+        "target_id": {"$ref": "#/$defs/nonEmpty"},
+        "status": {"$ref": "#/$defs/status"},
+        "last_verified_operation_id": {"type": ["string", "null"]},
+        "recovery_boundary": {"type": ["object", "null"]}
+      }
+    },
+    "publicationDependency": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "owner", "status", "depends_on_kind", "blocks_saved_configuration"],
+      "properties": {
+        "kind": {
+          "enum": [
+            "server-publication",
+            "server-recette",
+            "web-cutover-publication",
+            "web-pipeline-recette"
+          ]
         },
-        "family_counts": {
-          "type": "object",
-          "additionalProperties": {"type": "integer", "minimum": 0}
-        },
-        "in_scope_tag_keys": {
-          "type": "array",
-          "uniqueItems": true,
-          "items": {"type": "string", "minLength": 1}
-        },
-        "trigger_index": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "additionalProperties": false,
-            "required": ["object_key", "type", "fingerprint"],
-            "properties": {
-              "object_key": {"type": "string", "pattern": "^(trigger::.+|2147479553|2147479572|2147479573)$"},
-              "type": {"type": "string", "minLength": 1},
-              "fingerprint": {"type": ["string", "null"], "pattern": "^sha256:[0-9a-f]{64}$"}
-            }
-          }
-        },
-        "preexisting_workspace_changes": {"type": ["integer", "null"], "minimum": 0},
-        "fingerprint": {"type": ["string", "null"], "pattern": "^sha256:[0-9a-f]{64}$"}
+        "owner": {"$ref": "#/$defs/nonEmpty"},
+        "status": {"enum": ["open", "complete", "not-applicable"]},
+        "depends_on_kind": {"type": ["string", "null"]},
+        "blocks_saved_configuration": {"const": false}
       }
-    },
-    "execution_topologies": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": [
-          "tag_object_key",
-          "requirement_ids",
-          "lifecycle_role",
-          "normal_triggers",
-          "consent_mode",
-          "blocking_trigger_keys",
-          "blocking_event_scope",
-          "built_in_consent_checks",
-          "additional_consent_checks",
-          "firing_option",
-          "may_precede_cmp",
-          "pre_cmp_policy",
-          "page_view_capable",
-          "page_view_destinations",
-          "ecommerce_route",
-          "manual_ecommerce_fields",
-          "evidence"
-        ],
-        "properties": {
-          "tag_object_key": {"type": "string", "minLength": 1},
-          "requirement_ids": {
-            "type": "array",
-            "minItems": 1,
-            "uniqueItems": true,
-            "items": {"type": "string", "minLength": 1}
-          },
-          "lifecycle_role": {"enum": ["baseline-page-load", "event-driven"]},
-          "normal_triggers": {
-            "type": "array",
-            "minItems": 1,
-            "items": {
-              "type": "object",
-              "additionalProperties": false,
-              "required": ["trigger_object_key", "role", "type"],
-              "properties": {
-                "trigger_object_key": {"type": "string", "pattern": "^(trigger::.+|2147479553|2147479572|2147479573)$"},
-                "role": {"enum": ["cmp-readiness-grant", "initialization-page-load", "source-event"]},
-                "type": {
-                  "enum": [
-                    "click-all-elements",
-                    "click-just-links",
-                    "consent-initialization",
-                    "custom-event",
-                    "dom-ready",
-                    "element-visibility",
-                    "form-submission",
-                    "history-change",
-                    "initialization",
-                    "javascript-error",
-                    "page-view",
-                    "scroll-depth",
-                    "timer",
-                    "trigger-group",
-                    "window-loaded",
-                    "youtube-video"
-                  ]
-                }
-              }
-            }
-          },
-          "consent_mode": {"enum": ["strict-basic", "advanced-native"]},
-          "blocking_trigger_keys": {
-            "type": "array",
-            "uniqueItems": true,
-            "items": {"type": "string", "pattern": "^(trigger::.+|2147479553|2147479572|2147479573)$"}
-          },
-          "blocking_event_scope": {"type": ["string", "null"]},
-          "built_in_consent_checks": {
-            "type": "array",
-            "uniqueItems": true,
-            "items": {"type": "string", "minLength": 1}
-          },
-          "additional_consent_checks": {
-            "type": "array",
-            "uniqueItems": true,
-            "items": {"type": "string", "minLength": 1}
-          },
-          "firing_option": {"enum": ["once-per-event", "once-per-page", "unlimited"]},
-          "may_precede_cmp": {"type": "boolean"},
-          "pre_cmp_policy": {
-            "enum": [
-              "not-applicable",
-              "source-after-readiness",
-              "later-fresh-event",
-              "explicit-one-time-replay",
-              "external-dependency"
-            ]
-          },
-          "page_view_capable": {"type": "boolean"},
-          "page_view_destinations": {
-            "type": "array",
-            "uniqueItems": true,
-            "items": {"type": "string", "minLength": 1}
-          },
-          "ecommerce_route": {
-            "enum": ["not-applicable", "native-data-layer", "native-custom-object", "manual"]
-          },
-          "manual_ecommerce_fields": {
-            "type": "array",
-            "uniqueItems": true,
-            "items": {"type": "string", "minLength": 1}
-          },
-          "evidence": {
-            "type": "array",
-            "minItems": 1,
-            "uniqueItems": true,
-            "items": {"type": "string", "minLength": 1}
-          }
-        }
-      }
-    },
-    "page_view_decisions": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": [
-          "destination",
-          "requirement_ids",
-          "owner",
-          "owner_object_key",
-          "google_tag_object_key",
-          "send_page_view",
-          "external_dependency_ids",
-          "reason",
-          "evidence"
-        ],
-        "properties": {
-          "destination": {"type": "string", "minLength": 1},
-          "requirement_ids": {
-            "type": "array",
-            "minItems": 1,
-            "uniqueItems": true,
-            "items": {"type": "string", "minLength": 1}
-          },
-          "owner": {
-            "enum": [
-              "google-tag-automatic",
-              "dedicated-ga4-event",
-              "external",
-              "intentionally-none"
-            ]
-          },
-          "owner_object_key": {"type": ["string", "null"]},
-          "google_tag_object_key": {"type": ["string", "null"]},
-          "send_page_view": {"type": "boolean"},
-          "external_dependency_ids": {
-            "type": "array",
-            "uniqueItems": true,
-            "items": {"type": "string", "minLength": 1}
-          },
-          "reason": {"type": "string", "minLength": 1},
-          "evidence": {
-            "type": "array",
-            "minItems": 1,
-            "uniqueItems": true,
-            "items": {"type": "string", "minLength": 1}
-          }
-        }
-      }
-    },
-    "first_party_data_routes": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": [
-          "requirement_id",
-          "feature",
-          "destination_field",
-          "consumer_object_keys",
-          "consumer_bindings",
-          "source_priority",
-          "timing",
-          "hashing_owner",
-          "fields",
-          "consent_types",
-          "external_dependency_ids",
-          "evidence"
-        ],
-        "properties": {
-          "requirement_id": {"type": "string", "minLength": 1},
-          "feature": {
-            "enum": [
-              "ga4-user-id",
-              "ga4-user-provided-data",
-              "google-ads-enhanced-conversions",
-              "google-ads-tag-wide-user-data",
-              "google-ads-user-provided-data-event",
-              "vendor-advanced-matching"
-            ]
-          },
-          "destination_field": {"type": "string", "minLength": 1},
-          "consumer_object_keys": {
-            "type": "array",
-            "minItems": 1,
-            "uniqueItems": true,
-            "items": {"type": "string", "minLength": 1}
-          },
-          "consumer_bindings": {
-            "type": "array",
-            "minItems": 1,
-            "items": {
-              "type": "object",
-              "additionalProperties": false,
-              "required": [
-                "object_key",
-                "product",
-                "implementation",
-                "tag_type",
-                "template_identity",
-                "evidence"
-              ],
-              "properties": {
-                "object_key": {"type": "string", "minLength": 1},
-                "product": {"type": "string", "minLength": 1},
-                "implementation": {"enum": ["native", "installed-template"]},
-                "tag_type": {"type": "string", "minLength": 1},
-                "template_identity": {"type": ["string", "null"]},
-                "evidence": {
-                  "type": "array",
-                  "minItems": 1,
-                  "uniqueItems": true,
-                  "items": {"type": "string", "minLength": 1}
-                }
-              }
-            }
-          },
-          "source_priority": {"enum": ["data-layer", "controlled-javascript", "dom", "automatic"]},
-          "timing": {"enum": ["tag-wide", "same-event", "prior-page"]},
-          "hashing_owner": {"enum": ["not-applicable", "native-raw", "prehashed-sha256"]},
-          "fields": {
-            "type": "array",
-            "minItems": 1,
-            "items": {
-              "type": "object",
-              "additionalProperties": false,
-              "required": ["name", "source", "normalization", "empty_behavior"],
-              "properties": {
-                "name": {"type": "string", "minLength": 1},
-                "source": {"type": "string", "minLength": 1},
-                "normalization": {
-                  "type": "array",
-                  "uniqueItems": true,
-                  "items": {"type": "string", "minLength": 1}
-                },
-                "empty_behavior": {"const": "omit"}
-              }
-            }
-          },
-          "consent_types": {
-            "type": "array",
-            "uniqueItems": true,
-            "items": {"type": "string", "minLength": 1}
-          },
-          "external_dependency_ids": {
-            "type": "array",
-            "uniqueItems": true,
-            "items": {"type": "string", "minLength": 1}
-          },
-          "evidence": {
-            "type": "array",
-            "minItems": 1,
-            "uniqueItems": true,
-            "items": {"type": "string", "minLength": 1}
-          }
-        }
-      }
-    },
-    "inventory_dispositions": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": [
-          "row_id",
-          "source_order",
-          "source_locator",
-          "before_object_key",
-          "before_tag_name",
-          "disposition",
-          "after_tag_name",
-          "trigger_before",
-          "trigger_after",
-          "variable_changes",
-          "parameter_changes",
-          "consent_changes",
-          "rationale",
-          "operation_ids"
-        ],
-        "properties": {
-          "row_id": {"type": "string", "minLength": 1},
-          "source_order": {"type": "integer", "minimum": 0},
-          "source_locator": {"type": "string", "minLength": 1},
-          "before_object_key": {"type": ["string", "null"]},
-          "before_tag_name": {"type": ["string", "null"]},
-          "disposition": {
-            "enum": ["added", "keep", "update", "remap", "pause", "remove", "replace", "supersede"]
-          },
-          "after_tag_name": {"type": ["string", "null"]},
-          "trigger_before": {"type": "array", "items": {"type": "string"}},
-          "trigger_after": {"type": "array", "items": {"type": "string"}},
-          "variable_changes": {"type": "array", "items": {"type": "string"}},
-          "parameter_changes": {"type": "array", "items": {"type": "string"}},
-          "consent_changes": {"type": "array", "items": {"type": "string"}},
-          "rationale": {"type": "string", "minLength": 1},
-          "operation_ids": {
-            "type": "array",
-            "uniqueItems": true,
-            "items": {"type": "string", "minLength": 1}
-          }
-        }
-      }
-    },
-    "saved_readback": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "required": [
-          "operation_id",
-          "object_key",
-          "object_id",
-          "fingerprint",
-          "verified",
-          "differences",
-          "comparison",
-          "verified_at"
-        ],
-        "properties": {
-          "operation_id": {"type": "string", "minLength": 1},
-          "object_key": {"type": "string", "minLength": 1},
-          "object_id": {"type": ["string", "null"]},
-          "fingerprint": {"type": ["string", "null"]},
-          "verified": {"const": true},
-          "differences": {"type": "array", "maxItems": 0},
-          "comparison": {"$ref": "#/$defs/verificationComparison"},
-          "verified_at": {"type": "string", "format": "date-time"}
-        }
-      }
-    },
-    "official_sources": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "required": ["url", "title", "access_date", "supports"],
-        "properties": {
-          "url": {"type": "string", "format": "uri", "pattern": "^https://"},
-          "title": {"type": "string", "minLength": 1},
-          "access_date": {"type": "string", "format": "date"},
-          "supports": {
-            "type": "array",
-            "minItems": 1,
-            "uniqueItems": true,
-            "items": {"type": "string", "minLength": 1}
-          }
-        }
-      }
-    },
-    "external_dependencies": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": ["id", "requirement_ids", "owner", "action", "status"],
-        "properties": {
-          "id": {"type": "string", "minLength": 1},
-          "requirement_ids": {
-            "type": "array",
-            "uniqueItems": true,
-            "items": {"type": "string", "minLength": 1}
-          },
-          "owner": {"type": "string", "minLength": 1},
-          "action": {"type": "string", "minLength": 1},
-          "status": {"enum": ["open", "resolved", "deferred"]}
-        }
-      }
-    },
-    "recovery_boundary": {
-      "oneOf": [
-        {"type": "null"},
-        {
-          "type": "object",
-          "required": ["reason", "last_verified_operation", "unsafe_operations", "next_action"],
-          "properties": {
-            "reason": {"type": "string", "minLength": 1},
-            "last_verified_operation": {"type": ["string", "null"]},
-            "unsafe_operations": {
-              "type": "array",
-              "uniqueItems": true,
-              "items": {"type": "string", "minLength": 1}
-            },
-            "next_action": {"type": "string", "minLength": 1}
-          }
-        }
-      ]
     },
     "idempotency": {
       "type": "object",
@@ -857,56 +568,8 @@
       "required": ["checked", "remaining_actions", "evidence"],
       "properties": {
         "checked": {"type": "boolean"},
-        "remaining_actions": {
-          "type": "array",
-          "uniqueItems": true,
-          "items": {"type": "string", "minLength": 1}
-        },
-        "evidence": {
-          "type": "array",
-          "uniqueItems": true,
-          "items": {"type": "string", "minLength": 1}
-        }
-      }
-    },
-    "recette_handoff": {
-      "type": "object",
-      "required": [
-        "manifest_version",
-        "requirements",
-        "runtime_validation_performed",
-        "publication_performed"
-      ],
-      "properties": {
-        "manifest_version": {"const": "2.0"},
-        "requirements": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "required": [
-              "id",
-              "expected_tags",
-              "expected_normal_triggers",
-              "expected_blocking_triggers",
-              "expected_consent_states",
-              "expected_user_data_keys",
-              "network_cues",
-              "cues"
-            ],
-            "properties": {
-              "id": {"type": "string", "minLength": 1},
-              "expected_tags": {"type": "array", "items": {"type": "string"}},
-              "expected_normal_triggers": {"type": "array", "items": {"type": "string"}},
-              "expected_blocking_triggers": {"type": "array", "items": {"type": "string"}},
-              "expected_consent_states": {"type": "array", "items": {"type": "string"}},
-              "expected_user_data_keys": {"type": "array", "items": {"type": "string"}},
-              "network_cues": {"type": "array", "items": {"type": "string"}},
-              "cues": {"type": "array", "items": {"type": "string"}}
-            }
-          }
-        },
-        "runtime_validation_performed": {"const": false},
-        "publication_performed": {"const": false}
+        "remaining_actions": {"$ref": "#/$defs/uniqueStrings"},
+        "evidence": {"$ref": "#/$defs/uniqueStrings"}
       }
     }
   }

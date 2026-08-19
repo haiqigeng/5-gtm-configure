@@ -71,3 +71,9 @@ outside the GTM completion claim.
 - https://developers.snap.com/marketing-api/Ads-API/snap-pixel
 - https://businesshelp.snapchat.com/articles/en_US/Knowledge/formatting-pixel
 - https://forbusiness.snapchat.com/advertising/snap-pixel
+
+## Server route
+
+For Snap CAPI, load `server/media-snapchat.md`. Use the current API version and map the exact
+browser/server identifier pairs; do not collapse `client_dedup_id`, `event_id`, `transaction_id`,
+and `custom_data.order_id` into one guessed field.

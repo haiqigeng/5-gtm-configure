@@ -30,15 +30,22 @@ Classify each executing tag by role before choosing its consent control:
 | Role and authority | Web firing/gate | Transported signal | Server destination gate |
 | --- | --- | --- | --- |
 | Direct browser destination under a third-party CMP | Business event, or documented CMP lifecycle event for a baseline tag, plus the reusable destination-vendor block | Not applicable | Not applicable |
-| Web transporter under a third-party CMP | Functional business/CMP-readiness trigger only; no destination-vendor block by default | Documented vendor state on every applicable event | One template-native gate or server blocking trigger; missing/unknown denies |
-| Google destination under Google Consent Mode only | Current native Google consent behavior | Native Google consent parameters | Incoming Google-native behavior; no invented vendor block |
+| Web transporter under a third-party CMP | Functional event plus the approved browser-collection gate, if required; do not automatically copy every downstream vendor's block | Documented vendor state on every applicable event | One template-native gate or server blocking trigger; missing/unknown denies |
+| Google destination with explicitly approved advanced Consent Mode | Current native Google consent behavior | Native Google consent parameters | Incoming Google-native behavior; no defeating additional block |
 | Hybrid CMP plus Google Consent Mode | Classify each destination independently | Carry the authority required by that destination | Apply only that destination's declared authority |
 
-The carrier is not the destination. Do not suppress a transporter merely because the downstream
-vendor is denied when the receiver needs that state to enforce consent. Blocking the transporter is
-an explicit alternate architecture only when the approved design intentionally prevents transport;
-record `transporter_destination_vendor_block: true`, distinct gate roles, coverage loss, and the
-double-gate justification. Never infer it from client-side browser defaults.
+The carrier is not the destination, but browser-to-server collection still needs its own approved
+policy. Do not copy every downstream vendor's block onto a shared carrier or infer permission to
+transport before choice merely because the final vendor is gated. Resolve the carrier's permitted
+fields, timing, and consent independently. If the approved design prevents transport, record
+`transporter_destination_vendor_block: true`, distinct gate roles, and any intentional double-gate
+justification. Missing policy is an unresolved architecture decision, not automatic always-on transport.
+
+For Google, native denied-state behavior is not a strict no-request gate. Do not label
+`always-transported` plus `incoming-google-consent-native` as `strict-basic`. Use the approved basic
+pre-transport eligibility or obtain explicit advanced/native authority; never silently change the
+policy to satisfy the validator. Required native consent behavior can coexist with a basic external
+eligibility gate because these mechanisms do different work.
 
 Bind every active server destination tag to exactly one topology. Bind each server blocking trigger
 to the saved tag, keep its ordinary Event Data event trigger separate, and prove that the same

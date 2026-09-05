@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Thin CLI and compatibility dispatcher for configure-gtm run manifests."""
+"""CLI and public API for the current configure-gtm run manifest."""
 
 from __future__ import annotations
 
@@ -10,16 +10,17 @@ from pathlib import Path
 from typing import Any
 
 import run_state
-import run_validation_web as legacy
+import run_validation_web as web_support
+from adapter_support import atomic_write, run_file_lock
 from run_model import OPERATION_STATES, RUN_PHASES, RUN_STATUSES, SCHEMA_VERSION
 from run_model_web import FIRST_PARTY_FEATURES
-from run_render import render_markdown as render_v3_markdown
-from run_validation_core import validate_document as validate_v3_document
+from run_render import render_markdown as render_current_markdown
+from run_validation_core import validate_document as validate_current_document
 from strict_json import StrictJsonError, load_json, write_text_atomic
-from verification import build_pre_write_comparison as build_v3_pre_write_comparison
-from verification import build_verification_comparison as build_v3_verification_comparison
+from verification import build_pre_write_comparison as build_current_pre_write_comparison
+from verification import build_verification_comparison as build_current_verification_comparison
 from verification import canonical_sha256
-from verification import validate_verification_comparison as validate_v3_comparison
+from verification import validate_verification_comparison as validate_current_comparison
 
 __all__ = [
     "FIRST_PARTY_FEATURES",
@@ -35,32 +36,21 @@ __all__ = [
     "canonical_sha256",
     "checkpoint_operation",
     "create_from_contract",
-    "finalize_document",
     "inspect_document",
     "load_document",
     "render_markdown",
-    "record_target_baseline",
     "reopen_failed_operation",
     "run_file_lock",
-    "upgrade_document",
     "validate_document",
     "validate_verification_comparison",
 ]
 
-RunValidationError = legacy.RunValidationError
-RunConflictError = legacy.RunConflictError
-run_file_lock = legacy.run_file_lock
-atomic_write = legacy.atomic_write
-
-
-def _is_v3(document: Any) -> bool:
-    return isinstance(document, dict) and document.get("schema_version") == SCHEMA_VERSION
+RunValidationError = web_support.RunValidationError
+RunConflictError = web_support.RunConflictError
 
 
 def validate_document(value: Any) -> dict[str, Any]:
-    if _is_v3(value):
-        return validate_v3_document(value)
-    return legacy.validate_document(value)
+    return validate_current_document(value)
 
 
 def load_document(path: Path) -> dict[str, Any]:
@@ -74,14 +64,7 @@ def create_from_contract(
     source_locator: str,
     timestamp: str | None = None,
 ) -> dict[str, Any]:
-    if contract.get("schema_version") == "6.0":
-        return run_state.create_from_contract(
-            contract,
-            run_id=run_id,
-            source_locator=source_locator,
-            timestamp=timestamp,
-        )
-    return legacy.create_from_contract(
+    return run_state.create_from_contract(
         contract,
         run_id=run_id,
         source_locator=source_locator,
@@ -89,68 +72,32 @@ def create_from_contract(
     )
 
 
-def upgrade_document(document: dict[str, Any]) -> dict[str, Any]:
-    return run_state.upgrade_document(document)
-
-
 def inspect_document(document: dict[str, Any]) -> dict[str, Any]:
-    if _is_v3(document):
-        return run_state.inspect_document(document)
-    return legacy.inspect_document(document)
+    return run_state.inspect_document(document)
 
 
 def checkpoint_operation(document: dict[str, Any], **kwargs: Any) -> dict[str, Any]:
-    if _is_v3(document):
-        return run_state.checkpoint_operation(document, **kwargs)
-    return legacy.checkpoint_operation(document, **kwargs)
+    return run_state.checkpoint_operation(document, **kwargs)
 
 
 def reopen_failed_operation(document: dict[str, Any], **kwargs: Any) -> dict[str, Any]:
-    if _is_v3(document):
-        return run_state.reopen_failed_operation(document, **kwargs)
-    return legacy.reopen_failed_operation(document, **kwargs)
-
-
-def record_target_baseline(document: dict[str, Any], **kwargs: Any) -> dict[str, Any]:
-    if not _is_v3(document):
-        raise RunValidationError("target baseline recording requires configuration-run@3.0")
-    return run_state.record_target_baseline(document, **kwargs)
-
-
-def finalize_document(document: dict[str, Any], **kwargs: Any) -> dict[str, Any]:
-    if _is_v3(document):
-        return run_state.finalize_document(document, **kwargs)
-    return legacy.finalize_document(document, **kwargs)
+    return run_state.reopen_failed_operation(document, **kwargs)
 
 
 def render_markdown(document: dict[str, Any], *, embed_machine: bool = False) -> str:
-    if _is_v3(document):
-        return render_v3_markdown(validate_v3_document(document), embed_machine=embed_machine)
-    return legacy.render_markdown(document, embed_machine=embed_machine)
+    return render_current_markdown(validate_current_document(document), embed_machine=embed_machine)
 
 
-def build_verification_comparison(
-    operation: dict[str, Any], saved: Any, *args: Any, **kwargs: Any
-) -> Any:
-    if "target_id" in operation:
-        return build_v3_verification_comparison(operation, saved)
-    return legacy.build_verification_comparison(operation, saved, *args, **kwargs)
+def build_verification_comparison(operation: dict[str, Any], saved: Any) -> Any:
+    return build_current_verification_comparison(operation, saved)
 
 
-def validate_verification_comparison(
-    operation: dict[str, Any], comparison: Any, saved: Any, *args: Any, **kwargs: Any
-) -> Any:
-    if "target_id" in operation:
-        return validate_v3_comparison(operation, comparison, saved)
-    return legacy.validate_verification_comparison(operation, comparison, saved, *args, **kwargs)
+def validate_verification_comparison(operation: dict[str, Any], comparison: Any, saved: Any) -> Any:
+    return validate_current_comparison(operation, comparison, saved)
 
 
-def build_pre_write_comparison(
-    operation: dict[str, Any], saved: Any, *args: Any, **kwargs: Any
-) -> Any:
-    if "target_id" in operation:
-        return build_v3_pre_write_comparison(operation, saved)
-    return legacy.build_pre_write_comparison(operation, saved, *args, **kwargs)
+def build_pre_write_comparison(operation: dict[str, Any], saved: Any) -> Any:
+    return build_current_pre_write_comparison(operation, saved)
 
 
 def _emit_json(value: Any) -> None:
@@ -171,14 +118,6 @@ def main() -> int:
     init_parser.add_argument("--replace-planned", action="store_true")
     inspect_parser = subparsers.add_parser("inspect")
     inspect_parser.add_argument("--run", type=Path, required=True)
-    baseline_parser = subparsers.add_parser("baseline")
-    baseline_parser.add_argument("--run", type=Path, required=True)
-    baseline_parser.add_argument("--target", required=True)
-    baseline_parser.add_argument("--resources", type=Path, required=True)
-    baseline_parser.add_argument("--workspace-changes", type=Path, required=True)
-    baseline_parser.add_argument("--captured-at", required=True)
-    upgrade_parser = subparsers.add_parser("upgrade")
-    upgrade_parser.add_argument("--run", type=Path, required=True)
     checkpoint_parser = subparsers.add_parser("checkpoint")
     checkpoint_parser.add_argument("--run", type=Path, required=True)
     checkpoint_parser.add_argument("--operation", required=True)
@@ -198,10 +137,6 @@ def main() -> int:
     reopen_parser.add_argument("--operation", required=True)
     reopen_parser.add_argument("--note", required=True)
     reopen_parser.add_argument("--timestamp")
-    finalize_parser = subparsers.add_parser("finalize")
-    finalize_parser.add_argument("--run", type=Path, required=True)
-    finalize_parser.add_argument("--evidence", action="append", required=True)
-    finalize_parser.add_argument("--timestamp")
     render_parser = subparsers.add_parser("render")
     render_parser.add_argument("--run", type=Path, required=True)
     render_parser.add_argument("--output", type=Path)
@@ -233,24 +168,6 @@ def main() -> int:
             _emit_json({"pass": True, "output": str(args.output.resolve())})
         elif args.command == "inspect":
             _emit_json(inspect_document(load_document(args.run)))
-        elif args.command == "baseline":
-            resources = load_json(args.resources)
-            workspace_changes = load_json(args.workspace_changes)
-            with run_file_lock(args.run):
-                document = record_target_baseline(
-                    load_document(args.run),
-                    target_id=args.target,
-                    resources=resources,
-                    captured_at=args.captured_at,
-                    preexisting_workspace_changes=workspace_changes,
-                )
-                atomic_write(args.run, document)
-            _emit_json({"pass": True, "target": args.target, "baseline": "complete"})
-        elif args.command == "upgrade":
-            with run_file_lock(args.run):
-                document = upgrade_document(load_document(args.run))
-                atomic_write(args.run, document)
-            _emit_json({"pass": True, "schema_version": document["schema_version"]})
         elif args.command == "checkpoint":
             kwargs: dict[str, Any] = {
                 "operation_id": args.operation,
@@ -282,15 +199,6 @@ def main() -> int:
                 )
                 atomic_write(args.run, document)
             _emit_json({"pass": True, "operation": args.operation, "state": "planned"})
-        elif args.command == "finalize":
-            with run_file_lock(args.run):
-                document = finalize_document(
-                    load_document(args.run),
-                    idempotency_evidence=args.evidence,
-                    timestamp=args.timestamp,
-                )
-                atomic_write(args.run, document)
-            _emit_json({"pass": True, "status": "Configured"})
         else:
             rendered = render_markdown(load_document(args.run), embed_machine=args.embed_machine)
             if args.output:

@@ -45,7 +45,7 @@ def _safe_artifact(root: Path, relative: str) -> Path:
 def verify_delivery(delivery: Path) -> tuple[dict[str, Any], dict[str, Any]]:
     root = delivery.resolve()
     handoff = _load(root / "handoff.json")
-    if handoff.get("handoff_version") != "1.0.0":
+    if handoff.get("handoff_version") != "1.1.0":
         raise HandoffError("Unsupported GA4 tracking-plan handoff version.")
     if handoff.get("skill", {}).get("name") != "ga4-tracking-plan":
         raise HandoffError("The handoff does not come from ga4-tracking-plan.")
@@ -63,14 +63,14 @@ def verify_delivery(delivery: Path) -> tuple[dict[str, Any], dict[str, Any]]:
         role = str(artifact.get("role", ""))
         if not role:
             raise HandoffError("A handoff artifact has no non-empty role.")
-        if role in by_role:
+        if role in by_role and role != "event_push_schema":
             raise HandoffError(f"Duplicate handoff artifact role: {role}")
         if path in seen_paths:
             raise HandoffError(f"Duplicate handoff artifact path: {path}")
         if not path.is_file():
             raise HandoffError(f"Missing handoff artifact: {path}")
         expected_bytes = artifact.get("bytes")
-        if not isinstance(expected_bytes, int) or expected_bytes < 1:
+        if type(expected_bytes) is not int or expected_bytes < 1:
             raise HandoffError(f"Invalid handoff byte count: {path.name}")
         if path.stat().st_size != expected_bytes:
             raise HandoffError(f"Handoff byte-count mismatch: {path.name}")
@@ -243,7 +243,7 @@ def normalized_approved_semantics(handoff: dict[str, Any], plan: dict[str, Any])
                 "source_order": order,
                 "classification": event.get("classification"),
                 "source_event": event_name,
-                "trigger": event.get("trigger"),
+                "business_timing": event.get("trigger"),
                 "journey_ids": event.get("journey_ids", []),
                 "measurement_opportunity_ids": event.get("measurement_opportunity_ids", []),
                 "clear_before_push": event.get("data_layer", {}).get("clear", []),

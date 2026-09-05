@@ -17,8 +17,13 @@ sys.path.insert(0, str(ROOT / "tests"))
 from configuration_run import (  # noqa: E402
     checkpoint_operation,
     create_from_contract,
-    finalize_document,
-    record_target_baseline,
+)
+from current_support import (  # noqa: E402
+    add_nonpurchase_dual_dedup,
+    complete_capture_evidence,
+    valid_pipeline_contract,
+    valid_server_contract,
+    valid_web_contract,
 )
 from redaction import (  # noqa: E402
     REDACTED_STATE,
@@ -27,13 +32,8 @@ from redaction import (  # noqa: E402
     safe_equal,
     sensitive_paths,
 )
+from run_state import _record_target_baseline  # noqa: E402
 from run_validation_web import RunValidationError  # noqa: E402
-from v9_support import (  # noqa: E402
-    add_nonpurchase_dual_dedup,
-    valid_pipeline_contract,
-    valid_server_contract,
-    valid_web_contract,
-)
 from validate_configuration_contract import (  # noqa: E402
     ContractValidationError,
 )
@@ -43,7 +43,7 @@ from validate_configuration_contract import (  # noqa: E402
 from verification import build_verification_comparison, expected_graph  # noqa: E402
 
 
-class V9ContractAndRunTest(unittest.TestCase):
+class CurrentContractAndRunTest(unittest.TestCase):
     def test_all_three_routes_validate_and_materialize(self) -> None:
         for builder, expected_operations in (
             (valid_web_contract, 3),
@@ -58,7 +58,7 @@ class V9ContractAndRunTest(unittest.TestCase):
                     source_locator="approved input",
                     timestamp="2026-08-18T00:00:00Z",
                 )
-                self.assertEqual(run["schema_version"], "3.0")
+                self.assertEqual(run["schema_version"], "4.0")
                 self.assertEqual(run["run"]["mode"], contract["mode"])
                 self.assertEqual(len(run["object_changes"]), expected_operations)
                 self.assertEqual(
@@ -206,7 +206,7 @@ class V9ContractAndRunTest(unittest.TestCase):
         with self.assertRaisesRegex(ContractValidationError, "transformation owner"):
             validate_contract(contract)
 
-    def test_v8_wrongness_case_allows_one_guarded_nonpurchase_dual_id(self) -> None:
+    def test_dual_delivery_requires_one_approved_stable_occurrence_id(self) -> None:
         contract = add_nonpurchase_dual_dedup(valid_pipeline_contract())
         self.assertEqual(
             validate_contract(contract)["dedup_contracts"][0]["event_name"], "add_to_cart"
@@ -218,13 +218,13 @@ class V9ContractAndRunTest(unittest.TestCase):
             timestamp="2026-08-18T00:00:00Z",
         )
 
-        purchase = deepcopy(contract)
-        purchase["dedup_contracts"][0]["event_name"] = "purchase"
-        with self.assertRaisesRegex(ContractValidationError, "cannot use the GTM event fallback"):
-            validate_contract(purchase)
+        internal_fallback = deepcopy(contract)
+        internal_fallback["dedup_contracts"][0]["source_type"] = "gtm-event-scoped-fallback"
+        with self.assertRaisesRegex(ContractValidationError, "source_type is unsupported"):
+            validate_contract(internal_fallback)
 
         separate = deepcopy(contract)
-        separate["dedup_contracts"][0]["browser_reference"] = "{{CJS - Another ID}}"
+        separate["dedup_contracts"][0]["browser_reference"] = "{{DLV - Another ID}}"
         with self.assertRaisesRegex(ContractValidationError, "one occurrence source"):
             validate_contract(separate)
 
@@ -280,7 +280,7 @@ class V9ContractAndRunTest(unittest.TestCase):
         )
         self.assertNotIn("recette_handoff", run)
 
-    def test_baselines_and_controller_built_comparisons_reach_configured(self) -> None:
+    def test_manual_checkpoints_cannot_reach_configured_without_adapter_convergence(self) -> None:
         run = create_from_contract(
             valid_pipeline_contract(cutover=True),
             run_id="RUN-CONTROLLER-WORKFLOW",
@@ -295,12 +295,14 @@ class V9ContractAndRunTest(unittest.TestCase):
                     if operation["target_id"] == target["target_id"]
                 }
             )
-            run = record_target_baseline(
+            resources = {family: [] for family in families}
+            run = _record_target_baseline(
                 run,
                 target_id=target["target_id"],
-                resources={family: [] for family in families},
+                resources=resources,
                 captured_at="2026-08-18T00:00:01Z",
                 preexisting_workspace_changes=[],
+                capture_evidence=complete_capture_evidence(resources, target),
             )
         pending = {item["operation_id"]: item for item in run["object_changes"]}
         while pending:
@@ -330,14 +332,9 @@ class V9ContractAndRunTest(unittest.TestCase):
                 pending.pop(operation_id)
                 progressed = True
             self.assertTrue(progressed)
-        configured = finalize_document(
-            run,
-            idempotency_evidence=["Identical second pass returned zero mutations."],
-            timestamp="2026-08-18T00:00:02Z",
-        )
-        self.assertEqual(configured["run"]["status"], "Configured")
+        self.assertNotEqual(run["run"]["status"], "Configured")
 
-    def test_cli_records_baseline_and_wraps_invalid_readback_as_coded_json(self) -> None:
+    def test_cli_rejects_caller_baseline_and_wraps_invalid_readback_as_coded_json(self) -> None:
         run = create_from_contract(
             valid_web_contract(),
             run_id="RUN-CLI-EVIDENCE",
@@ -347,14 +344,8 @@ class V9ContractAndRunTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             run_path = root / "run.json"
-            resources_path = root / "resources.json"
-            changes_path = root / "workspace-changes.json"
             invalid_readback_path = root / "invalid-readback.json"
             run_path.write_text(json.dumps(run), encoding="utf-8")
-            resources_path.write_text(
-                json.dumps({"tag": [], "trigger": [], "variable": []}), encoding="utf-8"
-            )
-            changes_path.write_text("[]", encoding="utf-8")
             invalid_readback_path.write_text(
                 json.dumps({"name": "Google tag - Web transport"}), encoding="utf-8"
             )
@@ -363,25 +354,29 @@ class V9ContractAndRunTest(unittest.TestCase):
                     sys.executable,
                     str(ROOT / "scripts" / "configuration_run.py"),
                     "baseline",
-                    "--run",
-                    str(run_path),
-                    "--target",
-                    "web-main",
-                    "--resources",
-                    str(resources_path),
-                    "--workspace-changes",
-                    str(changes_path),
-                    "--captured-at",
-                    "2026-08-18T00:00:01Z",
                 ],
                 cwd=ROOT,
                 capture_output=True,
                 text=True,
                 check=False,
             )
-            self.assertEqual(baseline.returncode, 0, baseline.stdout + baseline.stderr)
-            recorded = json.loads(run_path.read_text(encoding="utf-8"))
+            self.assertEqual(baseline.returncode, 2)
+            self.assertIn("invalid choice: 'baseline'", baseline.stderr)
+            recorded = _record_target_baseline(
+                run,
+                target_id="web-main",
+                resources={"tag": [], "trigger": [], "variable": []},
+                captured_at="2026-08-18T00:00:01Z",
+                preexisting_workspace_changes=[],
+                capture_evidence=complete_capture_evidence(
+                    {"tag": [], "trigger": [], "variable": []}, run["run"]["targets"][0]
+                ),
+            )
+            run_path.write_text(json.dumps(recorded), encoding="utf-8")
             self.assertTrue(recorded["container_baselines"][0]["complete"])
+            ready_operation = next(
+                item for item in recorded["object_changes"] if not item["dependencies"]
+            )
             checkpoint = subprocess.run(
                 [
                     sys.executable,
@@ -390,7 +385,7 @@ class V9ContractAndRunTest(unittest.TestCase):
                     "--run",
                     str(run_path),
                     "--operation",
-                    run["object_changes"][0]["operation_id"],
+                    ready_operation["operation_id"],
                     "--state",
                     "verified",
                     "--note",

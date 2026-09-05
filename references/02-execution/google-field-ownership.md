@@ -15,11 +15,14 @@ Assign every Google field to exactly one GTM surface before mutation. Choose by 
 consumer set, destination, and consent route—not by whichever UI table is easiest to populate.
 Shared settings variables are optional reuse mechanisms, not default storage locations.
 
-Bind the page-view decision to actual in-scope objects. An automatic owner must be the referenced
-Google tag with the exact destination identity and effective `send_page_view: true`. A dedicated `page_view` owner must be a referenced
-GA4 Event tag while its referenced Google tag has effective `send_page_view: false`. External or
-intentionally-none ownership must keep the Google tag false when one exists; an external owner also
-names the external dependency. A declaration without these object/field checks is not proof.
+Bind each destination/occurrence decision to actual in-scope objects. An automatic initial owner
+must be the referenced Google tag with the exact destination identity and effective
+`send_page_view: true`. A dedicated initial `page_view` owner must be a referenced GA4 Event tag
+with the linked Google tag's automatic initial view disabled. An external or intentionally absent
+initial owner likewise requires `send_page_view: false` on the linked Google tag. For a virtual or
+later occurrence, suppress only overlapping collectors: a valid automatic initial view can coexist
+with a separate external virtual owner. Record the external dependency and inspect Enhanced
+Measurement history separately. A declaration without these object/field checks is not proof.
 
 Use the narrowest owner that matches the field's real lifecycle. A field owned by one event stays on
 that event. A configuration value shared by the same enumerated Google tags may use a Configuration
@@ -35,17 +38,26 @@ destination, and consent route.
 | `send_page_view` and other Google-tag initialization behavior | Google tag or Configuration Settings variable shared by every enumerated compatible Google tag | GA4 event parameters or Event Settings variable |
 | `server_container_url` / transport URL | Google tag or compatible shared Configuration Settings variable | GA4 event parameters, user properties, or a server-container object invented in this client-side run |
 | Cross-domain linker/configuration fields | Google tag or compatible Configuration Settings variable | Event Settings variable |
-| One-event GA4 parameter | That GA4 Event tag | Google tag configuration or broadly shared Event Settings variable |
+| Initial automatic page-view context (`page_title`, `page_location`, `page_referrer`) | Documented Google tag configuration fields resolved before its automatic view | A second page-view tag merely to carry the same context |
+| Explicit page-view context or another one-event GA4 parameter | The owning GA4 Event tag; automatic page-view collection must not overlap an explicit view | Broadly shared settings that retain a previous event's values |
 | Repeated GA4 event parameter | Event Settings variable only after all consumers and lifecycle match | Configuration Settings variable |
 | GA4 user property | GA4 Event tag user-properties area, or a narrowly shared Event Settings user-properties area | Event-parameter table, Google tag configuration fields |
 | GA4 `user_id` | Google tag configuration, with the documented login/logout lifecycle | GA4 user properties, custom dimensions, `user_data`, dummy or hashed-email substitutes |
 | GA4 user-provided data (`user_data`) | Native User-Provided Data variable selected on only the authorized GA4 Event tag(s) | Shared Event Settings variable, GA4 user properties, ordinary analytics parameters |
-| Google Ads enhanced-conversion user data | Native Google tag / Google Ads enhanced-conversion field, event override, or User-Provided Data Event tag according to timing | GA4 `user_data` by analogy, ordinary conversion parameters, Custom HTML hashing |
+| Google Ads enhanced-conversion user data | Associated Google tag `user_data` event parameter for standard same-page collection, tag-wide Google-tag collection when explicitly approved, or a User-Provided Data Event tag when data is available on an earlier page | GA4 `user_data` by analogy, the browser Ads Conversion Tracking tag as the current standard-data owner, ordinary conversion parameters, Custom HTML hashing |
+| Google Ads server enhanced-conversion transport | `google-ads-server-user-data-transport`: documented event-scoped `user_data` through the GA4 sender/Client, or a separately authorized tag-wide Google-tag sender; bind the receiving server Ads Conversion Tracking tag | The distinct server User-provided Data Event route, the client-only tag-wide feature, unrelated analytics events, GA4 user properties, or unauthorized server consumers |
+| Google Ads server prior-page user-data event | `google-ads-server-user-provided-data-event`: Google tag or documented GA4 Event override resolves `user_data` on the approved capture event; the server User-provided Data Event tag consumes it | An initialization-only setting when data appears later, the later Ads Conversion Tracking tag as the earlier-data receiver, or conflating capture with conversion |
 | GA4 ecommerce object | One GA4 Event tag ecommerce route: native Data Layer or compatible Custom Object | Shared Event Settings variable, parallel manual `items`, `items.0.*` scalar fields |
 | Google Ads conversion value, currency, transaction ID, and vendor fields | Exact installed Google Ads template fields on the conversion tag, or a narrowly shared supported setting | GA4 parameter table merely because names overlap |
 
 This matrix is authoritative for Google-field placement. Platform playbooks may add
 product-specific requirements, but must link here rather than restating a conflicting owner.
+
+The dataLayer is a shared source used by many products, not a Google-only or page-view-tag-owned
+object. A site's "core dataLayer" is an input contract, not a universal Google schema. Map its actual
+keys explicitly; inspect browser defaults before overriding them, and resolve fresh values at each
+initial or virtual view. One owner means one effective collector per destination/occurrence, not
+exactly one Google tag in every multi-destination container. Check both duplicate and missing owners.
 
 ## Keep identifiers and user data distinct
 

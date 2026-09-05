@@ -16,5 +16,10 @@ event named `microsoft_ads_consent_granted`; use the proved CMP lifecycle/state 
 
 Official source: https://learn.microsoft.com/en-us/advertising/guides/uet-conversion-api-integration
 
-Fail closed if the CAPI account feature, ID Sync, authentication owner, template route, consent
-state, or dedup mapping is unproved.
+Classify requirements by the selected use. Current Microsoft guidance requires ID Sync for
+remarketing/audience building and recommends it for conversion quality; do not block conversion-only
+configuration solely because an optional ID Sync enhancement is absent. Record that limitation and
+the responsible external owner. Recheck this conditional requirement against the current guide.
+
+Fail closed only for missing requirements of the chosen CAPI feature: account access, authentication,
+supported template route, required identity/consent, and deduplication when delivery overlaps.

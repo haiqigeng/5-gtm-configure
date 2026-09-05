@@ -23,7 +23,7 @@ product, template, CMP, Client, Transformation, or destination research.
 
 Classify the run before loading conditional detail:
 
-- `web`: only authorized web-container workspaces; preserve the v8 client-side behavior baseline.
+- `web`: only authorized web-container workspaces.
 - `server`: only authorized server-container workspaces; a discovered endpoint never grants access.
 - `pipeline`: at least one authorized web sender and one authorized server receiver, modeled as a
   graph. Several senders may feed one claiming Client and one Event Data event may fan out.
@@ -36,6 +36,8 @@ For durable state and deterministic materialization, use
 [configuration-run-and-resume.md](references/02-execution/configuration-run-and-resume.md), the
 [configuration contract schema](schemas/configuration-contract.schema.json), the
 [configuration run schema](schemas/configuration-run.schema.json).
+Treat the JSON Schemas as structural/editor aids; the packaged contract and run validators are the
+authoritative semantic gates and must pass before mutation or finalization.
 
 ### Shared and web routes
 
@@ -121,11 +123,11 @@ Before assigning status, read
 after authoritative readback of every required target, static cross-target proof, and an identical
 rerun no-op. Otherwise use the narrowest accurate `Partial`, `Blocked`, or `Deferred` result.
 
-## Preserved web invariants
+## Web invariants
 
 Operationally implement an approved analytics tracking plan and an explicit media implementation
 brief as a saved, verified GTM object graph, whether the request is greenfield or a delta. Preserve
-the complete v8 client-side surface: tags, normal and blocking triggers, variables, folders,
+the complete supported client-side surface: tags, normal and blocking triggers, variables, folders,
 templates, Google tag configuration/destinations, workspaces, Zones, environments, and settings.
 
 Default every product to strict/basic CMP blocking on its web route unless an explicit current
@@ -140,6 +142,10 @@ payload-eligibility variables, validity triggers, speculative helpers, or browse
 the supported template owns the behavior. Measurement Protocol, mobile, CRM, offline, and
 arbitrary backend ingress remain future extensions.
 
+Setup/cleanup-only tags without ordinary firing triggers are outside the current executable
+topology. Inspect existing sequences for impact, but hold a requirement needing that unsupported
+path; never add dummy triggers or claim setup-only field-test coverage. See the triggers reference.
+
 ## Operational rules
 
 - A named-target configuration request authorizes routine create/update/reuse only inside that
@@ -149,27 +155,29 @@ arbitrary backend ingress remain future extensions.
   never becomes another vendor's schema by analogy.
 - Preserve valid approved analytics event names, fields, sources, literals, filters, and timing.
   Select best-practice architecture before reuse; container prevalence is integration evidence.
-- For web tags, preserve the v8 strict/basic CMP default: baseline tags use a verified CMP lifecycle
+- For web tags, preserve the strict/basic CMP default: baseline tags use a verified CMP lifecycle
   event plus the vendor block; business tags use their business trigger plus the block. Do not stack
   an equivalent Additional Consent Check. Advanced/native behavior remains explicit-only.
-- In every new v6/v3 web or pipeline run, bind each executing web tag to one contract-owned
+- In every new contract 7.0 / run 4.0 web or pipeline run, bind each executing web tag to one contract-owned
   execution topology, bind every page-view-capable destination to one effective owner and
   `send_page_view` decision, bind `user_data`/`user_id` to an explicit first-party route, and keep
   ordered inventory dispositions for a refonte. These controls may not disappear during
   client/server materialization.
 - For a pipeline, configure and read back the receiver graph before changing a live sender endpoint.
-  A cutover operation depends on every required Client, Event Data, Transformation, trigger, and
-  destination operation. One failed dependency stops its transitive dependents, not independent
-  safe subtrees.
+  Every pipeline names its transport owner as the mandatory high-impact cutover operation, including
+  a new sender route. That operation depends on every required Client, Event Data, Transformation,
+  trigger, and destination operation. One failed dependency stops its transitive dependents, not
+  independent safe subtrees.
 - Record one consent topology per destination. Google Consent Mode is set in the web container and
   carried to consent-aware server Google tags. For non-Google server gating, prove the approved
   signal on every triggering event and fail unknown state closed unless policy says otherwise.
   Distinguish incoming Google-native consent, template-native consent, a supported Additional
   Consent Check, a server blocking trigger, and no server gate. A direct browser destination keeps
-  its vendor block. A web transporter uses only its functional/CMP-readiness trigger and no
-  destination-vendor block by default; with a third-party CMP it transports the documented vendor
-  state on every applicable event so the server destination can own the gate. An intentional
-  blocked-transporter design is an explicit alternate architecture, never an inferred default.
+  its vendor block. Resolve browser-to-server collection policy separately from downstream vendor
+  eligibility. A shared transporter does not mechanically inherit each destination's block; an
+  approved unblocked carrier transports documented consent on every applicable event. Google-native
+  denied-state behavior is not a strict no-request gate, and advanced behavior requires explicit
+  approval. Use the approved blocked-transport design when browser collection itself must wait.
 - Resolve each transported field across source, web variable, wire, claiming Client, Event Data,
   server owner, template field, destination type, missing behavior, and runtime verification note. `items` is an array and `user_data` is an object; never encode a universal "two arrays" rule. Prove every
   non-scalar shape and never silently flatten, stringify, truncate, or drop items.
@@ -179,17 +187,24 @@ arbitrary backend ingress remain future extensions.
   require their explicit high-impact authority.
 - Record a dedup contract only when the same destination occurrence can arrive twice. A
   dual-delivery purchase requires a stable product-supported transaction/order/occurrence identity;
-  the GTM event-scoped fallback is never a purchase identity. Other stable occurrence IDs follow.
-  The guarded GTM event-scoped CJS fallback is allowed only for documented non-purchase dual
-  delivery with no stable ID, one shared variable on the same GTM event, and an explicit runtime
-  verification note. Never regenerate the ID server-side or impose `event_id` on another product.
+  other dual-delivery events require an approved stable occurrence ID. If none exists, choose one
+  delivery channel or keep the overlap blocked. Never synthesize an identity from GTM internals,
+  regenerate the ID server-side, or impose `event_id` on another product.
 - Keep first-party data event- and consumer-scoped. Record normalization/hash ownership and consent.
   Never persist raw PII or credentials. Resolve secrets only through secure ephemeral input, redact
   before any artifact write, and never treat two redacted markers as equality proof.
-- Let the validated contract materialize active run sections. Record complete target baselines
-  before mutation; adapters populate readbacks, journals, and results; finalization derives status
-  and the human/machine configuration result. Never edit
+- Let the validated contract materialize active run sections. The authenticated adapter runtime
+  captures, retains, and fingerprints the redacted canonical target graph and workspace changes
+  before mutation; never accept caller-authored baseline evidence. Adapters populate readbacks,
+  journals, and results; finalization derives status and the human/machine result. Never edit
   active run state by hand or retry an ambiguous write before authoritative readback.
+- Bind every mutation to at least one approved requirement and a traceable approval record from
+  its approved-input locator. Hashes detect inconsistent edits; establish actual authority from the
+  user's instructions and source material, and recheck scope after a changed payload. Official documentation
+  establishes current product mechanics, never mutation authority. Reject any tag
+  or native User-Provided Data variable that configures `user_data` or `user_id` without a complete
+  first-party-data route. Before changing a shared Google Configuration Settings variable, close
+  over every authenticated baseline tag that references it.
 - Require action-specific authority and state: all deltas carry object ID plus pre-change state;
   rename, replace, template mutation, and remove carry their extra governed fields. Verify removal
   by authoritative absence. A reopened failure discards stale comparison/readback evidence.

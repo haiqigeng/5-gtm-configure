@@ -46,6 +46,42 @@ VARIABLE_FORMAT_PARAMETER_FIELDS = {
 
 
 class ObjectGraphDiffTest(unittest.TestCase):
+    def test_raw_reference_context_resolves_ids_without_becoming_extra_objects(self) -> None:
+        expected = {
+            "objects": [
+                {
+                    "target_id": "web-main",
+                    "object_type": "tag",
+                    "name": "GA4 - page_view",
+                    "type": "gaawe",
+                    "firingTriggerId": ["web-main::trigger::CE - page_view"],
+                }
+            ]
+        }
+        saved = {
+            "objects": [
+                {
+                    "target_id": "web-main",
+                    "object_type": "tag",
+                    "name": "GA4 - page_view",
+                    "type": "gaawe",
+                    "firingTriggerId": ["17"],
+                }
+            ],
+            "context_objects": [
+                {
+                    "target_id": "web-main",
+                    "object_type": "trigger",
+                    "name": "CE - page_view",
+                    "triggerId": "17",
+                    "type": "customEvent",
+                }
+            ],
+        }
+        report = compare_graphs(expected, saved, target_types={"web-main": "web"})
+        self.assertTrue(report["pass"])
+        self.assertEqual(report["extra_objects"], [])
+
     @classmethod
     def setUpClass(cls) -> None:
         cls.payload = json.loads(FIXTURE.read_text(encoding="utf-8"))
@@ -150,7 +186,11 @@ class ObjectGraphDiffTest(unittest.TestCase):
             normalize_graph(ambiguous)
 
     def test_unresolved_raw_or_semantic_reference_fails(self) -> None:
-        for reference in ("17", "trigger::CE - purchase"):
+        for reference in (
+            "17",
+            "trigger::CE - purchase",
+            "web-main::trigger::CE - purchase",
+        ):
             with self.subTest(reference=reference):
                 graph = {
                     "objects": [

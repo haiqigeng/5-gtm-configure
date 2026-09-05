@@ -4,7 +4,8 @@
 
 Use native server Floodlight Counter or Sales tags and the current Google procedure. Prove
 advertiser ID, group/activity identifiers, counting method, order/revenue variables where
-applicable, Conversion Linker, trigger, and enhanced-conversion route. Keep Counter and Sales
+applicable, Conversion Linker, and trigger. Enhanced conversions are optional: require and prove
+their user-data route only when explicitly in scope. Keep Counter and Sales
 semantics distinct.
 
 Consent Mode is owned in the web container and transmitted to Google server tags. Reconcile the

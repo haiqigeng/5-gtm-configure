@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate configure-gtm configuration-contract@6.0 with explicit v5 read compatibility."""
+"""Validate the current configure-gtm configuration-contract@7.0."""
 
 from __future__ import annotations
 
@@ -11,11 +11,17 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
-import run_validation_web as legacy_run
-import validate_configuration_contract_v5 as legacy
+import requirement_validation as requirement_support
+import run_validation_web as web_support
 from action_contract import validate_action_contract
+from event_semantics import approved_event_name
 from redaction import sensitive_paths
-from resource_registry import ResourceRegistryError, semantic_object_key, validate_target_family
+from resource_registry import (
+    ResourceRegistryError,
+    is_configuration_settings_mutation,
+    semantic_object_key,
+    validate_target_family,
+)
 from run_model import (
     ACTIONS,
     CONSENT_MODES,
@@ -25,7 +31,6 @@ from run_model import (
     DEDUP_STRATEGIES,
     DELTA_ACTIONS,
     FIELD_FLOW_STATUSES,
-    LEGACY_CONTRACT_SCHEMA_VERSIONS,
     MUTATING_ACTIONS,
     RUN_MODES,
     SERVER_CONSENT_MECHANISMS,
@@ -39,13 +44,17 @@ from strict_json import StrictJsonError, load_json
 from web_domain_validation import validate_web_domain
 
 _WEB_BUILT_IN_TRIGGER_IDS = {"2147479553", "2147479572", "2147479573"}
+_MAX_OFFICIAL_EVIDENCE_AGE_DAYS = 365
+
 
 SCHEMA_VERSION = CONTRACT_SCHEMA_VERSION
-LEGACY_SCHEMA_VERSIONS = LEGACY_CONTRACT_SCHEMA_VERSIONS
-ROUTES = legacy.ROUTES
-REQUIREMENT_KINDS = legacy.REQUIREMENT_KINDS
-EVIDENCE_GRADES = legacy.EVIDENCE_GRADES
-OBJECT_RESOURCE_FAMILIES = legacy.OBJECT_RESOURCE_FAMILIES | {"client", "transformation"}
+ROUTES = requirement_support.ROUTES
+REQUIREMENT_KINDS = requirement_support.REQUIREMENT_KINDS
+EVIDENCE_GRADES = requirement_support.EVIDENCE_GRADES
+OBJECT_RESOURCE_FAMILIES = requirement_support.OBJECT_RESOURCE_FAMILIES | {
+    "client",
+    "transformation",
+}
 HIGH_IMPACT_RESOURCE_FAMILIES = {
     "client",
     "container setting",
@@ -77,7 +86,7 @@ TOP_LEVEL_KEYS = {
 
 
 class ContractValidationError(ValueError):
-    """Raised when a v9 contract cannot safely authorize deterministic materialization."""
+    """Raised when the current contract cannot safely authorize deterministic materialization."""
 
     def __init__(self, message: str, *, error_code: str = "invalid_contract") -> None:
         super().__init__(message)
@@ -167,13 +176,12 @@ def _validate_scope_and_requirements(contract: dict[str, Any], route: str) -> se
     requirement_ids: set[str] = set()
     for index, raw in enumerate(_array(contract["requirements"], "$.requirements")):
         try:
-            requirement_id = legacy._validate_requirement(
+            requirement_id = requirement_support.validate_requirement(
                 raw,
                 index=index,
                 route=route,
-                require_field_shapes=True,
             )
-        except legacy.ContractValidationError as exc:
+        except requirement_support.ContractValidationError as exc:
             raise ContractValidationError(str(exc)) from exc
         if requirement_id in requirement_ids:
             raise ContractValidationError(f"duplicate requirement id {requirement_id!r}")
@@ -218,7 +226,9 @@ def _validate_targets(raw: Any, mode: str) -> dict[str, dict[str, Any]]:
 
 def _object_is_high_impact(item: dict[str, Any]) -> bool:
     family = item["resource_family"]
-    if item["action"] in {"remove", "replace"}:
+    if is_configuration_settings_mutation(item):
+        return True
+    if item["action"] in {"remove", "replace", "pause", "unpause"}:
         return True
     if family not in HIGH_IMPACT_RESOURCE_FAMILIES:
         return False
@@ -232,8 +242,9 @@ def _object_is_high_impact(item: dict[str, Any]) -> bool:
 def _validate_objects(
     raw: Any,
     targets: dict[str, dict[str, Any]],
-    requirement_ids: set[str],
+    requirements: dict[str, dict[str, Any]],
 ) -> tuple[dict[str, dict[str, Any]], dict[str, str]]:
+    requirement_ids = set(requirements)
     objects: dict[str, dict[str, Any]] = {}
     aliases: dict[str, str] = {}
     for index, value in enumerate(_array(raw, "$.implementation.objects")):
@@ -270,8 +281,15 @@ def _validate_objects(
         evidence = set(_unique_texts(item.get("evidence"), f"{path}.evidence", allow_empty=False))
         if not evidence <= EVIDENCE_GRADES:
             raise ContractValidationError(f"{path}.evidence contains an unsupported grade")
-        if action in MUTATING_ACTIONS and not evidence & {"approved-input", "official-current"}:
-            raise ContractValidationError(f"{path}.evidence lacks mutation authority")
+        if action in MUTATING_ACTIONS:
+            if not links:
+                raise ContractValidationError(
+                    f"{path}.requirement_ids must bind every mutation to approved scope"
+                )
+            if "approved-input" not in evidence:
+                raise ContractValidationError(
+                    f"{path}.evidence needs 'approved-input' mutation authority"
+                )
         if (
             action in {"reuse", "untouched", *DELTA_ACTIONS}
             and "container-confirmed" not in evidence
@@ -298,12 +316,11 @@ def _validate_objects(
         expected_high = _object_is_high_impact(item)
         if expected_high and risk != "high-impact":
             raise ContractValidationError(f"{path}.risk must be 'high-impact'")
-        if risk == "high-impact" and item.get("explicit_authority") is not True:
-            raise ContractValidationError(f"{path}.explicit_authority must be true")
         validate_action_contract(
             item,
             path=path,
             fail=_fail,
+            authority_locators={requirements[value]["authority"]["locator"] for value in links},
         )
         objects[key] = item
         aliases[key] = key
@@ -342,16 +359,9 @@ def _reject_cycles(graph: dict[str, list[str]], label: str) -> None:
 
 
 def _trigger_accepts_event(trigger: dict[str, Any], event_name: str) -> bool:
-    values = _reference_values(trigger.get("intended", {}))
-    for value in values:
-        if value == event_name:
-            return True
-        try:
-            if re.fullmatch(value, event_name):
-                return True
-        except re.error:
-            continue
-    return False
+    from event_semantics import trigger_accepts_event
+
+    return trigger_accepts_event(trigger.get("intended", {}), event_name)
 
 
 def _validate_server_object_graph(
@@ -407,10 +417,27 @@ def _validate_server_object_graph(
                 if key in expected_events:
                     expected_events[key].add(flow["transported_event"])
     for key, tag in server_tags.items():
+        from event_semantics import configured_event_name
+
+        literal = configured_event_name(tag.get("intended", {}))
+        approved_names = {
+            requirements[requirement_id].get("event_name")
+            for requirement_id in tag.get("requirement_ids", [])
+            if requirement_id in requirements
+        } - {None}
+        if (
+            tag.get("intended", {}).get("type") == "gaawc"
+            and literal is not None
+            and approved_names
+            and literal not in approved_names
+        ):
+            raise ContractValidationError(
+                f"server tag {key!r} configured event {literal!r} differs from approved event names"
+            )
         if not expected_events[key]:
             for requirement_id in tag.get("requirement_ids", []):
                 requirement = requirements.get(requirement_id, {})
-                event_name = requirement.get("source_event") or requirement.get("event_name")
+                event_name = approved_event_name(requirement)
                 if event_name:
                     expected_events[key].add(event_name)
         for event_name in expected_events[key]:
@@ -434,6 +461,9 @@ def _validate_consent_topologies(
     for index, value in enumerate(_array(raw, "$.consent_topologies")):
         path = f"$.consent_topologies[{index}]"
         topology = _object(value, path)
+        from run_validation_pipeline import validate_transport_consent
+
+        validate_transport_consent(topology, _fail)
         topology_id = _text(topology.get("consent_topology_id"), f"{path}.consent_topology_id")
         if topology_id in records:
             raise ContractValidationError(f"duplicate consent topology {topology_id!r}")
@@ -536,10 +566,6 @@ def _validate_consent_topologies(
                     f"{path} an unblocked transporter cannot declare blocked transport"
                 )
         if vendor_block:
-            if topology.get("intentional_double_gate") is not True:
-                raise ContractValidationError(
-                    f"{path} transporter vendor blocking requires explicit double-gate authority"
-                )
             if topology.get("transport_behavior") != "blocked":
                 raise ContractValidationError(
                     f"{path} transporter vendor blocking requires blocked transport behavior"
@@ -620,6 +646,13 @@ def _validate_consent_topologies(
             raise ContractValidationError(
                 f"{path} duplicates a transport block with a server destination gate"
             )
+        if (
+            not (topology.get("transport_behavior") == "blocked" and explicit_server_gate)
+            and topology.get("intentional_double_gate") is True
+        ):
+            raise ContractValidationError(
+                f"{path}.intentional_double_gate is true without two configurable gates"
+            )
     active_server_tags = {
         key
         for key, item in objects.items()
@@ -650,7 +683,7 @@ def _validate_dedup_contracts(raw: Any, requirement_ids: set[str]) -> dict[str, 
         strategy = contract.get("strategy")
         source_type = contract.get("source_type")
         destination = _text(contract.get("destination"), f"{path}.destination")
-        event_name = _text(contract.get("event_name"), f"{path}.event_name")
+        _text(contract.get("event_name"), f"{path}.event_name")
         if strategy not in DEDUP_STRATEGIES:
             raise ContractValidationError(f"{path}.strategy is unsupported")
         if source_type not in DEDUP_SOURCE_TYPES:
@@ -693,19 +726,6 @@ def _validate_dedup_contracts(raw: Any, requirement_ids: set[str]) -> dict[str, 
                 raise ContractValidationError(
                     f"{path} must bind browser and transporter to one occurrence source"
                 )
-            if event_name == "purchase" and source_type == "gtm-event-scoped-fallback":
-                raise ContractValidationError(
-                    f"{path} cannot use the GTM event fallback for a dual-delivery purchase"
-                )
-            if source_type == "gtm-event-scoped-fallback":
-                if contract.get("same_gtm_event") is not True:
-                    raise ContractValidationError(f"{path}.same_gtm_event must be true")
-                if not contract.get("runtime_verification_note"):
-                    raise ContractValidationError(f"{path}.runtime_verification_note is required")
-                if contract.get("compatibility_classification") != "guarded-internal-gtm-model":
-                    raise ContractValidationError(
-                        f"{path}.compatibility_classification must record the guarded GTM model"
-                    )
             if contract.get("server_generates_id") is True:
                 raise ContractValidationError(f"{path} cannot regenerate the ID in the server")
             if server_event_data_path != contract.get("transported_parameter"):
@@ -721,6 +741,10 @@ def _validate_dedup_contracts(raw: Any, requirement_ids: set[str]) -> dict[str, 
 
 def _validate_field_flow(value: Any, path: str, requirement_ids: set[str]) -> dict[str, Any]:
     field = _object(value, path)
+    field_scope = field.get("field_scope")
+    if field_scope not in {"event-parameter", "user-property", "item-parameter", "control"}:
+        raise ContractValidationError(f"{path}.field_scope is unsupported")
+    _text(field.get("destination_field"), f"{path}.destination_field")
     status = field.get("status")
     if status not in FIELD_FLOW_STATUSES:
         raise ContractValidationError(f"{path}.status is unsupported")
@@ -812,7 +836,23 @@ def _validate_pipelines(
             or objects[transport_owner]["target_id"] not in senders
         ):
             raise ContractValidationError(f"{path}.transport_owner must reference a sender web tag")
-        _text(pipeline.get("endpoint_reference"), f"{path}.endpoint_reference")
+        endpoint_reference = _text(pipeline.get("endpoint_reference"), f"{path}.endpoint_reference")
+        resolved_endpoint = web_support._normalize_transport_endpoint(
+            web_support._resolve_constant_reference(
+                endpoint_reference, objects, f"{path}.endpoint_reference"
+            ),
+            f"{path}.endpoint_reference",
+        )
+        owner_endpoint = web_support._configured_transport_endpoint(
+            objects[transport_owner], objects, f"{path}.transport_owner"
+        )
+        if owner_endpoint != resolved_endpoint:
+            raise ContractValidationError(
+                f"{path}.endpoint_reference differs from its transport owner"
+            )
+        owner_destinations = web_support._configured_destinations(
+            objects[transport_owner]["intended"], objects, f"{path}.transport_owner"
+        )
         claiming = _object(pipeline.get("claiming_client"), f"{path}.claiming_client")
         client_key = _text(claiming.get("object_key"), f"{path}.claiming_client.object_key")
         if client_key not in objects or objects[client_key]["resource_family"] != "client":
@@ -833,6 +873,10 @@ def _validate_pipelines(
         claim_key = (receiver, pipeline["request_class"])
         receiver_claims.setdefault(claim_key, set()).add(client_key)
         page_view = _object(pipeline.get("page_view_ownership"), f"{path}.page_view_ownership")
+        if page_view.get("occurrence") != "initial-page-load":
+            raise ContractValidationError(
+                f"{path}.page_view_ownership.occurrence must be 'initial-page-load'"
+            )
         page_owner = _text(page_view.get("owner"), f"{path}.page_view_ownership.owner")
         if (
             page_owner not in objects
@@ -842,17 +886,26 @@ def _validate_pipelines(
             raise ContractValidationError(
                 f"{path}.page_view_ownership.owner must reference a sender web tag"
             )
-        if page_view.get("send_page_view") not in {True, False}:
-            raise ContractValidationError(
-                f"{path}.page_view_ownership.send_page_view must be boolean"
-            )
         owner_target = _object(
             objects[page_owner].get("intended"),
             f"{path}.page_view_ownership.owner_intended",
         )
-        if legacy_run._send_page_view_value(owner_target, path) != page_view["send_page_view"]:
+        owner_type = web_support._tag_type(owner_target, path)
+        if owner_type in web_support.GOOGLE_CONFIGURATION_TAG_TYPES:
+            if page_view.get("send_page_view") not in {True, False}:
+                raise ContractValidationError(
+                    f"{path}.page_view_ownership.send_page_view must be boolean for a Google tag"
+                )
+            if (
+                web_support._send_page_view_value(owner_target, path, objects)
+                != page_view["send_page_view"]
+            ):
+                raise ContractValidationError(
+                    f"{path}.page_view_ownership differs from the bound Google tag"
+                )
+        elif page_view.get("send_page_view") is not None:
             raise ContractValidationError(
-                f"{path}.page_view_ownership differs from the bound web tag"
+                f"{path}.page_view_ownership.send_page_view must be null for a non-Google sender"
             )
         event_flows = _array(pipeline.get("event_flows"), f"{path}.event_flows")
         if not event_flows:
@@ -865,7 +918,7 @@ def _validate_pipelines(
                 raise ContractValidationError(f"{flow_path}.requirement_id is unknown")
             source_event = _text(flow.get("source_event"), f"{flow_path}.source_event")
             requirement = requirements[requirement_id]
-            approved_source_event = requirement.get("source_event") or requirement.get("event_name")
+            approved_source_event = approved_event_name(requirement)
             if approved_source_event and source_event != approved_source_event:
                 raise ContractValidationError(
                     f"{flow_path}.source_event differs from its approved requirement"
@@ -886,6 +939,7 @@ def _validate_pipelines(
                         f"{flow_path}.server_consumer_keys must reference receiver tags"
                     )
         field_flows = []
+        field_flow_identities: set[tuple[str, str, str]] = set()
         flow_requirement_ids = {flow["requirement_id"] for flow in event_flows}
         for field_index, field_value in enumerate(
             _array(pipeline.get("field_flows"), f"{path}.field_flows")
@@ -896,6 +950,17 @@ def _validate_pipelines(
                 raise ContractValidationError(
                     f"{field_path}.requirement_ids must belong to this pipeline's event flows"
                 )
+            for requirement_id in field["requirement_ids"]:
+                identity = (
+                    requirement_id,
+                    field["field_scope"],
+                    field["destination_field"],
+                )
+                if identity in field_flow_identities:
+                    raise ContractValidationError(
+                        f"{field_path} duplicates pipeline field flow {identity!r}"
+                    )
+                field_flow_identities.add(identity)
             if field.get("status") == "proved":
                 receiver_owner = field["receiver_owner"]
                 receiver_operation = objects.get(receiver_owner)
@@ -924,6 +989,15 @@ def _validate_pipelines(
                         raise ContractValidationError(
                             f"{field_path}.transformation_owner must reference a receiver "
                             "Transformation"
+                        )
+                    elif transformation.get("intended", {}).get("mode") == "allow" and field.get(
+                        "wire", {}
+                    ).get("path") not in set(
+                        transformation.get("intended", {}).get("allowed_parameters", [])
+                    ):
+                        raise ContractValidationError(
+                            f"{field_path}.transformation_owner allowlist removes the proved "
+                            "wire field"
                         )
             field_flows.append(field)
         topology_links = _unique_texts(
@@ -962,6 +1036,24 @@ def _validate_pipelines(
                 raise ContractValidationError(
                     f"{path} consent topology {topology_id!r} binds a non-sender transporter"
                 )
+            transporter_keys = set(topology.get("transporter_tag_keys", []))
+            for key in transporter_keys:
+                operation = objects[key]
+                if key == transport_owner:
+                    continue
+                direct_endpoint = web_support._configured_transport_endpoint(
+                    operation, objects, f"{path}.transporter_tag_keys[{key!r}]"
+                )
+                destinations = web_support._configured_destinations(
+                    operation["intended"], objects, f"{path}.transporter_tag_keys[{key!r}]"
+                )
+                if direct_endpoint != resolved_endpoint and not (
+                    destinations and destinations & owner_destinations
+                ):
+                    raise ContractValidationError(
+                        f"{path} consent topology {topology_id!r} transporter {key!r} "
+                        "does not inherit the proved endpoint"
+                    )
             if not topology_server_keys <= all_server_consumers:
                 raise ContractValidationError(
                     f"{path} consent topology {topology_id!r} binds a tag outside its event flows"
@@ -1021,12 +1113,6 @@ def _validate_pipelines(
                     raise ContractValidationError(
                         f"{path} dedup source reference differs from its variable object"
                     )
-                if dedup.get("source_type") == "gtm-event-scoped-fallback":
-                    variable_type = str(variable.get("intended", {}).get("type", "")).casefold()
-                    if variable_type not in {"cjs", "custom-javascript", "customjavascript"}:
-                        raise ContractValidationError(
-                            f"{path} guarded GTM fallback must reference a Custom JavaScript variable"
-                        )
                 browser_keys = set(dedup["browser_consumer_keys"])
                 transporter_keys = set(dedup["transporter_consumer_keys"])
                 if browser_keys & transporter_keys:
@@ -1091,15 +1177,21 @@ def _validate_pipelines(
                 f"{path}.operation_dependencies misses receiver objects: "
                 + ", ".join(missing_dependencies)
             )
-        cutover = pipeline.get("cutover_operation_key")
-        if cutover is not None:
-            cutover = _text(cutover, f"{path}.cutover_operation_key")
-            if cutover not in objects or objects[cutover]["target_id"] not in senders:
-                raise ContractValidationError(
-                    f"{path}.cutover_operation_key must be a sender object"
-                )
-            if objects[cutover].get("risk") != "high-impact":
-                raise ContractValidationError(f"{path}.cutover_operation_key must be high-impact")
+        cutover = _text(pipeline.get("cutover_operation_key"), f"{path}.cutover_operation_key")
+        if cutover != transport_owner:
+            raise ContractValidationError(
+                f"{path}.cutover_operation_key must be the pipeline transport owner"
+            )
+        if objects[cutover].get("risk") != "high-impact":
+            raise ContractValidationError(f"{path}.cutover_operation_key must be high-impact")
+        missing_cutover_dependencies = sorted(
+            required_keys - set(objects[cutover].get("depends_on", []))
+        )
+        if missing_cutover_dependencies:
+            raise ContractValidationError(
+                f"{path} cutover does not depend directly on every receiver prerequisite: "
+                + ", ".join(missing_cutover_dependencies)
+            )
     for (target_id, request_class), clients in receiver_claims.items():
         if len(clients) != 1:
             raise ContractValidationError(
@@ -1116,8 +1208,9 @@ def _validate_pipelines(
         )
 
 
-def _validate_evidence(raw: Any) -> None:
+def _validate_evidence(raw: Any, requirement_ids: set[str]) -> None:
     grades: set[str] = set()
+    officially_supported: set[str] = set()
     for index, value in enumerate(_array(raw, "$.evidence")):
         path = f"$.evidence[{index}]"
         evidence = _object(value, path)
@@ -1127,36 +1220,60 @@ def _validate_evidence(raw: Any) -> None:
         grades.add(grade)
         locator = _text(evidence.get("locator"), f"{path}.locator")
         if grade == "official-current":
-            parsed = urlparse(locator)
-            if parsed.scheme != "https" or not parsed.netloc:
-                raise ContractValidationError(f"{path}.locator must be an HTTPS official URL")
+            for field in ("title", "decision"):
+                _text(evidence.get(field), f"{path}.{field}")
             try:
-                date.fromisoformat(_text(evidence.get("accessed_on"), f"{path}.accessed_on"))
+                parsed = urlparse(locator)
+                valid_locator = (
+                    parsed.scheme == "https"
+                    and bool(parsed.hostname)
+                    and parsed.username is None
+                    and parsed.password is None
+                )
+            except ValueError:
+                valid_locator = False
+            if not valid_locator:
+                raise ContractValidationError(
+                    f"{path}.locator must be a credential-free HTTPS documentation URL"
+                )
+            try:
+                accessed_on = date.fromisoformat(
+                    _text(evidence.get("accessed_on"), f"{path}.accessed_on")
+                )
             except ValueError as exc:
                 raise ContractValidationError(f"{path}.accessed_on must be an ISO date") from exc
+            age = (date.today() - accessed_on).days
+            if age < 0:
+                raise ContractValidationError(f"{path}.accessed_on cannot be in the future")
+            if age > _MAX_OFFICIAL_EVIDENCE_AGE_DAYS:
+                raise ContractValidationError(
+                    f"{path}.official-current evidence is older than "
+                    f"{_MAX_OFFICIAL_EVIDENCE_AGE_DAYS} days"
+                )
+            supports = set(
+                _unique_texts(evidence.get("supports"), f"{path}.supports", allow_empty=False)
+            )
+            if supports - requirement_ids:
+                raise ContractValidationError(f"{path}.supports contains an unknown requirement")
+            officially_supported.update(supports)
     if not {"official-current", "container-confirmed"} <= grades:
         raise ContractValidationError(
             "$.evidence needs official-current and container-confirmed records"
         )
+    if officially_supported != requirement_ids:
+        raise ContractValidationError(
+            "official-current evidence must support every included requirement; missing="
+            + repr(sorted(requirement_ids - officially_supported))
+        )
 
 
-def validate_document(value: Any, *, allow_legacy: bool = False) -> dict[str, Any]:
+def validate_document(value: Any) -> dict[str, Any]:
     contract = _object(value, "$")
     version = contract.get("schema_version")
     if version is None:
         raise ContractValidationError(
             "$.schema_version is required; unversioned inputs cannot authorize mutation"
         )
-    if version in LEGACY_SCHEMA_VERSIONS:
-        if version == "4.0" and not allow_legacy:
-            raise ContractValidationError(
-                f"$.schema_version {version!r} is legacy; migrate to {SCHEMA_VERSION!r} "
-                "or use --allow-legacy for read compatibility"
-            )
-        try:
-            return legacy.validate_document(contract, allow_legacy=version == "4.0")
-        except legacy.ContractValidationError as exc:
-            raise ContractValidationError(str(exc), error_code=exc.error_code) from exc
     if version != SCHEMA_VERSION:
         raise ContractValidationError(f"$.schema_version must be {SCHEMA_VERSION!r}")
     unexpected = sorted(set(contract) - TOP_LEVEL_KEYS)
@@ -1179,12 +1296,28 @@ def validate_document(value: Any, *, allow_legacy: bool = False) -> dict[str, An
     requirement_ids = _validate_scope_and_requirements(contract, route)
     targets = _validate_targets(contract["targets"], mode)
     implementation = _object(contract["implementation"], "$.implementation")
-    if set(implementation) != {"execution_mode", "objects"}:
+    if not {"execution_mode", "objects"} <= set(implementation) or set(implementation) - {
+        "execution_mode",
+        "objects",
+        "field_bindings",
+    }:
         raise ContractValidationError(
-            "$.implementation requires exactly 'execution_mode' and 'objects'"
+            "$.implementation requires execution_mode and objects, with optional field_bindings"
         )
     execution_mode = _text(implementation["execution_mode"], "$.implementation.execution_mode")
-    objects, _ = _validate_objects(implementation["objects"], targets, requirement_ids)
+    requirement_by_id = {item["id"]: item for item in contract["requirements"]}
+    objects, _ = _validate_objects(implementation["objects"], targets, requirement_by_id)
+    implemented_requirement_ids = {
+        requirement_id
+        for item in objects.values()
+        for requirement_id in item.get("requirement_ids", [])
+    }
+    missing_implementation = sorted(requirement_ids - implemented_requirement_ids)
+    if missing_implementation:
+        raise ContractValidationError(
+            "every included requirement needs an implementing create/update/reuse/untouched "
+            f"object; missing={missing_implementation}"
+        )
     consent_topologies = _validate_consent_topologies(
         contract["consent_topologies"], requirement_ids, objects, targets, mode
     )
@@ -1195,19 +1328,44 @@ def validate_document(value: Any, *, allow_legacy: bool = False) -> dict[str, An
         targets,
         objects,
         requirement_ids,
-        {item["id"]: item for item in contract["requirements"]},
+        requirement_by_id,
         consent_topologies,
         dedup_contracts,
     )
     _validate_server_object_graph(
         objects,
         targets,
-        {item["id"]: item for item in contract["requirements"]},
+        requirement_by_id,
         contract["pipelines"],
     )
-    payload_mappings: list[dict[str, Any]] = []
-    for requirement in contract["requirements"]:
-        payload_mappings.extend(legacy_run._field_mappings(requirement))
+    from web_domain_validation import materialize_payload_mappings
+
+    try:
+        payload_mappings = materialize_payload_mappings(contract)
+    except web_support.RunValidationError as exc:
+        raise ContractValidationError(str(exc)) from exc
+    for index, pipeline in enumerate(contract["pipelines"]):
+        flow_requirement_ids = {flow["requirement_id"] for flow in pipeline.get("event_flows", [])}
+        field_flow_identities = {
+            (requirement_id, field["field_scope"], field["destination_field"])
+            for field in pipeline.get("field_flows", [])
+            for requirement_id in field.get("requirement_ids", [])
+        }
+        mapped_identities = {
+            (
+                mapping["requirement_id"],
+                mapping["field_scope"],
+                mapping["destination_field"],
+            )
+            for mapping in payload_mappings
+            if mapping.get("status") == "mapped"
+            and mapping.get("requirement_id") in flow_requirement_ids
+        }
+        missing_field_flows = sorted(mapped_identities - field_flow_identities)
+        if missing_field_flows:
+            raise ContractValidationError(
+                f"$.pipelines[{index}].field_flows misses mapped fields: {missing_field_flows}"
+            )
     validate_web_domain(
         execution_mode=execution_mode,
         requirements=[
@@ -1220,31 +1378,31 @@ def validate_document(value: Any, *, allow_legacy: bool = False) -> dict[str, An
         execution_topologies=contract["execution_topologies"],
         page_view_decisions=contract["page_view_decisions"],
         first_party_data_routes=contract["first_party_data_routes"],
+        pipelines=contract["pipelines"],
         inventory_dispositions=contract["inventory_dispositions"],
         external_dependencies=contract["external_dependencies"],
         fail=_fail,
         contract_phase=True,
     )
-    _validate_evidence(contract["evidence"])
+    _validate_evidence(contract["evidence"], requirement_ids)
     _array(contract["external_dependencies"], "$.external_dependencies")
     return contract
 
 
-def load_contract(path: Path, *, allow_legacy: bool = False) -> dict[str, Any]:
+def load_contract(path: Path) -> dict[str, Any]:
     try:
         value = load_json(path)
     except StrictJsonError as exc:
         raise ContractValidationError(str(exc), error_code=exc.error_code) from exc
-    return validate_document(value, allow_legacy=allow_legacy)
+    return validate_document(value)
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--contract", type=Path, required=True)
-    parser.add_argument("--allow-legacy", action="store_true")
     args = parser.parse_args()
     try:
-        contract = load_contract(args.contract, allow_legacy=args.allow_legacy)
+        contract = load_contract(args.contract)
     except ContractValidationError as exc:
         print(json.dumps({"pass": False, "error_code": exc.error_code, "error": str(exc)}))
         return 2

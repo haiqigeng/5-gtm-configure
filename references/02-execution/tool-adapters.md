@@ -79,7 +79,10 @@ in the configuration-run artifact.
 
 ## Build an object-family capability profile
 
-Record `list/read/create/update/revert/readback/pagination` capability independently for workspace,
+Before registration and again before each execution boundary, require the adapter to read its
+authenticated `account_id`, `container_id`, `workspace_id`, and `container_type`; all four must
+exactly match the authorized run target. A caller-assigned logical target ID is never identity
+evidence. Record `list/read/create/update/revert/readback/pagination` capability independently for workspace,
 tag, trigger, user-defined variable, built-in variable, folder, template, Google tag configuration,
 destination, Zone, environment, and applicable container settings. Also record whether the action is
 valid for a client-side web container and whether it is routine or high-impact.
@@ -103,7 +106,7 @@ Do not mutate from an informal prose summary. If the adapter cannot represent a 
 preserve the intended type/shape, stop that object and use another authorized adapter or mark the
 affected configuration `Blocked`.
 
-For analytics, use the strict v6 configuration-contract validation, normalized collection contract,
+For analytics, use the strict configuration-contract 7.0 validation, normalized collection contract,
 and zero-difference conformance result as adapter preconditions. Keep technical infrastructure fields
 separate so the adapter does not mistake a required GTM reference for an approved outgoing
 parameter.
@@ -195,16 +198,25 @@ Do not use names alone as idempotency keys. Compare stable IDs where present and
   not remove an intended field merely to make the adapter accept the request.
 
 For a programmatic adapter, `scripts/adapter_runtime.py` provides the tested pagination, bounded
-retry, read-before-write, ambiguous-response, dependency-stop, and checkpoint state machine. Its
-`collect_resource_baseline` helper exhausts every selected family once for local dependency
-analysis rather than repeatedly listing the same objects. Feed that result to
-`build_container_baseline` to record exact family counts, semantic trigger keys/types, in-scope tag
-keys, workspace-change count, and one deterministic baseline fingerprint; do not hand-author those
-binding fields from memory. Its
-comparison method must return structured evidence covering every top-level intended field and bound
+retry, authenticated baseline, read-before-write, ambiguous-response, dependency-stop, and
+checkpoint state machine. The target adapter must implement `list_resource_page` and
+`list_workspace_changes_page`. Immediately before the first write, the runtime exhausts every
+list-capable resource family, creates pagination receipts itself, retains the redacted canonical
+object graph and pre-existing workspace changes, and fingerprints that evidence. There is no
+caller-supplied baseline command or public baseline-recording API. A web Google Configuration Settings variable mutation also
+requires exhaustive tag enumeration, because tags are its consumers. Missing tag-list capability
+fails that target before any write. The validator recomputes resource identities, counts, and the
+baseline fingerprint from retained evidence on every load.
+Before each shared-settings write, including on resume, refresh the tag inventory and reject an
+unreviewed consumer. Retained receipts and hashes check consistency; authenticated reads establish
+origin. The comparison method must return structured evidence covering every top-level intended field and bound
 to the intended and authoritative saved payloads; a boolean match claim is invalid. MCP and UI runs
-must supply equivalent saved readback and apply the same transitions even when they cannot call the
-helper directly.
+must obtain equivalent authenticated exhaustive reads before mutation; a hand-authored receipt is
+not evidence.
+
+A documented non-applied rejection or exhausted write rate limit is `failed`. If the write returned
+successfully or ambiguously and the following readback fails, keep it `uncertain`; never reopen that
+operation as a fresh write without resolving the saved outcome.
 
 Normalize adapter-local tag `firingTriggerId`/`blockingTriggerId` values to the matching
 `trigger::<name>` object keys in the run artifact after exact ID resolution. Keep only the three
@@ -280,6 +292,10 @@ Prefer GTM MCP, then API, then authorized complete export/import, then signed-in
 the semantic adapters cannot express. Do not silently switch to browser automation or synthesize
 unknown API/template fields. Keep bounded non-applied rate-limit retries and read-before-retry for
 ambiguous responses.
+
+After all operations are verified, run the adapter's read-only convergence pass. It must freshly
+read every operation, recompute the target comparison, persist `no-op` or `mutation-required`, and
+perform zero mutations. Only a complete set of `no-op` observations may unlock finalization.
 
 Official server families:
 

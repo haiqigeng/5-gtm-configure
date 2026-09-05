@@ -14,8 +14,15 @@ from configuration_run import (  # noqa: E402
     build_verification_comparison,
     checkpoint_operation,
     create_from_contract,
-    finalize_document,
     reopen_failed_operation,
+)
+from current_support import (  # noqa: E402
+    add_nonpurchase_dual_dedup,
+    approve_mutations,
+    valid_pipeline_contract,
+    valid_server_contract,
+    valid_web_contract,
+    with_complete_baselines,
 )
 from redaction import (  # noqa: E402
     redact_for_persistence,
@@ -23,39 +30,118 @@ from redaction import (  # noqa: E402
     sensitive_paths,
 )
 from run_render import render_markdown  # noqa: E402
+from run_state import _finalize_adapter_verified_document  # noqa: E402
 from run_validation_core import validate_document as validate_run  # noqa: E402
 from run_validation_web import RunValidationError  # noqa: E402
-from v9_support import (  # noqa: E402
-    add_nonpurchase_dual_dedup,
-    valid_pipeline_contract,
-    valid_server_contract,
-    valid_web_contract,
-)
 from validate_configuration_contract import (  # noqa: E402
     ContractValidationError,
 )
 from validate_configuration_contract import validate_document as validate_contract  # noqa: E402
-from verification import expected_graph, materialization_fingerprints  # noqa: E402
+from verification import (  # noqa: E402
+    canonical_sha256,
+    expected_graph,
+    materialization_fingerprints,
+)
 
 
 def materialize(contract: dict) -> dict:
-    return create_from_contract(
-        contract,
-        run_id="RUN-HARDENING",
-        source_locator="approved input",
-        timestamp="2026-08-18T00:00:00Z",
+    approve_mutations(contract)
+    return with_complete_baselines(
+        create_from_contract(
+            contract,
+            run_id="RUN-HARDENING",
+            source_locator="approved input",
+            timestamp="2026-08-18T00:00:00Z",
+        )
     )
 
 
-class V9RegressionHardeningTest(unittest.TestCase):
+class CurrentRegressionHardeningTest(unittest.TestCase):
+    def test_complete_baseline_is_bound_to_resources_and_identity_registry(self) -> None:
+        run = materialize(valid_web_contract())
+        baseline = run["container_baselines"][0]
+        baseline["resources"]["tag"].append({"name": "Injected", "type": "html"})
+        baseline["family_counts"]["tag"] += 1
+        with self.assertRaisesRegex(RunValidationError, "resource_identities"):
+            validate_run(run)
+
+        baseline["resource_identities"]["tag"].append("web-main::tag::Injected")
+        with self.assertRaisesRegex(RunValidationError, "fingerprint"):
+            validate_run(run)
+
+        baseline["fingerprint"] = "sha256:" + canonical_sha256(
+            {
+                "resources": baseline["resources"],
+                "workspace_changes": baseline["preexisting_workspace_changes"],
+                "capture_evidence": baseline["capture_evidence"],
+            }
+        )
+        self.assertEqual(validate_run(run)["schema_version"], "4.0")
+
     def test_web_contract_cannot_drop_topology_or_page_view_ownership(self) -> None:
         contract = valid_web_contract()
         contract["execution_topologies"] = []
         with self.assertRaisesRegex(ContractValidationError, "execution topology"):
             validate_contract(contract)
 
+    def test_page_view_ownership_is_occurrence_scoped_and_supports_internal_tags(self) -> None:
+        contract = valid_web_contract()
+        topology = contract["execution_topologies"][0]
+        topology["page_view_occurrences"] = ["initial-page-load", "virtual-navigation"]
+        decision = contract["page_view_decisions"][0]
+        decision.update(
+            owner="internal-tag",
+            google_tag_object_key=None,
+            send_page_view=None,
+            reason="The internal analytics tag owns this occurrence.",
+        )
+        contract["page_view_decisions"].append(
+            {
+                **deepcopy(decision),
+                "occurrence": "virtual-navigation",
+                "reason": "The same internal tag owns virtual navigation without overlapping initial load.",
+            }
+        )
+        with self.assertRaisesRegex(ContractValidationError, "initial-page-load occurrence"):
+            validate_contract(contract)
+
+        # An internal owner must be a real page-view emitter, not a Google tag
+        # relabelled in the decision record.
+        topology["page_view_occurrences"] = ["initial-page-load"]
+        contract["page_view_decisions"] = [decision]
+        decision.update(
+            owner="google-tag-automatic",
+            google_tag_object_key=decision["owner_object_key"],
+            send_page_view=True,
+        )
+        self.assertEqual(len(validate_contract(contract)["page_view_decisions"]), 1)
+
+        duplicate = deepcopy(contract)
+        duplicate["page_view_decisions"].append(deepcopy(duplicate["page_view_decisions"][0]))
+        with self.assertRaisesRegex(ContractValidationError, "duplicate page-view decision"):
+            validate_contract(duplicate)
+
+        missing = deepcopy(contract)
+        missing["page_view_decisions"].pop()
+        with self.assertRaisesRegex(ContractValidationError, "page-view decisions"):
+            validate_contract(missing)
+
+    def test_pipeline_requires_exactly_one_flow_for_every_mapped_field_identity(self) -> None:
+        contract = valid_pipeline_contract()
+        contract["pipelines"][0]["field_flows"] = []
+        with self.assertRaisesRegex(ContractValidationError, "misses mapped fields"):
+            validate_contract(contract)
+
+        contract = valid_pipeline_contract()
+        contract["pipelines"][0]["field_flows"].append(
+            deepcopy(contract["pipelines"][0]["field_flows"][0])
+        )
+        with self.assertRaisesRegex(ContractValidationError, "duplicates pipeline field flow"):
+            validate_contract(contract)
+
         contract = valid_web_contract()
         contract["implementation"]["objects"][0]["intended"]["send_page_view"] = False
+        approve_mutations(contract)
         with self.assertRaisesRegex(ContractValidationError, "send_page_view"):
             validate_contract(contract)
 
@@ -70,13 +156,13 @@ class V9RegressionHardeningTest(unittest.TestCase):
                 "pre_change": deepcopy(action["intended"]),
                 "evidence": ["approved-input", "official-current", "container-confirmed"],
                 "risk": "high-impact",
-                "explicit_authority": True,
             }
         )
         action.pop("intended")
         remove["execution_topologies"] = []
         remove["page_view_decisions"] = []
-        cases.append((remove, "destructive_authorization"))
+        action.pop("approval")
+        cases.append((remove, "approval"))
 
         rename = valid_web_contract()
         action = rename["implementation"]["objects"][0]
@@ -117,7 +203,8 @@ class V9RegressionHardeningTest(unittest.TestCase):
             run = materialize(valid_pipeline_contract())
             mutation(run)
             with self.assertRaisesRegex(
-                RunValidationError, "differ from deterministic materialization"
+                RunValidationError,
+                "differs from the authorized target|differ from deterministic materialization",
             ):
                 validate_run(run)
 
@@ -128,26 +215,27 @@ class V9RegressionHardeningTest(unittest.TestCase):
         for baseline in run["container_baselines"]:
             baseline["complete"] = True
         with self.assertRaisesRegex(RunValidationError, "comparison|saved_readback"):
-            finalize_document(run, idempotency_evidence=["forged no-op claim"])
+            _finalize_adapter_verified_document(run)
 
     def test_remove_is_verified_by_authoritative_absence(self) -> None:
         contract = valid_web_contract()
         action = contract["implementation"]["objects"][0]
+        # Removing this tag does not require creating its former trigger references.
+        action["depends_on"] = []
         pre_change = deepcopy(action["intended"])
         action.update(
             {
                 "action": "remove",
                 "object_id": "tag-100",
                 "pre_change": pre_change,
-                "destructive_authorization": True,
                 "evidence": ["approved-input", "official-current", "container-confirmed"],
                 "risk": "high-impact",
-                "explicit_authority": True,
             }
         )
         action.pop("intended")
         contract["execution_topologies"] = []
         contract["page_view_decisions"] = []
+        approve_mutations(contract)
         run = materialize(contract)
         operation = run["object_changes"][0]
         prewrite, safe_pre_change = build_pre_write_comparison(
@@ -193,9 +281,19 @@ class V9RegressionHardeningTest(unittest.TestCase):
                 "tagManagerUrl": "server/accounts/1/tags/2",
             },
         )
-        self.assertTrue(comparison["pass"])
+        self.assertFalse(comparison["pass"])
+        self.assertFalse(comparison["secret_comparison"]["reference_proved"])
         self.assertFalse(comparison["secret_comparison"]["value_equality_claimed"])
         self.assertNotIn("runtime-secret", str(persisted))
+        proved, _ = build_pre_write_comparison(
+            operation,
+            {
+                "name": "Meta - Purchase",
+                "type": "meta-capi",
+                "access_token": redacted_marker(reference="vault://meta/v1"),
+            },
+        )
+        self.assertTrue(proved["pass"])
         renamed, _ = build_pre_write_comparison(
             operation,
             {
@@ -207,16 +305,48 @@ class V9RegressionHardeningTest(unittest.TestCase):
         self.assertFalse(renamed["pass"])
         self.assertIn("$.name: value differs", renamed["differences"])
 
-    def test_redaction_handles_template_rows_compact_phone_and_governance_flags(self) -> None:
+    def test_verification_canonicalizes_secret_bearing_keyed_rows(self) -> None:
+        operation = {
+            "operation_id": "OP-SECRET-ROWS",
+            "target_id": "server-main",
+            "container_type": "server",
+            "resource_family": "tag",
+            "name": "Vendor - Purchase",
+            "object_key": "server-main::tag::Vendor - Purchase",
+            "action": "create",
+            "intended": {
+                "type": "vendor-api",
+                "parameter": [
+                    {
+                        "type": "template",
+                        "key": "apiSecret",
+                        "value": redacted_marker(reference="vault://vendor/api-secret"),
+                    },
+                    {"type": "template", "key": "eventName", "value": "purchase"},
+                ],
+            },
+        }
+        saved = expected_graph(operation)
+        saved["objects"][0]["parameter"].reverse()
+        saved["objects"][0]["parameter"][1]["value"] = "runtime-secret"
+
+        comparison, persisted = build_verification_comparison(operation, saved)
+
+        self.assertTrue(comparison["pass"])
+        self.assertTrue(comparison["report"]["secret_comparison"]["presence_paths_match"])
+        self.assertFalse(comparison["report"]["secret_comparison"]["value_equality_claimed"])
+        self.assertNotIn("runtime-secret", str(persisted))
+
+    def test_redaction_handles_template_rows_and_compact_phone(self) -> None:
         source = {
             "parameter": [{"key": "apiSecret", "value": "sk_live_example"}],
             "mobile": "0101010101",
-            "destructive_authorization": True,
+            "governance_note": "approved mutation",
         }
         persisted = redact_for_persistence(source)
         self.assertNotEqual(persisted["parameter"][0]["value"], "sk_live_example")
         self.assertNotEqual(persisted["mobile"], "0101010101")
-        self.assertIs(persisted["destructive_authorization"], True)
+        self.assertEqual(persisted["governance_note"], "approved mutation")
         self.assertEqual(sensitive_paths(persisted), [])
 
     def test_redaction_covers_real_authorization_header_shapes(self) -> None:
@@ -229,14 +359,14 @@ class V9RegressionHardeningTest(unittest.TestCase):
             "rows": [
                 {"name": "Authorization", "value": "Basic YWJjZGVmZ2hpamts"},
             ],
-            "destructive_authorization": True,
+            "governance_note": "approved mutation",
         }
         persisted = redact_for_persistence(source)
         serialized = str(persisted)
         self.assertNotIn("sk_live_direct", serialized)
         self.assertNotIn("sk_live_flattened", serialized)
         self.assertNotIn("YWJjZGVm", serialized)
-        self.assertIs(persisted["destructive_authorization"], True)
+        self.assertEqual(persisted["governance_note"], "approved mutation")
         self.assertEqual(sensitive_paths(persisted), [])
 
     def test_pipeline_owners_dedup_and_consent_must_bind_real_objects(self) -> None:
@@ -269,12 +399,14 @@ class V9RegressionHardeningTest(unittest.TestCase):
             if item["object_key"] == transporter_key
         )
         transporter["intended"].pop("event_id")
+        approve_mutations(contract)
         with self.assertRaisesRegex(ContractValidationError, "does not use the shared ID"):
             validate_contract(contract)
 
     def test_server_tags_require_real_firing_and_consent_bindings(self) -> None:
         contract = valid_server_contract()
         contract["implementation"]["objects"][1]["intended"]["firingTriggerId"] = []
+        approve_mutations(contract)
         with self.assertRaisesRegex(ContractValidationError, "firingTriggerId"):
             validate_contract(contract)
 
@@ -298,12 +430,15 @@ class V9RegressionHardeningTest(unittest.TestCase):
         transporter["intended"]["blockingTriggerId"] = [
             "web-main::trigger::CMP - Analytics granted"
         ]
+        approve_mutations(contract)
         with self.assertRaisesRegex(ContractValidationError, "must not carry"):
             validate_contract(contract)
 
         contract = valid_pipeline_contract()
-        contract["consent_topologies"][0]["transporter_destination_vendor_block"] = True
-        with self.assertRaisesRegex(ContractValidationError, "double-gate authority"):
+        topology = contract["consent_topologies"][0]
+        topology["intentional_double_gate"] = True
+        topology["double_gate_justification"] = "Declared twice without two configurable gates."
+        with self.assertRaisesRegex(ContractValidationError, "without two configurable gates"):
             validate_contract(contract)
 
     def test_markdown_preserves_analyst_operational_detail_without_recette_coupling(self) -> None:
@@ -329,7 +464,7 @@ class V9RegressionHardeningTest(unittest.TestCase):
 
     def test_reopen_clears_stale_saved_evidence(self) -> None:
         run = materialize(valid_web_contract())
-        operation = run["object_changes"][0]
+        operation = next(item for item in run["object_changes"] if not item["dependencies"])
         run = checkpoint_operation(
             run,
             operation_id=operation["operation_id"],
@@ -355,7 +490,11 @@ class V9RegressionHardeningTest(unittest.TestCase):
             operation_id=operation["operation_id"],
             note="approved retry",
         )
-        current = reopened["object_changes"][0]
+        current = next(
+            item
+            for item in reopened["object_changes"]
+            if item["operation_id"] == operation["operation_id"]
+        )
         self.assertEqual(current["state"], "planned")
         self.assertNotIn("saved_readback", current)
         self.assertNotIn("comparison", current)

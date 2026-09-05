@@ -1,4 +1,4 @@
-"""Deterministic creation, migration, checkpoints, inspection, and finalization for run@3.0."""
+"""Deterministic creation, checkpoints, inspection, and finalization for run@4.0."""
 
 from __future__ import annotations
 
@@ -8,10 +8,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-import run_validation_web as legacy
+import run_validation_web as web_support
 from redaction import redact_for_persistence
-from resource_registry import ResourceRegistryError, validate_target_family
-from run_model import SCHEMA_VERSION
+from resource_registry import (
+    ResourceRegistryError,
+    required_baseline_families,
+    validate_target_family,
+)
+from run_model import SCHEMA_VERSION, SERVER_RESOURCE_FAMILIES, WEB_RESOURCE_FAMILIES
 from run_validation_core import transition_allowed, validate_document
 from strict_json import StrictJsonError, load_json
 from validate_configuration_contract import ContractValidationError
@@ -24,10 +28,8 @@ from verification import (
     validate_verification_comparison,
 )
 
-RunValidationError = legacy.RunValidationError
-RunConflictError = legacy.RunConflictError
-run_file_lock = legacy.run_file_lock
-atomic_write = legacy.atomic_write
+RunValidationError = web_support.RunValidationError
+RunConflictError = web_support.RunConflictError
 
 
 def _utc_now() -> str:
@@ -46,34 +48,17 @@ def _official_sources(contract: dict[str, Any]) -> list[dict[str, Any]]:
         output.append(
             {
                 "url": evidence["locator"],
-                "title": evidence.get("title", evidence["locator"]),
+                "title": evidence["title"],
                 "access_date": evidence["accessed_on"],
-                "supports": evidence.get("supports", []),
+                "supports": evidence["supports"],
+                "decision": evidence["decision"],
             }
         )
     return output
 
 
-def _external_dependencies(
-    contract: dict[str, Any], requirement_ids: list[str]
-) -> list[dict[str, Any]]:
-    output = []
-    for index, dependency in enumerate(contract["external_dependencies"], start=1):
-        if isinstance(dependency, str):
-            output.append(
-                {
-                    "id": f"EXT-{index:03d}",
-                    "requirement_ids": requirement_ids,
-                    "owner": "external",
-                    "action": dependency,
-                    "status": "open",
-                }
-            )
-        elif isinstance(dependency, dict):
-            output.append(deepcopy(dependency))
-        else:
-            raise RunValidationError(f"external dependency {index} must be text or an object")
-    return output
+def _external_dependencies(contract: dict[str, Any]) -> list[dict[str, Any]]:
+    return deepcopy(contract["external_dependencies"])
 
 
 def _publication_dependencies(mode: str) -> list[dict[str, Any]]:
@@ -122,7 +107,7 @@ def create_from_contract(
     source_locator: str,
     timestamp: str | None = None,
 ) -> dict[str, Any]:
-    """Materialize every active v3 run section deterministically from contract@6.0."""
+    """Materialize every active v4 run section deterministically from contract@7.0."""
     try:
         contract = validate_contract(deepcopy(contract))
     except ContractValidationError as exc:
@@ -161,7 +146,6 @@ def create_from_contract(
             "justification": item["justification"],
             "evidence": item["evidence"],
             "risk": item.get("risk", "routine"),
-            "explicit_authority": item.get("explicit_authority", False),
             "state": "planned",
             "journal": [],
         }
@@ -171,7 +155,7 @@ def create_from_contract(
             "pre_change",
             "object_id",
             "new_name",
-            "destructive_authorization",
+            "approval",
             "replacement_reason",
             "permission_delta",
             "scope",
@@ -189,14 +173,15 @@ def create_from_contract(
                 "kind": item.get("kind", contract["route"]),
                 "source_locator": item["authority"]["locator"],
                 "source_event": item.get("source_event"),
+                "event_name": item.get("event_name"),
                 "destination": item.get("destination") or item.get("event_name"),
                 "status": "In progress",
                 "object_keys": sorted(requirement_objects[item["id"]]),
             }
         )
-    payload_mappings = []
-    for requirement in contract["requirements"]:
-        payload_mappings.extend(legacy._field_mappings(requirement))
+    from web_domain_validation import materialize_payload_mappings
+
+    payload_mappings = materialize_payload_mappings(contract)
     pipelines = []
     for item in contract["pipelines"]:
         record = deepcopy(item)
@@ -238,7 +223,7 @@ def create_from_contract(
             },
             "publication": {"performed": False, "version_created": False},
             "materialization": {
-                "method": "contract-6.0-deterministic",
+                "method": "contract-7.0-deterministic",
                 "owned_sections": [
                     "targets",
                     "requirements",
@@ -275,7 +260,10 @@ def create_from_contract(
                 "complete": False,
                 "resource_families": [],
                 "family_counts": {},
+                "resource_identities": {},
+                "resources": {},
                 "preexisting_workspace_changes": None,
+                "capture_evidence": None,
                 "fingerprint": None,
             }
             for target in targets
@@ -292,10 +280,10 @@ def create_from_contract(
             for target in targets
         ],
         "official_sources": _official_sources(contract),
-        "external_dependencies": _external_dependencies(contract, requirement_ids),
+        "external_dependencies": _external_dependencies(contract),
         "publication_dependencies": _publication_dependencies(contract["mode"]),
         "recovery_boundary": None,
-        "idempotency": {"checked": False, "remaining_actions": [], "evidence": []},
+        "idempotency": {"checked": False, "remaining_actions": [], "observations": []},
     }
     run["run"]["materialization"]["section_fingerprints"] = materialization_fingerprints(run)
     return validate_document(run)
@@ -306,145 +294,16 @@ def load_document(path: Path) -> dict[str, Any]:
         value = load_json(path)
     except StrictJsonError as exc:
         raise RunValidationError(str(exc), error_code=exc.error_code) from exc
-    version = value.get("schema_version") if isinstance(value, dict) else None
-    if version == SCHEMA_VERSION:
-        return validate_document(value)
-    if version in {"2.0", "2.1"}:
-        return legacy.validate_document(value)
-    raise RunValidationError(f"unsupported configuration-run schema {version!r}")
+    return validate_document(value)
 
 
-def upgrade_document(document: dict[str, Any]) -> dict[str, Any]:
-    """Migrate a safe web-only v2.x run into the target-scoped v3 envelope."""
-    if document.get("schema_version") == SCHEMA_VERSION:
-        return validate_document(document)
-    if document.get("schema_version") == "2.0":
-        document = legacy.upgrade_document(document)
-    document = legacy.validate_document(document)
-    target = document["run"]["target"]
-    target_id = "web-main"
-    operation_ids = {
-        item["operation_id"]: item["operation_id"] for item in document["object_changes"]
-    }
-    changes = []
-    for item in document["object_changes"]:
-        record = deepcopy(item)
-        record["target_id"] = target_id
-        record["container_type"] = "web"
-        record["resource_family"] = record.pop("object_type")
-        record["object_key"] = f"{target_id}::{record['resource_family']}::{record['name']}"
-        record["risk"] = (
-            "high-impact"
-            if record["action"] in {"remove", "replace"}
-            or record["resource_family"]
-            in {
-                "container setting",
-                "destination",
-                "environment",
-                "google tag configuration",
-                "template",
-                "zone",
-            }
-            else "routine"
-        )
-        record["explicit_authority"] = (
-            record.get("destructive_authorization", False) or record["risk"] == "routine"
-        )
-        record["dependencies"] = [operation_ids[value] for value in record.get("dependencies", [])]
-        record.setdefault(
-            "justification",
-            "Migrated from configuration-run@2.1; original rationale is unavailable.",
-        )
-        if (
-            record["action"] in {"reuse", "untouched"}
-            and not record.get("intended")
-            and isinstance(record.get("pre_change"), dict)
-        ):
-            record["intended"] = deepcopy(record["pre_change"])
-        changes.append(record)
-    baseline = document["container_baseline"]
-    run = {
-        "schema_version": SCHEMA_VERSION,
-        "run": {
-            "id": document["run"]["id"],
-            "mode": "web",
-            "execution_mode": document["run"].get("execution_mode", "isolated-durable"),
-            "phase": document["run"]["phase"],
-            "status": document["run"]["status"],
-            "started_at": document["run"]["started_at"],
-            "updated_at": document["run"]["updated_at"],
-            "targets": [
-                {
-                    "target_id": target_id,
-                    "container_type": "web",
-                    "account_id": target["account_id"],
-                    "container_id": target["container_id"],
-                    "workspace_id": target["workspace_id"],
-                    "adapter_capabilities": {},
-                }
-            ],
-            "contract": deepcopy(document["run"]["contract"]),
-            "publication": deepcopy(document["run"]["publication"]),
-            "materialization": {
-                "method": "legacy-web-2.1-migration",
-                "owned_sections": [],
-                "contract_fingerprint": document["run"]["contract"]["fingerprint"],
-                "section_fingerprints": {},
-                "legacy_sections": {
-                    "execution_topologies": deepcopy(document.get("execution_topologies", [])),
-                    "page_view_decisions": deepcopy(document.get("page_view_decisions", [])),
-                    "first_party_data_routes": deepcopy(
-                        document.get("first_party_data_routes", [])
-                    ),
-                    "inventory_dispositions": deepcopy(document.get("inventory_dispositions", [])),
-                },
-            },
-        },
-        "requirements": deepcopy(document["requirements"]),
-        "pipelines": [],
-        "object_changes": changes,
-        "payload_mappings": deepcopy(document["payload_mappings"]),
-        "consent_topologies": [],
-        "execution_topologies": deepcopy(document.get("execution_topologies", [])),
-        "page_view_decisions": deepcopy(document.get("page_view_decisions", [])),
-        "first_party_data_routes": deepcopy(document.get("first_party_data_routes", [])),
-        "inventory_dispositions": deepcopy(document.get("inventory_dispositions", [])),
-        "container_baselines": [{"target_id": target_id, **deepcopy(baseline)}],
-        "dedup_contracts": [],
-        "saved_readback": [
-            {"target_id": target_id, **deepcopy(item)}
-            for item in document.get("saved_readback", [])
-        ],
-        "target_results": [
-            {
-                "target_id": target_id,
-                "status": document["run"]["status"],
-                "last_verified_operation_id": next(
-                    (
-                        item["operation_id"]
-                        for item in reversed(changes)
-                        if item["state"] == "verified"
-                    ),
-                    None,
-                ),
-                "recovery_boundary": deepcopy(document.get("recovery_boundary")),
-            }
-        ],
-        "official_sources": deepcopy(document["official_sources"]),
-        "external_dependencies": deepcopy(document["external_dependencies"]),
-        "publication_dependencies": [],
-        "recovery_boundary": deepcopy(document["recovery_boundary"]),
-        "idempotency": deepcopy(document["idempotency"]),
-    }
-    return validate_document(run)
-
-
-def build_target_baseline(
+def _build_target_baseline(
     target: dict[str, Any],
     resources: dict[str, list[dict[str, Any]]],
     *,
     captured_at: str,
     preexisting_workspace_changes: list[dict[str, Any]],
+    capture_evidence: dict[str, Any],
 ) -> dict[str, Any]:
     """Build one redacted, deterministic baseline from exhausted target-family reads."""
     if not isinstance(captured_at, str) or not captured_at.strip():
@@ -455,6 +314,43 @@ def build_target_baseline(
         not isinstance(item, dict) for item in preexisting_workspace_changes
     ):
         raise RunValidationError("baseline workspace changes must be an array of objects")
+    if not isinstance(capture_evidence, dict) or set(capture_evidence) != {
+        "captured_by",
+        "source_identity",
+        "resource_pagination",
+        "workspace_changes_pagination",
+    }:
+        raise RunValidationError("baseline capture_evidence has missing or unexpected fields")
+    if capture_evidence.get("captured_by") != "authenticated-adapter-runtime":
+        raise RunValidationError("baseline must be captured by the authenticated adapter runtime")
+    source_identity = capture_evidence.get("source_identity")
+    expected_identity = {
+        field: target[field]
+        for field in ("account_id", "container_id", "workspace_id", "container_type")
+    }
+    if source_identity != expected_identity:
+        raise RunValidationError(
+            "baseline capture_evidence.source_identity must match the authorized GTM target"
+        )
+    resource_pagination = capture_evidence.get("resource_pagination")
+    if not isinstance(resource_pagination, dict) or set(resource_pagination) != set(resources):
+        raise RunValidationError("baseline pagination receipts must cover exactly the resources")
+    receipts = [
+        *resource_pagination.items(),
+        ("workspace changes", capture_evidence.get("workspace_changes_pagination")),
+    ]
+    for family, receipt in receipts:
+        if (
+            not isinstance(receipt, dict)
+            or set(receipt) != {"pages_read", "exhausted"}
+            or not isinstance(receipt.get("pages_read"), int)
+            or isinstance(receipt.get("pages_read"), bool)
+            or receipt["pages_read"] < 1
+            or receipt.get("exhausted") is not True
+        ):
+            raise RunValidationError(
+                f"baseline pagination receipt for {family!r} must prove positive pages and exhaustion"
+            )
     container_type = target["container_type"]
     normalized: dict[str, list[dict[str, Any]]] = {}
     for family in sorted(resources):
@@ -469,24 +365,36 @@ def build_target_baseline(
             )
         normalized[validated_family] = redact_for_persistence(items)
     safe_changes = redact_for_persistence(preexisting_workspace_changes)
+    resource_identities = {
+        family: sorted(
+            f"{target['target_id']}::{family}::{item['name'].strip()}"
+            for item in normalized[family]
+            if isinstance(item.get("name"), str) and item["name"].strip()
+        )
+        for family in sorted(normalized)
+    }
     return {
         "target_id": target["target_id"],
         "captured_at": captured_at.strip(),
         "complete": True,
         "resource_families": sorted(normalized),
         "family_counts": {family: len(normalized[family]) for family in sorted(normalized)},
+        "resource_identities": resource_identities,
+        "resources": normalized,
         "preexisting_workspace_changes": safe_changes,
-        "fingerprint": f"sha256:{canonical_sha256(normalized)}",
+        "capture_evidence": deepcopy(capture_evidence),
+        "fingerprint": f"sha256:{canonical_sha256({'resources': normalized, 'workspace_changes': safe_changes, 'capture_evidence': capture_evidence})}",
     }
 
 
-def record_target_baseline(
+def _record_target_baseline(
     document: dict[str, Any],
     *,
     target_id: str,
     resources: dict[str, list[dict[str, Any]]],
     captured_at: str,
     preexisting_workspace_changes: list[dict[str, Any]],
+    capture_evidence: dict[str, Any],
 ) -> dict[str, Any]:
     """Record one baseline before the first write; repeated identical input is a no-op."""
     value = deepcopy(validate_document(document))
@@ -496,6 +404,24 @@ def record_target_baseline(
     )
     if target is None:
         raise RunValidationError(f"unknown target_id {target_id!r}")
+    required_families = required_baseline_families(
+        [item for item in value["object_changes"] if item["target_id"] == target_id],
+        target["container_type"],
+    )
+    if not required_families <= set(resources):
+        raise RunValidationError(
+            f"baseline misses planned resource families: {sorted(required_families - set(resources))}"
+        )
+    if value["run"]["execution_mode"] == "refonte-durable":
+        expected_families = (
+            WEB_RESOURCE_FAMILIES if target["container_type"] == "web" else SERVER_RESOURCE_FAMILIES
+        )
+        if set(resources) != expected_families:
+            raise RunValidationError(
+                "refonte baseline must exhaust the complete target resource surface; "
+                f"missing={sorted(expected_families - set(resources))}, "
+                f"extra={sorted(set(resources) - expected_families)}"
+            )
     started = [
         item["operation_id"]
         for item in value["object_changes"]
@@ -505,11 +431,12 @@ def record_target_baseline(
         raise RunConflictError(
             "target baseline must be recorded before mutation: " + ", ".join(started)
         )
-    baseline = build_target_baseline(
+    baseline = _build_target_baseline(
         target,
         resources,
         captured_at=captured_at,
         preexisting_workspace_changes=preexisting_workspace_changes,
+        capture_evidence=capture_evidence,
     )
     index = next(
         index
@@ -550,6 +477,19 @@ def checkpoint_operation(
     value = deepcopy(validate_document(document))
     operation = _operation(value, operation_id)
     current = operation["state"]
+    if state in {"in_progress", "saved", "verified"} and not any(
+        baseline["target_id"] == operation["target_id"] and baseline.get("complete") is True
+        for baseline in value["container_baselines"]
+    ):
+        raise RunValidationError(
+            "target baseline must be complete before execution or verification"
+        )
+    if state in {"in_progress", "saved", "verified"}:
+        dependency_states = {
+            item["operation_id"]: item["state"] for item in value["object_changes"]
+        }
+        if any(dependency_states[key] != "verified" for key in operation["dependencies"]):
+            raise RunValidationError("every dependency must be verified before execution")
     if not transition_allowed(current, state):
         raise RunValidationError(f"operation transition {current!r} -> {state!r} is not allowed")
     delta_actions = {
@@ -673,7 +613,9 @@ def _derive_live_status(document: dict[str, Any]) -> None:
             result["status"] = "Partial"
         elif states & {"failed"}:
             result["status"] = "Partial" if verified else "Blocked"
-        elif states <= {"verified", "skipped"} and operations:
+        elif "skipped" in states:
+            result["status"] = "Partial" if verified else "Deferred"
+        elif states <= {"verified"} and operations:
             result["status"] = "In progress"
         else:
             result["status"] = "In progress"
@@ -681,9 +623,33 @@ def _derive_live_status(document: dict[str, Any]) -> None:
     if "Partial" in statuses:
         document["run"]["status"] = "Partial"
     elif "Blocked" in statuses:
-        document["run"]["status"] = "Blocked"
+        any_progress = any(
+            item["state"] in {"verified", "saved", "in_progress"}
+            for item in document["object_changes"]
+        )
+        document["run"]["status"] = "Partial" if any_progress else "Blocked"
+    elif "Deferred" in statuses:
+        any_progress = any(
+            item["state"] in {"verified", "saved", "in_progress"}
+            for item in document["object_changes"]
+        )
+        document["run"]["status"] = "Partial" if any_progress else "Deferred"
     else:
         document["run"]["status"] = "In progress"
+    for result in document["target_results"]:
+        pending = [
+            item["operation_id"]
+            for item in document["object_changes"]
+            if item["target_id"] == result["target_id"]
+            and item["state"] in {"failed", "uncertain", "saved", "in_progress"}
+        ]
+        result["recovery_boundary"] = (
+            {"operation_ids": pending, "next_action": "authoritative readback before retry"}
+            if pending
+            else None
+        )
+    boundaries = [item for item in document["target_results"] if item["recovery_boundary"]]
+    document["recovery_boundary"] = {"targets": deepcopy(boundaries)} if boundaries else None
 
 
 def inspect_document(document: dict[str, Any]) -> dict[str, Any]:
@@ -692,12 +658,32 @@ def inspect_document(document: dict[str, Any]) -> dict[str, Any]:
     ready: list[str] = []
     waiting: dict[str, list[str]] = {}
     blocked: dict[str, list[str]] = {}
+    missing_baselines = {
+        item["target_id"]
+        for item in value["container_baselines"]
+        if item.get("complete") is not True
+    }
+    authentication_blocked = {
+        item["target_id"]
+        for item in value["object_changes"]
+        if item["state"] in {"failed", "uncertain"}
+        and item.get("journal")
+        and str(item["journal"][-1].get("error", "")).startswith("authentication_required:")
+    }
     for operation in value["object_changes"]:
         if operation["state"] != "planned":
             continue
+        if operation["target_id"] in missing_baselines:
+            blocked[operation["operation_id"]] = ["complete target baseline required"]
+            continue
+        if operation["target_id"] in authentication_blocked:
+            blocked[operation["operation_id"]] = ["target authentication requires revalidation"]
+            continue
         dependencies = operation["dependencies"]
-        failed = [value for value in dependencies if states[value] in {"failed", "uncertain"}]
-        pending = [value for value in dependencies if states[value] not in {"verified", "skipped"}]
+        failed = [
+            value for value in dependencies if states[value] in {"failed", "uncertain", "skipped"}
+        ]
+        pending = [value for value in dependencies if states[value] != "verified"]
         if failed:
             blocked[operation["operation_id"]] = failed
         elif pending:
@@ -724,17 +710,143 @@ def inspect_document(document: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def finalize_document(
+def _parse_instant(value: Any, path: str) -> datetime:
+    if not isinstance(value, str) or not value.strip():
+        raise RunValidationError(f"{path} is required")
+    try:
+        parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise RunValidationError(f"{path} must be an ISO-8601 timestamp") from exc
+    if parsed.tzinfo is None:
+        raise RunValidationError(f"{path} must include a timezone")
+    return parsed.astimezone(timezone.utc)
+
+
+def _record_adapter_idempotency_observations(
+    document: dict[str, Any],
+    observations: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Persist convergence reads produced by the target-verified adapter runtime."""
+    value = deepcopy(validate_document(document))
+    operations = {item["operation_id"]: item for item in value["object_changes"]}
+    if any(item["state"] != "verified" for item in operations.values()):
+        raise RunValidationError("idempotency convergence requires every operation verified")
+    if not isinstance(observations, list) or len(observations) != len(operations):
+        raise RunValidationError("idempotency convergence requires one observation per operation")
+    records: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    remaining: list[str] = []
+    for index, observation in enumerate(observations):
+        if not isinstance(observation, dict) or set(observation) != {
+            "operation_id",
+            "target_id",
+            "source",
+            "source_identity",
+            "observed_at",
+            "saved",
+        }:
+            raise RunValidationError(
+                f"idempotency observation {index} has missing or unexpected fields"
+            )
+        operation_id = observation["operation_id"]
+        if operation_id in seen or operation_id not in operations:
+            raise RunValidationError(f"idempotency observation {index} is unknown or duplicated")
+        seen.add(operation_id)
+        operation = operations[operation_id]
+        if observation["target_id"] != operation["target_id"]:
+            raise RunValidationError(f"idempotency observation {index} target differs")
+        if observation["source"] != "target-adapter-read":
+            raise RunValidationError(
+                f"idempotency observation {index} must come from a target adapter read"
+            )
+        observed_at = observation["observed_at"]
+        observed_instant = _parse_instant(
+            observed_at, f"idempotency observation {index} observed_at"
+        )
+        latest_verified = max(
+            _parse_instant(entry["at"], f"operation {operation_id!r} journal timestamp")
+            for entry in operation["journal"]
+            if entry.get("state") == "verified"
+        )
+        if observed_instant <= latest_verified:
+            raise RunValidationError(
+                f"idempotency observation {index} must be newer than verification"
+            )
+        source_identity = observation["source_identity"]
+        expected_identity = {
+            field: target[field]
+            for target in value["run"]["targets"]
+            if target["target_id"] == operation["target_id"]
+            for field in ("account_id", "container_id", "workspace_id", "container_type")
+        }
+        if source_identity != expected_identity:
+            raise RunValidationError(
+                f"idempotency observation {index} source identity differs from its authorized target"
+            )
+        comparison, safe_saved = build_verification_comparison(operation, observation["saved"])
+        decision = "no-op" if comparison["pass"] else "mutation-required"
+        if decision != "no-op":
+            remaining.append(operation_id)
+        records.append(
+            {
+                "operation_id": operation_id,
+                "target_id": operation["target_id"],
+                "source": "target-adapter-read",
+                "source_identity": deepcopy(source_identity),
+                "observed_at": observed_at,
+                "decision": decision,
+                "saved": safe_saved,
+                "comparison": comparison,
+            }
+        )
+    if seen != set(operations):
+        raise RunValidationError("idempotency convergence did not cover every operation")
+    value["idempotency"] = {
+        "checked": not remaining,
+        "remaining_actions": sorted(remaining),
+        "observations": records,
+    }
+    if remaining:
+        remaining_set = set(remaining)
+        value["saved_readback"] = [
+            item
+            for item in value["saved_readback"]
+            if item.get("operation_id") not in remaining_set
+        ]
+        for operation_id in remaining:
+            operation = operations[operation_id]
+            for field in (
+                "comparison",
+                "saved_readback",
+                "pre_write_readback",
+                "pre_write_comparison",
+            ):
+                operation.pop(field, None)
+            operation["state"] = "planned"
+            operation["journal"].append(
+                {
+                    "at": next(
+                        record["observed_at"]
+                        for record in records
+                        if record["operation_id"] == operation_id
+                    ),
+                    "state": "planned",
+                    "note": "Fresh convergence readback requires the authorized operation again.",
+                    "convergence_repair": True,
+                }
+            )
+        _derive_live_status(value)
+    return validate_document(value)
+
+
+def _finalize_adapter_verified_document(
     document: dict[str, Any],
     *,
-    idempotency_evidence: list[str],
     timestamp: str | None = None,
 ) -> dict[str, Any]:
     value = deepcopy(validate_document(document))
     incomplete = [
-        item["operation_id"]
-        for item in value["object_changes"]
-        if item["state"] not in {"verified", "skipped"}
+        item["operation_id"] for item in value["object_changes"] if item["state"] != "verified"
     ]
     if incomplete:
         raise RunValidationError(
@@ -749,13 +861,23 @@ def finalize_document(
         raise RunValidationError(
             "cannot finalize without complete target baselines: " + ", ".join(incomplete_baselines)
         )
-    if not idempotency_evidence:
-        raise RunValidationError("Configured requires concrete identical-rerun no-op evidence")
-    value["idempotency"] = {
-        "checked": True,
-        "remaining_actions": [],
-        "evidence": list(idempotency_evidence),
-    }
+    if value["idempotency"]["checked"] is not True or value["idempotency"]["remaining_actions"]:
+        raise RunValidationError("Configured requires adapter-backed identical-rerun no-op proof")
+    unresolved = [
+        f"{row['requirement_id']}::{row['destination_field']}"
+        for row in value["payload_mappings"]
+        if row["status"] in {"pending", "blocked"}
+    ]
+    unresolved.extend(
+        f"{pipeline['pipeline_id']}::{field['destination']['path']}"
+        for pipeline in value["pipelines"]
+        for field in pipeline["field_flows"]
+        if field["status"] != "proved"
+    )
+    if unresolved:
+        raise RunValidationError(
+            "cannot finalize unresolved field mappings: " + ", ".join(unresolved)
+        )
     for result in value["target_results"]:
         result["status"] = "Configured"
         result["recovery_boundary"] = None

@@ -17,21 +17,28 @@
 ## Classify the feature before mapping data
 
 Do not use “first-party data,” `user_data`, “enhanced matching,” and `user_id` as synonyms. Assign
-the request to one exact browser feature before creating any variable:
+the request to one exact feature and delivery route before creating any variable:
 
 | Feature | Purpose | Default GTM owner |
 | --- | --- | --- |
 | GA4 `user_id` | Signed-in, cross-session identity using an approved stable non-PII identifier | Google tag configuration with explicit set/omit/reset lifecycle |
 | GA4 user-provided-data collection | GA4's separately activated collection of consented first-party identifiers | Native User-Provided Data variable selected in `user_data` on only the authorized GA4 Event tag(s) |
-| Google Ads enhanced conversions for web | Improve a specific web conversion with consented first-party identifiers | Current native Google tag / Google Ads conversion field; event override when the conversion event owns the data |
+| Google Ads enhanced conversions for web | Improve a specific web conversion with consented first-party identifiers | Associated Google tag's documented `user_data` field; see the ownership matrix for standard collection and event overrides |
 | Google Ads tag-wide user-provided data | Make a documented user-data value available to compatible Google Ads conversions | Current documented Google tag route, only after explicit tag-wide authorization |
 | Google Ads User-Provided Data Event | Capture user data on an earlier page when it is unavailable at the later conversion event | Native User-Provided Data Event tag on the exact earlier event; the conversion remains a separate tag |
+| Google Ads server enhanced conversions | Carry approved identifiers to the receiving Ads tag | Documented Google sender `user_data` transport, claiming Client/Event Data, and authorized server Ads consumer |
 | Media-vendor advanced matching | Vendor-specific browser matching such as Meta or TikTok | That vendor's supported installed template field and consent route |
 
 The same email source can therefore require different GTM variables or consumers. Never copy the
 GA4 `user_data` implementation into Google Ads or another media template by analogy. Follow
 [google-field-ownership.md](google-field-ownership.md) for the authoritative Google placement
 matrix.
+
+Keep four names separate: the site's source key (which may be `user_provided_data`), the GTM
+User-Provided Data variable (which assembles the supported object), the selected product's
+`user_data` field/transport, and the User-Provided Data Event tag (which performs a collection action).
+Names in the dataLayer are not interchangeable protocol fields. Record the exact mapping; do not
+create both similarly named fields or both tag types merely because the labels differ.
 
 ## Require explicit authority and activation
 
@@ -48,7 +55,7 @@ destination, consent route, and page scope is compatible.
 In the durable run, bind each feature route to one exact mapped destination field and every
 authorized consumer object. Read the consumer target back and prove that field is configured on
 the correct product surface: GA4 `user_id` on a Google configuration tag, GA4 `user_data` on the
-authorized GA4 Event tag, Google Ads enhanced conversion on its Ads consumer, tag-wide Google Ads
+authorized GA4 Event tag, client Google Ads enhanced-conversion data on its associated Google tag, tag-wide Google Ads
 `user_data` on the authorized Google tag, and prior-page collection on the User-Provided Data Event
 tag. Record positive product identity, implementation kind, saved tag type, and—for a community
 template—the exact installed template identity with current official/template evidence. A route
@@ -78,13 +85,24 @@ Choose the Google implementation by when the approved value exists:
 | GA4 `user_id` lifecycle on one Google tag | Configure it directly on that Google tag. |
 | Same GA4 `user_id` lifecycle across several enumerated compatible Google tags | A Configuration Settings variable is allowed only when source, set/reset behavior, consumers, destination, and consent are identical. |
 | GA4 user-provided data exists on a selected event | Native User-Provided Data variable in the `user_data` field of that GA4 Event tag only. |
-| Google Ads enhanced-conversion data exists on the conversion event | Current native enhanced-conversion field on the exact conversion tag, or its documented event override. |
+| Google Ads enhanced-conversion data exists on the conversion event | Associated Google tag's `user_data` event parameter for the documented standard route; use the authoritative ownership matrix and current Google event-override guidance for narrower timing. |
 | Google Ads enhanced-conversion data exists only on an earlier page/event | Native User-Provided Data Event tag on that earlier event, using the same approved feature and exact timing documented by Google. Do not delay or fabricate the later conversion payload. |
 | Google Ads data is explicitly authorized tag-wide | Current native Google tag route; enumerate every conversion consumer before saving. |
 
-Do not put GA4 `user_data` in a shared Event Settings variable. Do not transport advertising user
-data through GA4 event parameters, user properties, or `user_id`. Do not attach one event's user
-data to unrelated events to compensate for uncertain timing.
+Do not put GA4 `user_data` in a shared Event Settings variable or advertising identifiers in ordinary
+GA4 parameters, user properties, or `user_id`. This does not prohibit Google's explicitly documented
+event-scoped `user_data` carrier for server-side Ads enhanced conversions. That route requires the
+approved pipeline and receiving consumer, not GA4 user-provided-data activation by analogy. Prevent
+unauthorized forwarding at the receiving tag/Transformation scope and record the browser-to-server
+collection consent independently. Do not attach one event's data to unrelated events.
+
+Do not require a User-Provided Data Event tag universally. Use it when the current feature requires
+earlier collection; data available with the conversion can use the documented same-event route.
+Inspect the current Google-tag/event fields instead of requiring an obsolete conversion-tag checkbox.
+Check the supported trigger for earlier collection as well: Google's GTM procedure specifies Form
+Submission in that route. A site's custom event with a similar business meaning does not prove
+native trigger compatibility. Resolve this against current feature/template evidence without
+broadening collection to all forms or moving the actual conversion to the capture event.
 
 ## Choose a controlled source
 
@@ -101,9 +119,11 @@ field. Use a narrow synchronous formatter when the approved raw source needs doc
 normalization or object assembly. Do not use Custom HTML hashing, an imported hashing library, an
 unverified asynchronous Custom JavaScript promise, or a payload-eligibility variable.
 
-Never persist personal data in a GTM Constant, Lookup Table, Regex Table, cookie, local storage,
+Never implement custom persistence of personal data in a GTM Constant, Lookup Table, Regex Table, cookie, local storage,
 object note, variable/tag/trigger name, mutation journal, run artifact, change log, or debug output.
-The configuration stores source paths and field names, never resolved real values.
+The configuration stores source paths and field names, never resolved real values. A documented
+native earlier-collection or matching feature may manage its own storage under explicit feature and
+consent authority; inspect that lifecycle rather than banning the feature or inventing GTM storage.
 
 ## Normalize, hash, and omit correctly
 
@@ -231,6 +251,28 @@ cached field catalogue:
 ## Extend first-party data through the server pipeline
 
 For every approved server consumer, record the complete ownership chain:
+
+For Google Ads server carriage, use feature `google-ads-server-user-data-transport`. With
+`timing: same-event`, bind `consumer_object_keys` to the actual GA4 Event sender. With separately
+approved `timing: tag-wide`, bind it to the actual Google tag carrying `user_data`; do not use the
+client-only `google-ads-tag-wide-user-data` feature to claim server delivery. In both cases set
+`consumer_bindings.product` to `google-ads-transport` and enumerate
+`server_consumer_object_keys` separately. For enhanced conversions, those receiving keys are the
+server Google Ads Conversion Tracking tags that consume the available event data. Do not substitute
+the distinct server Google Ads User-provided Data Event tag. The receiving keys must match the
+proved object-shaped `user_data` field flows and event consumers in the authorized pipeline. This
+represents Ads transport, not GA4 matching activation. The positive server product/template and
+unauthorized consumer exclusion still require installed-field inspection and saved readback.
+
+When data is available on an earlier event and the approved architecture moves the separate
+User-provided Data Event route to the server container, use
+`google-ads-server-user-provided-data-event` with `timing: prior-page`. Bind the web consumer to the
+Google tag or documented GA4 Event override carrying `user_data`, and the server consumer to the
+Google Ads User-provided Data Event tag. The value must resolve on the approved capture event.
+If it first appears after initialization, put the native UPD variable on that event's sender;
+an initial Google-tag setting does not prove later data freshness. Prove that earlier transported
+event and object-shaped field independently from the later conversion event. Do not label this
+route as the server Ads Conversion Tracking enhanced-conversion route.
 
 `approved source -> web normalization/hash owner -> transported user_data field -> claiming Client
 -> Event Data path -> optional scoped server redaction/augmentation -> destination template`

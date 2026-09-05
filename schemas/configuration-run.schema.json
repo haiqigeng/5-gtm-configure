@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/haiqigeng/gtm-configure/schemas/configuration-run.schema.json",
-  "title": "configure-gtm configuration-run@3.0",
+  "title": "configure-gtm configuration-run@4.0",
   "description": "Multi-target saved-state and recovery contract.",
   "type": "object",
   "additionalProperties": false,
@@ -28,7 +28,7 @@
     "idempotency"
   ],
   "properties": {
-    "schema_version": {"const": "3.0"},
+    "schema_version": {"const": "4.0"},
     "run": {"$ref": "#/$defs/run"},
     "requirements": {"type": "array", "items": {"$ref": "#/$defs/requirement"}},
     "pipelines": {"type": "array", "items": {"$ref": "#/$defs/pipeline"}},
@@ -37,7 +37,16 @@
     "consent_topologies": {"type": "array", "items": {"$ref": "#/$defs/consent"}},
     "execution_topologies": {"type": "array", "items": {"type": "object"}},
     "page_view_decisions": {"type": "array", "items": {"type": "object"}},
-    "first_party_data_routes": {"type": "array", "items": {"type": "object"}},
+    "first_party_data_routes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "feature": {"enum": ["analytics-user-id", "ga4-user-id", "ga4-user-provided-data", "google-ads-enhanced-conversions", "google-ads-tag-wide-user-data", "google-ads-user-provided-data-event", "google-ads-server-user-data-transport", "google-ads-server-user-provided-data-event", "vendor-advanced-matching"]},
+          "server_consumer_object_keys": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string"}}
+        }
+      }
+    },
     "inventory_dispositions": {"type": "array", "items": {"type": "object"}},
     "container_baselines": {"type": "array", "items": {"$ref": "#/$defs/baseline"}},
     "dedup_contracts": {"type": "array", "items": {"$ref": "#/$defs/dedup"}},
@@ -117,8 +126,7 @@
             "section_fingerprints": {
               "type": "object",
               "additionalProperties": {"$ref": "#/$defs/nonEmpty"}
-            },
-            "legacy_sections": {"type": "object"}
+            }
           }
         }
       }
@@ -150,7 +158,8 @@
         "id": {"$ref": "#/$defs/nonEmpty"},
         "kind": {"$ref": "#/$defs/nonEmpty"},
         "source_locator": {"$ref": "#/$defs/nonEmpty"},
-        "source_event": {"type": ["string", "null"]},
+            "source_event": {"type": ["string", "null"]},
+            "event_name": {"type": ["string", "null"]},
         "destination": {"type": ["string", "null"]},
         "status": {"$ref": "#/$defs/status"},
         "object_keys": {"$ref": "#/$defs/uniqueStrings"}
@@ -172,7 +181,6 @@
         "justification",
         "evidence",
         "risk",
-        "explicit_authority",
         "state",
         "journal"
       ],
@@ -220,13 +228,12 @@
         "pre_change": {},
         "object_id": {"$ref": "#/$defs/nonEmpty"},
         "new_name": {"$ref": "#/$defs/nonEmpty"},
-        "destructive_authorization": {"type": "boolean"},
+        "approval": {"$ref": "#/$defs/mutationApproval"},
         "replacement_reason": {"$ref": "#/$defs/nonEmpty"},
         "permission_delta": {},
         "scope": {"$ref": "#/$defs/nonEmpty"},
         "evidence": {"$ref": "#/$defs/uniqueStrings"},
         "risk": {"enum": ["routine", "high-impact"]},
-        "explicit_authority": {"type": "boolean"},
         "state": {
           "enum": [
             "planned",
@@ -245,6 +252,21 @@
         "pre_write_comparison": {"type": "object"}
       },
       "allOf": [
+        {
+          "if": {
+            "properties": {
+              "action": {"enum": ["create", "update", "replace", "rename", "pause", "unpause", "remove"]}
+            },
+            "required": ["action"]
+          },
+          "then": {
+            "required": ["approval"],
+            "properties": {
+              "requirement_ids": {"minItems": 1},
+              "evidence": {"contains": {"const": "approved-input"}}
+            }
+          }
+        },
         {
           "if": {
             "properties": {
@@ -268,16 +290,6 @@
         {
           "if": {"properties": {"action": {"const": "rename"}}, "required": ["action"]},
           "then": {"required": ["new_name"]}
-        },
-        {
-          "if": {
-            "properties": {"action": {"enum": ["remove", "replace"]}},
-            "required": ["action"]
-          },
-          "then": {
-            "required": ["destructive_authorization"],
-            "properties": {"destructive_authorization": {"const": true}}
-          }
         },
         {
           "if": {"properties": {"action": {"const": "replace"}}, "required": ["action"]},
@@ -317,6 +329,8 @@
       "additionalProperties": false,
       "required": [
         "status",
+        "field_scope",
+        "destination_field",
         "requirement_ids",
         "source",
         "wire",
@@ -325,6 +339,8 @@
       ],
       "properties": {
         "status": {"enum": ["proved", "blocked", "external"]},
+        "field_scope": {"enum": ["event-parameter", "user-property", "item-parameter", "control"]},
+        "destination_field": {"$ref": "#/$defs/nonEmpty"},
         "requirement_ids": {"$ref": "#/$defs/uniqueStrings"},
         "source": {"$ref": "#/$defs/shapeNode"},
         "wire": {"$ref": "#/$defs/shapeNode"},
@@ -354,7 +370,8 @@
         "field_flows",
         "consent_topology_ids",
         "dedup_contract_ids",
-        "operation_dependencies"
+        "operation_dependencies",
+        "cutover_operation_id"
       ],
       "properties": {
         "pipeline_id": {"$ref": "#/$defs/nonEmpty"},
@@ -366,10 +383,11 @@
         "claiming_client_operation_id": {"$ref": "#/$defs/nonEmpty"},
         "page_view_ownership": {
           "type": "object",
-          "required": ["owner", "send_page_view"],
+          "required": ["owner", "occurrence", "send_page_view"],
           "properties": {
             "owner": {"$ref": "#/$defs/nonEmpty"},
-            "send_page_view": {"type": "boolean"}
+            "occurrence": {"const": "initial-page-load"},
+            "send_page_view": {"type": ["boolean", "null"]}
           }
         },
         "event_flows": {"type": "array", "minItems": 1, "items": {"type": "object"}},
@@ -488,7 +506,6 @@
             "transaction-id",
             "stable-occurrence-id",
             "approved-event-id",
-            "gtm-event-scoped-fallback",
             "template-native",
             "none"
           ]
@@ -502,13 +519,24 @@
         "transported_parameter": {"type": "string"},
         "server_event_data_path": {"type": "string"},
         "server_generates_id": {"type": "boolean"},
-        "same_gtm_event": {"type": "boolean"},
         "runtime_verification_note": {"type": "string"},
         "browser_field": {"type": "string"},
         "server_field": {"type": "string"},
         "occurrence_scope": {"type": "string"},
-        "companion_fields": {"type": "array"},
-        "compatibility_classification": {"type": "string"}
+        "companion_fields": {"type": "array"}
+      }
+    },
+    "mutationApproval": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["grade", "locator", "object_key", "action", "requirement_ids", "payload_sha256"],
+      "properties": {
+        "grade": {"const": "approved-input"},
+        "locator": {"$ref": "#/$defs/nonEmpty"},
+        "object_key": {"$ref": "#/$defs/nonEmpty"},
+        "action": {"enum": ["create", "update", "replace", "rename", "pause", "unpause", "remove"]},
+        "requirement_ids": {"$ref": "#/$defs/uniqueStrings", "minItems": 1},
+        "payload_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
       }
     },
     "baseline": {
@@ -519,7 +547,10 @@
         "complete",
         "resource_families",
         "family_counts",
+        "resource_identities",
+        "resources",
         "preexisting_workspace_changes",
+        "capture_evidence",
         "fingerprint"
       ],
       "properties": {
@@ -528,8 +559,57 @@
         "complete": {"type": "boolean"},
         "resource_families": {"$ref": "#/$defs/uniqueStrings"},
         "family_counts": {"type": "object"},
+        "resource_identities": {
+          "type": "object",
+          "additionalProperties": {"$ref": "#/$defs/uniqueStrings"}
+        },
+        "resources": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "items": {"type": "object"}
+          }
+        },
         "preexisting_workspace_changes": {},
+        "capture_evidence": {
+          "type": ["object", "null"],
+          "properties": {
+            "captured_by": {"const": "authenticated-adapter-runtime"},
+            "source_identity": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["account_id", "container_id", "workspace_id", "container_type"],
+              "properties": {
+                "account_id": {"$ref": "#/$defs/nonEmpty"},
+                "container_id": {"$ref": "#/$defs/nonEmpty"},
+                "workspace_id": {"$ref": "#/$defs/nonEmpty"},
+                "container_type": {"enum": ["web", "server"]}
+              }
+            },
+            "resource_pagination": {
+              "type": "object",
+              "additionalProperties": {"$ref": "#/$defs/paginationReceipt"}
+            },
+            "workspace_changes_pagination": {"$ref": "#/$defs/paginationReceipt"}
+          },
+          "required": [
+            "captured_by",
+            "source_identity",
+            "resource_pagination",
+            "workspace_changes_pagination"
+          ],
+          "additionalProperties": false
+        },
         "fingerprint": {"type": ["string", "null"]}
+      }
+    },
+    "paginationReceipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pages_read", "exhausted"],
+      "properties": {
+        "pages_read": {"type": "integer", "minimum": 1},
+        "exhausted": {"const": true}
       }
     },
     "targetResult": {
@@ -565,11 +645,38 @@
     "idempotency": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["checked", "remaining_actions", "evidence"],
+      "required": ["checked", "remaining_actions", "observations"],
       "properties": {
         "checked": {"type": "boolean"},
         "remaining_actions": {"$ref": "#/$defs/uniqueStrings"},
-        "evidence": {"$ref": "#/$defs/uniqueStrings"}
+        "observations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["operation_id", "target_id", "source", "source_identity", "observed_at", "decision", "saved", "comparison"],
+            "properties": {
+              "operation_id": {"$ref": "#/$defs/nonEmpty"},
+              "target_id": {"$ref": "#/$defs/nonEmpty"},
+              "source": {"const": "target-adapter-read"},
+              "source_identity": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["account_id", "container_id", "workspace_id", "container_type"],
+                "properties": {
+                  "account_id": {"$ref": "#/$defs/nonEmpty"},
+                  "container_id": {"$ref": "#/$defs/nonEmpty"},
+                  "workspace_id": {"$ref": "#/$defs/nonEmpty"},
+                  "container_type": {"enum": ["web", "server"]}
+                }
+              },
+              "observed_at": {"$ref": "#/$defs/nonEmpty"},
+              "decision": {"enum": ["no-op", "mutation-required"]},
+              "saved": {},
+              "comparison": {"type": "object"}
+            }
+          }
+        }
       }
     }
   }

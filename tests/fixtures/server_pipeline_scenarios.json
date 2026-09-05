@@ -74,7 +74,7 @@
       "overlap_rule": "Block until the exact partner postback and duplicate contract are supplied."
     }
   ],
-  "v8_wrongness_scenario": {
+  "unsafe_internal_dedup_scenario": {
     "event": "add_to_cart",
     "delivery": "dual",
     "stable_site_id_available": false,

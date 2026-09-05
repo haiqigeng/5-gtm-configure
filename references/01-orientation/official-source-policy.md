@@ -58,12 +58,46 @@ For every applicable product and CMP:
    effective destination enforcement mechanism without making a legal decision.
 8. Retain URL, title, access date, affected requirement/object, and the supported decision.
 
+For each configuration capability, answer **official guidance → applicable recommendation →
+installed capability → coherent implementation → saved proof**. Distinguish a mandatory field,
+conditional requirement, recommended improvement, optional feature, and unsupported assumption.
+Only a missing applicable requirement blocks. An optional match-quality improvement is an advisory,
+not a reason to withhold a valid conversion setup.
+
+Mark support honestly: `documented`, `template-confirmed`, `statically-verified`, or
+`runtime-unverified` as evidence descriptions, not new completion statuses. A vendor name in this
+library is a research route, not certification of every product or template. If an official GTM
+guide exists, use it before reconstructing an implementation from an API guide. When docs are
+unavailable, identify the exact missing decision and continue independent supported work.
+
+Vendor setup guides may include All Pages, automatic collection, broad imports, publication, or
+account changes. Those examples describe product mechanics; adapt them to approved timing/consent
+and the skill's authority. Do not copy a turnkey setup's unrequested side effects. Conversely, a
+documented native schema bridge is not "mapping by analogy": use it when its explicit mapping
+matches the approved destination semantics and all installed fields are inspected.
+
 ## Run record
 
 Keep source dataLayer/configuration key, web variable, wire field, claiming Client/Event Data path,
 server owner, template UI field, and vendor request parameter distinct. Record provenance where it
 governs a write: exact product/template, approved locator, type/shape, consent, dedup, discrepancy,
 and unresolved conflict. Never persist credentials or raw PII in the evidence record.
+
+An `official-current` evidence record must use the exact authoritative vendor/CMP documentation
+host, record an access date that is neither future-dated nor older than 365 days, and list the
+specific included requirement IDs it supports. Every included requirement needs such coverage.
+Record the page title and a concise `decision` explaining the exact rule applied to those
+requirements. A dataLayer guide can support source timing; it cannot by itself establish GA4
+page-view defaults, Google Ads enhanced-conversion fields, or another product's deduplication.
+The static validator checks locator/date/link/decision presence. The agent must read and assess
+the actual page for product, surface, feature, and installed-version relevance before mutation.
+Official evidence proves current product mechanics; only approved input authorizes mutation.
+Verify the documentation's publisher and official product relationship through current primary
+sources. The entry points below aid discovery; they are not a closed host allowlist. A newly
+verified official host does not require changing the installed skill or obtaining another release.
+The validator requires a credential-free HTTPS locator and complete traceability, not a claim of
+authenticated publisher identity. Arbitrary HTTPS pages and aggregators remain insufficient
+technical authority even when their URL is structurally valid.
 
 ## Official entry points
 

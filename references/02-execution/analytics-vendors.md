@@ -76,6 +76,11 @@ Do not pass advertising matching data, raw PII, or another product's user identi
 analytics destination unless the exact approved analytics contract and current product terms permit
 it. Treat property/site IDs as controlled destination inputs.
 
+For an approved ordinary non-Google analytics identity, use the `analytics-user-id` first-party
+route with the product's actual `user_id` field, truthful tag-wide or same-event timing, and
+`hashing_owner: not-applicable`. Record the login/identify source and the logout/reset behavior in
+the requirement and implementation evidence; do not relabel it as advertising matching.
+
 ## Vendor-specific routing
 
 Use current official entry points for the exact product. Examples include:
@@ -91,6 +96,25 @@ skill configures their browser destination from GTM only when a current supporte
 does not administer those tag managers.
 
 ## Acceptance
+
+### Useful supported routes to investigate
+
+These are decision aids, not a frozen template catalogue. Reopen the linked feature guide and
+inspect the actual installed version before selecting fields:
+
+| Product | Configuration opportunity / correctness check | Official feature guide |
+| --- | --- | --- |
+| Matomo | Separate tracker initialization/page tracking from event dispatch. Its documented GTM templates can map ecommerce; verify native event/category/action semantics and item shapes instead of copying GA4 names. Do not confuse Matomo Tag Manager with Google Tag Manager. | [GTM ecommerce](https://matomo.org/faq/tag-manager/how-to-track-google-tag-manager-ecommerce-events-in-matomo/) |
+| Piwik PRO | Distinguish browser tracker installation, proxy/script serving, and actual server event forwarding. A proxy alone is not server-side destination configuration. | [Server GTM integration](https://help.piwik.pro/support/integrations/google-tag-manager-server-side-integration/) |
+| Adobe Analytics | Select AppMeasurement versus Web SDK deliberately. For AppMeasurement SPA work, page/link calls and variable clearance are distinct responsibilities; retained variables must not leak across hits. Adobe Tags instructions do not establish a GTM template. | [AJAX implementation](https://experienceleague.adobe.com/en/docs/analytics/implementation/other/ajax) |
+| Piano Analytics | The PA SDK GTM template exposes configuration, events, consent updates, and a native GA ecommerce bridge. Use the bridge only after checking its event/property mapping against the approved Piano contract; do not build redundant CJS when the native bridge fits. | [PA SDK template](https://analytics-docs.piano.io/en/analytics/v1/google-tag-manager-pa-sdk-template) |
+| Amplitude | Inspect autocapture, attribution, identity reset, region, and initialization consumers. Configuration precedence can replace a whole nested object through a shallow merge; read back the effective options. Do not accidentally enable replay or unrequested automatic events. | [GTM client template](https://amplitude.com/docs/data/source-catalog/google-tag-manager) |
+| Mixpanel | Inspect the native template's instance initialization, identity/reset, persistence, automatic collection and region. Keep initialization options consistent; template defaults can differ from the JavaScript SDK. | [Official GTM integration](https://docs.mixpanel.com/docs/tracking-methods/integrations/google-tag-manager) |
+
+For another product, establish its exact official GTM/SDK route and inspected template. These
+research routes are not certification of an installed implementation.
+
+### Saved acceptance
 
 Read back base/event separation, destination identity, complete field set, triggers, consent,
 settings, template version, automatic behavior, and all references. Report external property setup

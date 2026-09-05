@@ -21,7 +21,7 @@ class ContractError(ValueError):
 
 
 def _validate_unversioned_comparison(value: Any) -> None:
-    """Accept only the minimal historical comparison shape, never a mutation contract."""
+    """Accept the current normalized collection projection, never a mutation contract."""
     if not isinstance(value, dict):
         raise ContractError("unversioned comparison input must be an object")
     scope = value.get("scope")
@@ -41,7 +41,7 @@ def load_contract(path: Path) -> dict[str, Any]:
         _validate_unversioned_comparison(value)
     else:
         try:
-            validate_document(value, allow_legacy=True)
+            validate_document(value)
         except ContractValidationError as exc:
             raise ContractError(f"{path}: {exc}", error_code=exc.error_code) from exc
     return value

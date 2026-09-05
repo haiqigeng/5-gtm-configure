@@ -116,7 +116,7 @@ For `pipeline`, also record sender targets, receiver target, request class, tran
 endpoint reference, exactly one intended claiming Client, page-view owner, event and field flows,
 server consumer fan-out, consent topology IDs, dedup IDs, and receiver-to-cutover dependencies.
 
-Use `requirement_ids` on every object in a multi-requirement map. Validate normalized v6 JSON before
+Use `requirement_ids` on every object in a multi-requirement map. Validate normalized contract 7.0 JSON before
 the first write. Use `replace` only as the single governed action defined by the run/recovery
 reference; never encode it as contradictory remove-plus-create rows.
 
@@ -132,6 +132,14 @@ requirement or documented constraint. Prefer direct template fields and DLVs, th
 or genuinely shared settings variables, then LUTs or RLTs for real deterministic multi-scenario
 mappings. Use narrow CJS only for a required shape conversion.
 
+Judge utility before object count: (1) every approved use is covered, (2) the selected supported
+architecture is maintainable and appropriate, (3) its effective fields, timing, consumers, and
+dependencies agree. Compare only materially different feasible choices. Prefer explicit event
+ownership when it makes timing clearer, but preserve a correct automatic owner in a narrow delta.
+Do not create an optional feature, helper, global setting, or second delivery path merely to make
+the configuration look complete. Record worthwhile out-of-scope improvements as advisories with
+their benefit and required authority, not as hidden changes or blockers.
+
 Create precise normal triggers and the smallest reusable basic-consent block set. Attach the
 complete block set to every in-scope vendor base/configuration and event tag. Use a verified CMP
 readiness/grant event independently when it supplies an initial or later-grant firing opportunity.
@@ -146,7 +154,9 @@ Scroll, YouTube, History, Timer, and other approved native trigger types remain 
 source contract calls for them. Record built-in checks separately.
 For explicitly approved advanced/native page-load behavior, Initialization, Page View, DOM Ready,
 and Window Loaded remain valid when they match the product contract.
-Resolve pre-CMP business events explicitly because no block replays them.
+Resolve pre-CMP business events explicitly because no block replays them: prove post-readiness
+source timing, use a later fresh event, explicitly accept dropping the unconsented occurrence, use
+one proved replay, or hold on the external dependency. Never choose a drop policy implicitly.
 
 Assign exactly one page-view owner and apply the authoritative Google field-ownership matrix before
 writing any Google tag. Ambiguous page-view ownership or shared-field ownership is a preflight
@@ -180,9 +190,9 @@ non-Google consent state on every transported event that can fire the server des
 unknown state closed unless approved policy says otherwise.
 
 When browser and server delivery overlap, map one vendor-documented occurrence identity across both
-routes. Use transaction/order identity for purchase when supported. A guarded GTM event-scoped CJS
-fallback is allowed only for a non-purchase dual route with no stable ID, one shared variable on the
-same GTM event, and an explicit runtime verification note. Never regenerate it server-side.
+routes. Use transaction/order identity for purchase when supported. Require an approved stable
+occurrence ID for other overlapping events; otherwise use one delivery route or keep the overlap
+blocked. Never synthesize or regenerate an ID from GTM internals.
 
 ## 7. Mutate in dependency order
 
@@ -190,7 +200,7 @@ Prefer GTM MCP, then API, then authorized export/import, then signed-in UI for u
 fields. Discover exact actions and pagination; never guess an alias or treat the first page as the
 inventory.
 
-For a web-only run, preserve the established v8 dependency order. For a server or pipeline run, use
+For a web-only run, create dependencies before their consumers. For a server or pipeline run, use
 dependency order rather than target order:
 
 1. server workspace/baseline and compatible claiming Client readback or authorized change;

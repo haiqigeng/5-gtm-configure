@@ -7,19 +7,22 @@ object graphs. It never publishes and never substitutes configuration for runtim
 
 ## Current Release
 
-**v9.0.0** extends the mature v8.1 web configurator into one routed client-and-server skill. A run
-is explicitly `web`, `server`, or `pipeline`; authority, baselines, adapter capabilities, mutations,
-readback, recovery, and status remain isolated per target.
+**v10.0.0** makes the routed web, server, and pipeline configurator current-only and closes the
+utility and correctness gaps found in independent evaluation. Authority, baselines, adapter
+capabilities, mutations, readback, recovery, and status remain isolated per target.
 
-The release adds GTM server Clients, Event Data variables, server triggers/tags/templates,
+Existing coverage includes GTM server Clients, Event Data variables, server triggers/tags/templates,
 Transformations, GA4 and media destinations, transport ownership, consent propagation, field-shape
 proof, first-party-data and secret handling, destination-specific browser/server deduplication,
 receiver-first cutover ordering, dependency-only failure containment, and evidence-backed
 human/machine configuration results without coupling the skill to runtime recette tooling.
 
-New mutation contracts use `configuration-contract@6.0`, execution uses
-`configuration-run@3.0`. Versioned v5 contracts and 2.1 web runs retain an explicit compatibility
-path. All v8.1 web behavior remains the regression baseline.
+Known execution boundary: triggerless setup/cleanup-only tags cannot be represented by the current
+topology. Hold those requirements without inventing ordinary triggers; they are excluded from
+this release's field-test acceptance.
+
+Mutation contracts use only `configuration-contract@7.0`; execution uses only
+`configuration-run@4.0`. Obsolete contract/run schemas and upgrade paths are intentionally absent.
 
 ## North Star
 
@@ -34,7 +37,7 @@ pipeline, unsafe cutover, or runtime expectation is not configuration.
 
 ## Operating Routes
 
-- `web` preserves the complete v8 client-side configuration surface and defaults.
+- `web` covers the complete supported client-side configuration surface and defaults.
 - `server` configures explicitly authorized server-container workspaces using server semantics.
 - `pipeline` configures the connected sender/receiver graph; several web senders may feed one
   Client and one claimed event may fan out to several destinations.
@@ -93,24 +96,25 @@ The pipeline route additionally resolves:
   before persistence.
 - Create no dedup contract for single-channel delivery. For dual delivery, use one current
   vendor-documented occurrence identity across browser and server. A dual-delivery purchase needs
-  a stable product-supported transaction/order/occurrence identity; never substitute the GTM
-  event-scoped fallback. If no stable purchase identity exists, choose another delivery strategy
-  or leave that dual route blocked.
-- The guarded GTM event-scoped ID fallback is limited to approved non-purchase dual delivery with
-  no stable source, one shared variable on the same GTM event, no server regeneration, and an
-  explicit runtime verification note. Browser-only runs still do not generate an event ID.
+  a stable product-supported transaction/order/occurrence identity. If no stable occurrence identity
+  exists, choose another delivery strategy or leave that dual route blocked.
+- Do not synthesize browser/server occurrence identity from GTM internals. Browser-only runs still
+  do not generate an event ID.
 - Never create payload-eligibility helpers or validity triggers merely because a runtime value may
   be absent.
 
 ## Execution And Recovery
 
-Contract 6.0 deterministically materializes target-scoped operation keys of the form:
+Contract 7.0 deterministically materializes target-scoped operation keys of the form:
 
 `<target-id>::<resource-family>::<semantic-name>`
 
 Contract-owned run sections carry fingerprints. Adapters may update baselines, journals,
 comparisons, readbacks, results, and recovery state; they cannot silently rewrite intention. Each
-write gets fresh pre-change proof where applicable and authoritative post-write readback.
+write gets fresh pre-change proof where applicable and authoritative post-write readback. Baselines
+are captured directly through the authenticated adapter immediately before the first write; the
+runtime retains the redacted canonical object graph and creates exhaustion receipts itself. There
+is no caller-supplied baseline command.
 
 The immutable projection includes target identity, official sources, external dependencies,
 client execution topologies, page-view ownership, first-party routes, refonte dispositions,
@@ -118,10 +122,25 @@ pipelines, consent, deduplication, and object intention. Removal is verified by 
 absence. A failed operation can be reopened only after stale pre-write/readback/comparison evidence
 is cleared.
 
+The packaged runtime intentionally uses the Python standard library only so the skill remains
+executable without installing packages in an analyst environment. Draft 2020-12 JSON Schemas are
+structural/editor aids and are meta-validated with the existing development-only `jsonschema`
+dependency; the focused Python modules remain authoritative for cross-object, semantic, consent,
+authorization, and lifecycle invariants that JSON Schema cannot express cleanly.
+
 On failure, only the failed/uncertain operation and its transitive dependents stop. Independent safe
 subtrees continue. A failed Client prevents its destination tags and cutover; an unrelated GA4
 subtree need not stop because a Meta tag failed. Ambiguous writes are read before any retry, and
 only documented non-applied rate limits retry within a bound.
+
+Every mutation must link to an approved requirement and carry an exact, payload-hashed approval
+record from that requirement's approved-input locator. A payload change invalidates that record;
+authority still comes from the user's instructions and source material, never from a hash.
+`official-current` documents mechanics but never authorizes a write. First-party `user_data` and
+`user_id` configuration must be owned by an explicit first-party-data route. Shared Google
+Configuration Settings changes require complete closure over all authenticated baseline consumers.
+These are consistency and operational checks. They do not cryptographically authenticate user
+approval, prove documentation relevance, or make editable local artifacts a security boundary.
 
 Credentials are resolved through an ephemeral secret provider for mutation and never written to
 the contract/run/diff/render/result. Readback may prove matching secret-field presence and all
@@ -156,16 +175,16 @@ extensions.
 
 - `SKILL.md`: entrypoint, route classification, conditional playbook routing, and core rules.
 - `references/01-orientation/`: utility contract and live official-source discipline.
-- `references/02-execution/`: preserved web playbooks plus conditional `pipeline/` and `server/`
+- `references/02-execution/`: web playbooks plus conditional `pipeline/` and `server/`
   guidance.
 - `references/03-judgement/`: saved-state acceptance and configuration-result guidance.
-- `schemas/`: contract 6.0, run 3.0, and preserved run 2.1 schemas.
-- `scripts/configuration_run.py`: thin compatibility CLI over split validation/state/render modules.
+- `schemas/`: current contract 7.0 and run 4.0 schemas.
+- `scripts/configuration_run.py`: current-only CLI over split validation/state/render modules.
 - `scripts/adapter_runtime.py`: target registry, capability-local execution, redaction, and
   dependency containment.
 - `scripts/diff_object_graph.py`: target-aware normalized graph comparison, including Clients and
   Transformations.
-- `tests/`: preserved web regressions plus v9 server/pipeline, security, adapter, schema, and
+- `tests/`: current web, server/pipeline, security, adapter, schema, and
   documentation tests.
 
 ## Install And Validate
@@ -177,12 +196,12 @@ the packaged runtime scripts, and `LICENSE` into the target skill directory.
 python -m pip install -e ".[dev]"
 python -m ruff format --no-cache --check scripts tests
 python -m ruff check --no-cache scripts tests
-python scripts/check_release.py --tag v9.0.0 --release-notes CHANGELOG.md
+python scripts/check_release.py --tag v10.0.0 --release-notes CHANGELOG.md
 python -m unittest discover -s tests -v
 python -m compileall -q scripts
-python scripts/build_skill_package.py --output dist/configure-gtm-v9.0.0.zip
+python scripts/build_skill_package.py --output dist/configure-gtm-v10.0.0.zip
 git diff --check
 ~~~
 
-Releases use Semantic Versioning. Major versions change the skill or interchange contracts, minor
-versions add backward-compatible capability, and patch versions provide backward-compatible fixes.
+Releases use Semantic Versioning. Major versions may replace obsolete interchange contracts;
+minor and patch versions evolve the current supported surface.

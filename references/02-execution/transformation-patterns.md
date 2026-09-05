@@ -45,13 +45,18 @@ function() {
   var output = [];
   for (var i = 0; i < items.length; i++) {
     var item = items[i];
-    if (!item || item.SOURCE_ID === undefined || item.SOURCE_ID === null || item.SOURCE_ID === '') {
+    if (!item || Object.prototype.toString.call(item) !== '[object Object]') {
       return undefined;
     }
-    output.push({
-      DESTINATION_ID: String(item.SOURCE_ID),
-      DESTINATION_QUANTITY: item.SOURCE_QUANTITY
-    });
+    var id = item.SOURCE_ID;
+    if ((typeof id !== 'string' && typeof id !== 'number') || id === '' ||
+        (typeof id === 'number' && !isFinite(id))) return undefined;
+    var quantity = item.SOURCE_QUANTITY;
+    if (quantity !== undefined &&
+        (typeof quantity !== 'number' || !isFinite(quantity) || quantity < 0)) return undefined;
+    var projected = {DESTINATION_ID: String(id)};
+    if (quantity !== undefined) projected.DESTINATION_QUANTITY = quantity;
+    output.push(projected);
   }
   return output;
 }

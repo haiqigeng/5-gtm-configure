@@ -130,18 +130,31 @@ or add a field to remain within a limit.
 Do not default `send_page_view` to either `true` or `false`. Before changing a Google tag, inspect
 the saved Google-tag fields, GA4 Event tags, Enhanced Measurement page-load/history behavior, SPA
 routing, hard-coded/partner installations, and the approved page-view contract. Record exactly one
-owner per destination:
+owner per destination and occurrence role. Initial page load and virtual navigation are distinct;
+multiple tags are valid only when their occurrence domains are proved mutually exclusive:
 
 | Owner | Google-tag decision | When valid |
 | --- | --- | --- |
 | Google tag automatic page view | `send_page_view: true` | Its timing, page fields, SPA behavior, and consent opportunity satisfy the approved requirement without another owner. |
 | Dedicated `GA4 - Event - page_view` | `send_page_view: false` | The approved event needs explicit parameters, timing, routing, or SPA ownership that the automatic route cannot supply. |
-| External/hard-coded owner | `send_page_view: false` for the in-scope Google tag | Authoritative evidence proves the external owner and its compatible destination/consent behavior. |
-| Intentionally no page view | `send_page_view: false` | The approved scope intentionally excludes page views; record the reason. |
+| Internal non-Google tag | Not applicable | A Matomo, Amplitude, or other in-container tag owns the named destination/occurrence. |
+| External/hard-coded owner | Not applicable | Authoritative evidence proves the external owner and its compatible destination/consent behavior. |
+| Intentionally no page view | Not applicable | The approved destination/occurrence is intentionally excluded; record the reason. |
 
-Ambiguous ownership blocks the affected Google-tag change. Never create a dedicated page-view tag
-and leave automatic collection enabled, or disable a proven compatible owner merely because a
-manual tag is easier to inspect.
+Ambiguous, missing, or overlapping ownership blocks the affected change. When a dedicated GA4
+page-view tag owns initial load, every applicable Google tag has `send_page_view: false`. When the
+Google tag owns initial load, do not create another initial page-view tag. Google-tag automatic
+page view cannot own virtual navigation; use an explicit, proved virtual-navigation owner.
+
+Derive capability from effective stored fields and every connected GA4 destination, including
+inherited Configuration Settings and the documented default when `send_page_view` is absent.
+An empty declaration cannot hide an automatic or explicit `page_view` emitter. An Ads-only Google
+tag does not become a GA4 page-view owner. Resolve a `GT-...` tag's connected destinations before
+assigning ownership.
+
+`send_page_view: false` suppresses the configuration command's page view. Enhanced Measurement
+history-change collection is independent and must also be reconciled when an explicit SPA event
+owns virtual views. See [Google's page-view guide](https://developers.google.com/analytics/devguides/collection/ga4/views).
 
 Under strict/basic consent, a page-load owner that cannot use the original pre-CMP event uses the
 CMP's verified one-time readiness/grant event as its normal trigger and retains the vendor blocking

@@ -133,7 +133,7 @@ class RuntimeHardeningTest(unittest.TestCase):
                 "sha256": digest,
             }
             handoff = {
-                "handoff_version": "1.0.0",
+                "handoff_version": "1.1.0",
                 "skill": {"name": "ga4-tracking-plan", "version": "3.0.0"},
                 "approval": {"state": "approved"},
                 "plan": {"canonical_sha256": digest},

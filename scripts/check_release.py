@@ -17,11 +17,10 @@ from build_skill_package import INCLUDED, build, package_files
 from strict_json import StrictJsonError, loads_strict
 
 ROOT = Path(__file__).resolve().parents[1]
-CURRENT_RELEASE = "9.0.0"
+CURRENT_RELEASE = "10.0.0"
 SEMVER = re.compile(r"^v(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)$")
 LINK = re.compile(r"\]\(([^)]+)\)")
 WORD = re.compile(r"\b[\w-]+\b")
-V8_MANDATORY_CORE_WORDS = 7214
 
 REFERENCE_FILES = {
     "references/01-orientation/official-source-policy.md",
@@ -111,9 +110,9 @@ REQUIRED_REPOSITORY_FILES = {
     ".github/workflows/release.yml",
     "scripts/check_release.py",
     "scripts/build_skill_package.py",
-    "tests/test_v9_contract_and_run.py",
-    "tests/test_v9_adapter_runtime.py",
-    "tests/test_v9_documentation.py",
+    "tests/test_current_contract_and_run.py",
+    "tests/test_current_adapter_runtime.py",
+    "tests/test_current_documentation.py",
     "tests/fixtures/server_pipeline_scenarios.json",
 } | REFERENCE_FILES
 SCAN_EXCLUDED = {
@@ -241,19 +240,16 @@ def check_versions_and_schemas() -> list[str]:
 
     model = read("scripts/run_model.py")
     expected = {
-        "SCHEMA_VERSION": "3.0",
-        "CONTRACT_SCHEMA_VERSION": "6.0",
+        "SCHEMA_VERSION": "4.0",
+        "CONTRACT_SCHEMA_VERSION": "7.0",
     }
     for name, value in expected.items():
         actual = assigned_string_constant(model, name)
         if actual != value:
             errors.append(f"run_model.{name} must be {value!r}, got {actual!r}")
-    if assigned_string_constant(read("scripts/run_model_web.py"), "SCHEMA_VERSION") != "2.1":
-        errors.append("preserved web run model must remain schema 2.1")
     for relative in (
         "schemas/configuration-contract.schema.json",
         "schemas/configuration-run.schema.json",
-        "schemas/configuration-run-2.1.schema.json",
         "tests/fixtures/server_pipeline_scenarios.json",
     ):
         try:
@@ -274,13 +270,13 @@ def check_runtime_content() -> list[str]:
         "receiver graph before changing a live sender endpoint",
         "incoming Google-native consent",
         "`items` is an array and `user_data` is an object",
-        "GTM event-scoped CJS fallback",
+        "Never synthesize an identity from GTM internals",
         "Never publish",
     )
     folded = skill.casefold()
     for phrase in required_phrases:
         if phrase.casefold() not in folded:
-            errors.append(f"SKILL.md missing v9 contract phrase: {phrase}")
+            errors.append(f"SKILL.md missing current contract phrase: {phrase}")
     forbidden = (
         "server-side GTM, Conversions API, and browser/server deduplication remain future",
         "the skill performs client-side GTM configuration only",
@@ -319,9 +315,10 @@ def check_runtime_package() -> list[str]:
     required_modules = {
         "scripts/action_contract.py",
         "scripts/adapter_runtime.py",
-        "scripts/adapter_runtime_web.py",
+        "scripts/adapter_support.py",
         "scripts/configuration_run.py",
         "scripts/redaction.py",
+        "scripts/requirement_validation.py",
         "scripts/resource_registry.py",
         "scripts/run_model.py",
         "scripts/run_model_web.py",
@@ -332,7 +329,6 @@ def check_runtime_package() -> list[str]:
         "scripts/run_validation_server.py",
         "scripts/run_validation_web.py",
         "scripts/validate_configuration_contract.py",
-        "scripts/validate_configuration_contract_v5.py",
         "scripts/verification.py",
         "scripts/web_domain_validation.py",
     }
@@ -436,7 +432,9 @@ def check_git_state(*, tag: str | None, require_tag: bool, require_clean: bool) 
             text=True,
             check=False,
         )
-        if tag not in result.stdout.splitlines():
+        if result.returncode != 0:
+            errors.append(f"could not verify HEAD tags: git exited {result.returncode}")
+        elif tag not in result.stdout.splitlines():
             errors.append(f"HEAD is not tagged {tag}")
     if require_clean:
         result = subprocess.run(
@@ -446,7 +444,9 @@ def check_git_state(*, tag: str | None, require_tag: bool, require_clean: bool) 
             text=True,
             check=False,
         )
-        if result.stdout.strip():
+        if result.returncode != 0:
+            errors.append(f"could not verify working tree: git exited {result.returncode}")
+        elif result.stdout.strip():
             errors.append("working tree is not clean")
     return errors
 
@@ -480,12 +480,7 @@ def main() -> int:
         for error in errors:
             print(f"ERROR: {error}", file=sys.stderr)
         return 1
-    core_words = sum(len(WORD.findall(read(relative))) for relative in MANDATORY_CORE)
-    print(
-        "Release check: PASS "
-        f"(v{CURRENT_RELEASE}, {len(REFERENCE_FILES)} routed references, "
-        f"mandatory core {core_words} words; v8 baseline {V8_MANDATORY_CORE_WORDS})"
-    )
+    print(f"Release check: PASS (v{CURRENT_RELEASE}, {len(REFERENCE_FILES)} routed references)")
     return 0
 
 

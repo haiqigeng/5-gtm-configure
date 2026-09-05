@@ -4,7 +4,6 @@
 
 - [Require a contract only for overlap](#require-a-contract-only-for-overlap)
 - [Choose one occurrence identity](#choose-one-occurrence-identity)
-- [Use the guarded GTM fallback narrowly](#use-the-guarded-gtm-fallback-narrowly)
 - [Map vendor fields independently](#map-vendor-fields-independently)
 - [Prove runtime equality externally](#prove-runtime-equality-externally)
 
@@ -24,41 +23,11 @@ For `dual-shared-id`, use one value everywhere:
    supported by the exact vendor; retain any separate cross-channel identifier it also requires.
 2. For another event, use a stable approved occurrence ID such as a lead ID.
 3. Otherwise use an explicitly supplied site/dataLayer event ID.
-4. Only then consider one GTM event-scoped fallback when the vendor supports advertiser-generated
-   identifiers and both browser and transporter tags use the same GTM business event.
+4. If no approved stable occurrence ID exists, choose one delivery channel or keep dual delivery
+   blocked until the source owner provides one.
 
 The source value may map to different browser and server field names. Do not reuse a session/user
 ID across occurrences, generate a second server ID, or create independent random generators.
-
-## Use the guarded GTM fallback narrowly
-
-The approved non-purchase fallback is:
-
-```javascript
-function() {
-  var container = window.google_tag_manager &&
-    window.google_tag_manager[{{Container ID}}];
-  var gtmData = container && container.dataLayer &&
-    container.dataLayer.get('gtm');
-
-  if (!gtmData || gtmData.start == null || gtmData.uniqueEventId == null) {
-    return undefined;
-  }
-
-  return String(gtmData.start) + '.' + String(gtmData.uniqueEventId);
-}
-```
-
-Treat `window.google_tag_manager` access as a compatibility technique, not a public Google API
-guarantee. Use the Container ID built-in variable, one CJS variable, one transported parameter, and
-one same-event browser/transporter reference. Record the decision and runtime verification note. Do not
-create a payload-eligibility trigger if the value is absent; runtime absence is a dedup defect.
-
-This rule explicitly replaces the v8.1 blanket prohibition on generating a browser event ID. It
-never authorizes the GTM event-scoped fallback for purchase. Without a stable product-supported
-purchase identity, choose a single channel, a server-replaces-browser route, another documented
-product-native strategy, or keep dual delivery blocked. It also never authorizes a per-tag
-generator or an ID for GA4/Google Ads/Floodlight by analogy.
 
 ## Map vendor fields independently
 

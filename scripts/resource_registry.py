@@ -5,7 +5,12 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from run_model import RESOURCE_FAMILIES, SERVER_RESOURCE_FAMILIES, WEB_RESOURCE_FAMILIES
+from run_model import (
+    MUTATING_ACTIONS,
+    RESOURCE_FAMILIES,
+    SERVER_RESOURCE_FAMILIES,
+    WEB_RESOURCE_FAMILIES,
+)
 
 
 class ResourceRegistryError(ValueError):
@@ -13,6 +18,36 @@ class ResourceRegistryError(ValueError):
 
 
 _TOKEN = re.compile(r"[^a-z0-9]+")
+
+CONFIGURATION_SETTINGS_VARIABLE_TYPES = {
+    "gtcs",
+    "googtagconfigsettings",
+    "googtagconfigurationsettings",
+    "googletagconfigurationsettings",
+}
+
+
+def is_configuration_settings_mutation(operation: dict[str, Any]) -> bool:
+    """Include both old and new type so replacement/removal cannot hide consumers."""
+    if (
+        operation.get("resource_family") or operation.get("object_type")
+    ) != "variable" or operation.get("action") not in MUTATING_ACTIONS:
+        return False
+    return any(
+        _TOKEN.sub("", str(snapshot.get("type", "")).casefold())
+        in CONFIGURATION_SETTINGS_VARIABLE_TYPES
+        for snapshot in (operation.get("intended"), operation.get("pre_change"))
+        if isinstance(snapshot, dict)
+    )
+
+
+def required_baseline_families(operations: list[dict[str, Any]], container_type: str) -> set[str]:
+    required = {item["resource_family"] for item in operations}
+    if container_type == "web" and any(
+        is_configuration_settings_mutation(item) for item in operations
+    ):
+        required.add("tag")
+    return required
 
 
 def normalized_family(value: str) -> str:
@@ -23,7 +58,7 @@ def normalized_family(value: str) -> str:
 
 
 def semantic_object_key(target_id: str, resource_family: str, name: str) -> str:
-    """Return the v9 target-scoped semantic identity."""
+    """Return the current target-scoped semantic identity."""
     if not isinstance(target_id, str) or not target_id.strip():
         raise ResourceRegistryError("target_id must be a non-empty string")
     if not isinstance(name, str) or not name.strip():

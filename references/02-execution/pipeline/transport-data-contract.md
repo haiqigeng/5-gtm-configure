@@ -32,6 +32,11 @@ and environment lifecycle align. Create a dedicated transport Google tag only wh
 concerns needs isolation. Use a Constant or LUT for the endpoint only when reuse, safe environment
 routing, or ownership clarity justifies it; a literal owned field can be simpler.
 
+Bind the pipeline endpoint to the saved endpoint field of that owner. In each linked consent
+topology, enumerate the actual web tags that can emit transported occurrences. A sender without a
+direct endpoint must bind the same destination identity as the owner so its inherited endpoint is
+provable. Shared requirement IDs alone never prove transport.
+
 ## Govern shapes
 
 There is no universal rule that a server container accepts only two arrays. For the documented

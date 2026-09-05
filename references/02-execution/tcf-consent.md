@@ -1,10 +1,12 @@
-# IAB Europe TCF 2.3 route
+# IAB Europe TCF route
 
 ## Scope
 
 Load this route only when the approved CMP/site architecture uses IAB Europe TCF for the
-client-side web container. TCF 2.3 is the current framework route; do not implement a remembered
-TCF 2.2 string, event, vendor mapping, or migration pattern.
+client-side web container. Verify the applicable framework/policy version, effective dates, CMP
+support, and deployed signal contract from current primary sources. An announced newer version or
+transition deadline does not by itself prove that this deployment must already use it. Do not
+freeze a "current" version in configuration instructions or implement a remembered mapping.
 
 This skill connects a confirmed CMP signal to saved GTM configuration. It does not decide whether
 TCF applies, select legal bases, choose purposes/special features, approve vendors, certify the CMP,
@@ -63,4 +65,5 @@ Runtime decoding, network behavior, and vendor-platform acceptance remain recett
 - https://iabeurope.eu/transparency-consent-framework/
 - https://support.google.com/admanager/answer/9805023
 - https://developers.google.com/tag-platform/security/guides/consent
-- the selected CMP's current official TCF 2.3 and GTM integration documentation
+- https://iabeurope.eu/cmp-vendor-notifications/
+- the selected CMP's current official TCF and GTM integration documentation

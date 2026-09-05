@@ -6,6 +6,7 @@ import re
 from collections import defaultdict, deque
 from typing import Any, Callable
 
+from event_semantics import approved_event_name
 from run_model import (
     CONSENT_SIGNAL_AUTHORITIES,
     DEDUP_SOURCE_TYPES,
@@ -18,7 +19,27 @@ from run_model import (
     UNKNOWN_STATE_BEHAVIORS,
     WEB_CONSENT_MECHANISMS,
 )
-from run_validation_web import _send_page_view_value
+from run_validation_web import (
+    GOOGLE_CONFIGURATION_TAG_TYPES,
+    _configured_destinations,
+    _configured_transport_endpoint,
+    _normalize_transport_endpoint,
+    _resolve_constant_reference,
+    _send_page_view_value,
+    _tag_type,
+)
+
+
+def validate_transport_consent(topology: dict[str, Any], fail: Callable[[str], None]) -> None:
+    if (
+        topology.get("consent_mode") == "strict-basic"
+        and topology.get("transport_behavior") == "always-transported"
+        and topology.get("server_enforcement", {}).get("mechanism")
+        == "incoming-google-consent-native"
+    ):
+        fail(
+            "strict-basic cannot use always-transported Google native denied-state behavior as a no-request gate"
+        )
 
 
 def _reference_values(value: Any) -> set[str]:
@@ -61,6 +82,18 @@ def _validate_field_flow(
     requirement_ids: set[str],
     fail: Callable[[str], None],
 ) -> None:
+    if field.get("field_scope") not in {
+        "event-parameter",
+        "user-property",
+        "item-parameter",
+        "control",
+    }:
+        fail(f"{path}.field_scope is unsupported")
+    if (
+        not isinstance(field.get("destination_field"), str)
+        or not field["destination_field"].strip()
+    ):
+        fail(f"{path}.destination_field must be a non-empty string")
     if field.get("status") not in FIELD_FLOW_STATUSES:
         fail(f"{path}.status is unsupported")
     linked = field.get("requirement_ids")
@@ -114,6 +147,7 @@ def validate_pipeline_run(
             fail(f"$.consent_topologies[{index}] must be an object")
             continue
         topology_id = item.get("consent_topology_id")
+        validate_transport_consent(item, fail)
         if not isinstance(topology_id, str) or not topology_id:
             fail(f"$.consent_topologies[{index}].consent_topology_id is required")
             continue
@@ -176,8 +210,6 @@ def validate_pipeline_run(
                     f"$.consent_topologies[{index}] unblocked transporter declares blocked transport"
                 )
         if vendor_block:
-            if item.get("intentional_double_gate") is not True:
-                fail(f"$.consent_topologies[{index}] transporter block lacks explicit authority")
             if transport_behavior != "blocked":
                 fail(f"$.consent_topologies[{index}] transporter block needs blocked transport")
             if web_mechanism not in {
@@ -274,12 +306,45 @@ def validate_pipeline_run(
             or transport_operation.get("target_id") not in senders
         ):
             fail(f"{path}.transport_owner must reference a sender web tag")
+        endpoint_reference = pipeline.get("endpoint_reference")
+        if not isinstance(endpoint_reference, str) or not endpoint_reference.strip():
+            fail(f"{path}.endpoint_reference must be a non-empty string")
+            resolved_endpoint = None
+        else:
+            try:
+                resolved_endpoint = _normalize_transport_endpoint(
+                    _resolve_constant_reference(
+                        endpoint_reference, by_object_key, f"{path}.endpoint_reference"
+                    ),
+                    f"{path}.endpoint_reference",
+                )
+            except ValueError as exc:
+                fail(str(exc))
+                resolved_endpoint = None
+        if transport_operation is not None:
+            try:
+                owner_endpoint = _configured_transport_endpoint(
+                    transport_operation, by_object_key, f"{path}.transport_owner"
+                )
+                owner_destinations = _configured_destinations(
+                    transport_operation.get("intended", {}),
+                    by_object_key,
+                    f"{path}.transport_owner",
+                )
+            except ValueError as exc:
+                fail(str(exc))
+                owner_endpoint = None
+                owner_destinations = set()
+            if owner_endpoint != resolved_endpoint:
+                fail(f"{path}.endpoint_reference differs from its transport owner")
+        else:
+            owner_destinations = set()
         page_view = pipeline.get("page_view_ownership")
         if not isinstance(page_view, dict) or not page_view.get("owner"):
             fail(f"{path}.page_view_ownership must name the owner")
-        elif page_view.get("send_page_view") not in {True, False}:
-            fail(f"{path}.page_view_ownership.send_page_view must be boolean")
         else:
+            if page_view.get("occurrence") != "initial-page-load":
+                fail(f"{path}.page_view_ownership.occurrence must be 'initial-page-load'")
             owner_operation = by_object_key.get(page_view["owner"])
             if (
                 owner_operation is None
@@ -291,8 +356,24 @@ def validate_pipeline_run(
                 intended = owner_operation.get("intended")
                 if not isinstance(intended, dict):
                     fail(f"{path}.page_view_ownership owner lacks intended state")
-                elif _send_page_view_value(intended, path) != page_view["send_page_view"]:
-                    fail(f"{path}.page_view_ownership differs from its bound web tag")
+                else:
+                    owner_type = _tag_type(intended, path)
+                    if owner_type in GOOGLE_CONFIGURATION_TAG_TYPES:
+                        if page_view.get("send_page_view") not in {True, False}:
+                            fail(
+                                f"{path}.page_view_ownership.send_page_view must be boolean "
+                                "for a Google tag"
+                            )
+                        elif (
+                            _send_page_view_value(intended, path, by_object_key)
+                            != page_view["send_page_view"]
+                        ):
+                            fail(f"{path}.page_view_ownership differs from its bound Google tag")
+                    elif page_view.get("send_page_view") is not None:
+                        fail(
+                            f"{path}.page_view_ownership.send_page_view must be null for a "
+                            "non-Google sender"
+                        )
         client_operation = pipeline.get("claiming_client_operation_id")
         if client_operation not in by_operation:
             fail(f"{path}.claiming_client_operation_id is unknown")
@@ -325,9 +406,7 @@ def validate_pipeline_run(
                 if requirement is None:
                     fail(f"{flow_path}.requirement_id is unknown")
                 else:
-                    approved_event = requirement.get("source_event") or requirement.get(
-                        "destination"
-                    )
+                    approved_event = approved_event_name(requirement)
                     if approved_event and flow.get("source_event") != approved_event:
                         fail(f"{flow_path}.source_event differs from its approved requirement")
             consumers = flow.get("server_consumer_operation_ids")
@@ -346,6 +425,7 @@ def validate_pipeline_run(
         if not isinstance(field_flows, list):
             fail(f"{path}.field_flows must be an array")
             field_flows = []
+        field_flow_identities: set[tuple[str, str, str]] = set()
         for field_index, field in enumerate(field_flows):
             field_path = f"{path}.field_flows[{field_index}]"
             if not isinstance(field, dict):
@@ -354,6 +434,15 @@ def validate_pipeline_run(
             _validate_field_flow(field, field_path, requirement_ids, fail)
             if not set(field.get("requirement_ids", [])) <= flow_requirements:
                 fail(f"{field_path}.requirement_ids must belong to this pipeline")
+            for requirement_id in field.get("requirement_ids", []):
+                identity = (
+                    requirement_id,
+                    str(field.get("field_scope")),
+                    str(field.get("destination_field")),
+                )
+                if identity in field_flow_identities:
+                    fail(f"{field_path} duplicates pipeline field flow {identity!r}")
+                field_flow_identities.add(identity)
             if field.get("status") != "proved":
                 continue
             owner = by_object_key.get(field.get("receiver_owner"))
@@ -377,6 +466,27 @@ def validate_pipeline_run(
                         f"{field_path}.transformation_owner must reference a receiver "
                         "Transformation"
                     )
+                elif transformation.get("intended", {}).get("mode") == "allow" and field.get(
+                    "wire", {}
+                ).get("path") not in set(
+                    transformation.get("intended", {}).get("allowed_parameters", [])
+                ):
+                    fail(
+                        f"{field_path}.transformation_owner allowlist removes the proved wire field"
+                    )
+        mapped_identities = {
+            (
+                mapping["requirement_id"],
+                mapping["field_scope"],
+                mapping["destination_field"],
+            )
+            for mapping in document["payload_mappings"]
+            if mapping.get("status") == "mapped"
+            and mapping.get("requirement_id") in flow_requirements
+        }
+        missing_field_flows = sorted(mapped_identities - field_flow_identities)
+        if missing_field_flows:
+            fail(f"{path}.field_flows misses mapped fields: {missing_field_flows}")
         topology_ids = pipeline.get("consent_topology_ids")
         if not isinstance(topology_ids, list) or not topology_ids:
             fail(f"{path}.consent_topology_ids must be a non-empty array")
@@ -398,13 +508,38 @@ def validate_pipeline_run(
                 fail(f"{path} references unknown consent topology {topology_id!r}")
                 continue
             transporter_keys = set(topology.get("transporter_tag_keys", []))
-            if transport_owner not in transporter_keys:
+            if not transporter_keys:
                 fail(f"{path} consent topology {topology_id!r} does not bind its transporter")
             if any(
                 by_object_key.get(key, {}).get("target_id") not in senders
                 for key in transporter_keys
             ):
                 fail(f"{path} consent topology {topology_id!r} binds a non-sender transporter")
+            for key in transporter_keys:
+                operation = by_object_key.get(key)
+                if operation is None:
+                    continue
+                if key == transport_owner:
+                    continue
+                try:
+                    direct_endpoint = _configured_transport_endpoint(
+                        operation, by_object_key, f"{path}.transporter_tag_keys[{key!r}]"
+                    )
+                    destinations = _configured_destinations(
+                        operation.get("intended", {}),
+                        by_object_key,
+                        f"{path}.transporter_tag_keys[{key!r}]",
+                    )
+                except ValueError as exc:
+                    fail(str(exc))
+                    continue
+                if direct_endpoint != resolved_endpoint and not (
+                    destinations and destinations & owner_destinations
+                ):
+                    fail(
+                        f"{path} consent topology {topology_id!r} transporter {key!r} "
+                        "does not inherit the proved endpoint"
+                    )
             server_keys = set(topology.get("server_tag_keys", []))
             topology_consumer_keys.update(server_keys)
             if not server_keys <= pipeline_consumer_keys:
@@ -420,6 +555,13 @@ def validate_pipeline_run(
             topology_requirements = {
                 flow.get("requirement_id") for flow in topology_flows if flow.get("requirement_id")
             }
+            sender_requirements = {
+                requirement_id
+                for key in transporter_keys
+                for requirement_id in by_object_key.get(key, {}).get("requirement_ids", [])
+            }
+            if not topology_requirements <= sender_requirements:
+                fail(f"{path} consent topology {topology_id!r} does not bind its event senders")
             topology_events = {
                 flow.get("transported_event")
                 for flow in topology_flows
@@ -469,6 +611,19 @@ def validate_pipeline_run(
                 and not topology.get("intentional_double_gate")
             ):
                 fail(f"consent topology {topology_id!r} has an accidental double gate")
+            if (
+                not (
+                    topology.get("transport_behavior") == "blocked"
+                    and mechanism
+                    in {
+                        "server-template-native-consent",
+                        "server-additional-consent-check",
+                        "server-blocking-trigger",
+                    }
+                )
+                and topology.get("intentional_double_gate") is True
+            ):
+                fail(f"consent topology {topology_id!r} declares a double gate without two gates")
             if mechanism in {"server-blocking-trigger", "server-template-native-consent"}:
                 if topology.get("transporter_destination_vendor_block") is True:
                     fail(
@@ -522,18 +677,6 @@ def validate_pipeline_run(
                 reference_name = _reference_name(str(dedup.get("source_reference", "")))
                 if reference_name is not None and variable.get("name") != reference_name:
                     fail(f"{path} dedup source reference differs from its variable object")
-                if dedup.get("source_type") == "gtm-event-scoped-fallback":
-                    variable_type = str(
-                        variable.get("intended", {}).get(
-                            "type", variable.get("intended", {}).get("variable_type", "")
-                        )
-                    ).casefold()
-                    if variable_type not in {
-                        "cjs",
-                        "custom-javascript",
-                        "customjavascript",
-                    }:
-                        fail(f"{path} guarded GTM fallback must use Custom JavaScript")
             browser_keys = set(dedup.get("browser_consumer_keys", []))
             transporter_keys = set(dedup.get("transporter_consumer_keys", []))
             if browser_keys & transporter_keys:
@@ -591,19 +734,22 @@ def validate_pipeline_run(
                 f"{path}.operation_dependencies misses receiver prerequisites: "
                 + ", ".join(missing_dependencies)
             )
-        if cutover is not None:
-            if cutover not in by_operation:
-                fail(f"{path}.cutover_operation_id is unknown")
-            else:
-                closure = _dependency_closure(cutover, by_operation)
-                missing = sorted(required - closure)
-                if missing:
-                    fail(
-                        f"{path} cutover does not depend on every receiver prerequisite: "
-                        + ", ".join(missing)
-                    )
-                if by_operation[cutover].get("risk") != "high-impact":
-                    fail(f"{path}.cutover_operation_id must be high-impact")
+        if cutover is None:
+            fail(f"{path}.cutover_operation_id is required")
+        elif cutover not in by_operation:
+            fail(f"{path}.cutover_operation_id is unknown")
+        else:
+            if transport_operation is None or cutover != transport_operation["operation_id"]:
+                fail(f"{path}.cutover_operation_id must be the pipeline transport owner")
+            closure = _dependency_closure(cutover, by_operation)
+            missing = sorted(required_receivers - closure)
+            if missing:
+                fail(
+                    f"{path} cutover does not depend on every receiver prerequisite: "
+                    + ", ".join(missing)
+                )
+            if by_operation[cutover].get("risk") != "high-impact":
+                fail(f"{path}.cutover_operation_id must be high-impact")
     for (target_id, request_class), clients in receiver_claims.items():
         if len(clients) != 1:
             fail(
@@ -678,25 +824,6 @@ def _validate_dedup(
             for field in ("browser_field", "server_field", "occurrence_scope"):
                 if not contract.get(field):
                     fail(f"{path}.{field} is required")
-            if source_type == "gtm-event-scoped-fallback":
-                shared = {
-                    contract.get("source_reference"),
-                    contract.get("browser_reference"),
-                    contract.get("transporter_reference"),
-                }
-                if None in shared or len(shared) != 1:
-                    fail(f"{path} does not use one shared web GTM variable")
-                if contract.get("same_gtm_event") is not True:
-                    fail(f"{path}.same_gtm_event must be true")
-                if not contract.get("runtime_verification_note"):
-                    fail(f"{path}.runtime_verification_note is required")
-                if contract.get("compatibility_classification") != "guarded-internal-gtm-model":
-                    fail(f"{path}.compatibility_classification is required")
-            if (
-                contract.get("event_name") == "purchase"
-                and source_type == "gtm-event-scoped-fallback"
-            ):
-                fail(f"{path} cannot replace an available purchase transaction identity by policy")
 
 
 def _validate_publication_dependencies(

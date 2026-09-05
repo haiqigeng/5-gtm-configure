@@ -2,6 +2,25 @@ from __future__ import annotations
 
 from copy import deepcopy
 
+from action_contract import build_mutation_approval
+
+_MUTATING_ACTIONS = {"create", "update", "replace", "rename", "pause", "unpause", "remove"}
+
+
+def approve_mutations(contract: dict) -> dict:
+    """Test-fixture helper that binds current mutations to requirement approval locators."""
+    locators = {
+        requirement["id"]: requirement["authority"]["locator"]
+        for requirement in contract["requirements"]
+    }
+    for item in contract["implementation"]["objects"]:
+        if item["action"] in _MUTATING_ACTIONS:
+            item["approval"] = build_mutation_approval(item, locators[item["requirement_ids"][0]])
+        else:
+            item.pop("approval", None)
+    return contract
+
+
 WEB_TARGET = {
     "target_id": "web-main",
     "container_type": "web",
@@ -33,10 +52,15 @@ def valid_pipeline_contract(*, cutover: bool = False) -> dict:
         "object_key": web_key,
         "action": "create",
         "requirement_ids": ["REQ-PAGE"],
-        "depends_on": [consent_trigger_key],
+        "depends_on": [
+            client_key,
+            server_trigger_key,
+            server_tag_key,
+            consent_trigger_key,
+        ],
         "justification": "Owns the approved GA4 web transport and page view",
         "evidence": ["approved-input", "official-current"],
-        "risk": "routine",
+        "risk": "high-impact",
         "intended": {
             "type": "googtag",
             "measurement_id": "G-TEST123",
@@ -64,7 +88,6 @@ def valid_pipeline_contract(*, cutover: bool = False) -> dict:
                     "container-confirmed",
                 ],
                 "risk": "high-impact",
-                "explicit_authority": True,
                 "pre_change": {
                     "type": "googtag",
                     "measurement_id": "G-TEST123",
@@ -85,6 +108,7 @@ def valid_pipeline_contract(*, cutover: bool = False) -> dict:
         },
         "page_view_ownership": {
             "owner": web_key,
+            "occurrence": "initial-page-load",
             "send_page_view": True,
         },
         "event_flows": [
@@ -98,6 +122,8 @@ def valid_pipeline_contract(*, cutover: bool = False) -> dict:
         "field_flows": [
             {
                 "status": "proved",
+                "field_scope": "event-parameter",
+                "destination_field": "page_location",
                 "source": {"path": "page_location", "shape": "scalar"},
                 "wire": {"path": "page_location", "shape": "scalar"},
                 "event_data": {"path": "page_location", "shape": "scalar"},
@@ -118,189 +144,206 @@ def valid_pipeline_contract(*, cutover: bool = False) -> dict:
             consent_trigger_key,
         ],
     }
-    if cutover:
-        pipeline["cutover_operation_key"] = web_key
-    return {
-        "schema_version": "6.0",
-        "mode": "pipeline",
-        "route": "analytics",
-        "scope": {"included": ["REQ-PAGE"], "reference_only": [], "excluded": []},
-        "requirements": [
-            {
-                "id": "REQ-PAGE",
-                "authority": {
-                    "grade": "approved-input",
-                    "locator": "Tracking Plan / page_view",
-                },
-                "event_name": "page_view",
-                "source_event": "page_view",
-                "parameters": {
-                    "page_location": {
-                        "source": "page_location",
-                        "source_shape": "scalar:string",
-                        "destination_shape": "scalar:string",
-                        "provenance": {
-                            "grade": "approved-input",
-                            "locator": "Tracking Plan / page_view / page_location",
-                        },
-                    }
-                },
-            }
-        ],
-        "targets": [deepcopy(WEB_TARGET), deepcopy(SERVER_TARGET)],
-        "pipelines": [pipeline],
-        "consent_topologies": [
-            {
-                "consent_topology_id": "CONSENT-GA4",
-                "destination": "GA4",
-                "requirement_ids": ["REQ-PAGE"],
-                "consent_mode": "strict-basic",
-                "transport_behavior": "always-transported",
-                "web_enforcement": {"mechanism": "transport-trigger-only"},
-                "server_enforcement": {"mechanism": "incoming-google-consent-native"},
-                "signal_authority": "google-consent-mode",
-                "signal_source": "Google Consent Mode parameters",
-                "unknown_state_behavior": "native-product-behavior",
-                "event_coverage": ["page_view"],
-                "intentional_double_gate": False,
-                "server_tag_keys": [server_tag_key],
-                "transporter_tag_keys": [web_key],
-                "transporter_destination_vendor_block": False,
-            }
-        ],
-        "dedup_contracts": [],
-        "implementation": {
-            "execution_mode": "isolated-durable",
-            "objects": [
-                web_action,
+    pipeline["cutover_operation_key"] = web_key
+    return approve_mutations(
+        {
+            "schema_version": "7.0",
+            "mode": "pipeline",
+            "route": "analytics",
+            "scope": {"included": ["REQ-PAGE"], "reference_only": [], "excluded": []},
+            "requirements": [
                 {
-                    "target_id": "server-main",
-                    "resource_family": "client",
-                    "name": "GA4 Client - Web transport",
-                    "object_key": client_key,
-                    "action": "reuse",
-                    "requirement_ids": ["REQ-PAGE"],
-                    "depends_on": [],
-                    "justification": "Reuses the compatible default GA4 claiming Client",
-                    "evidence": ["official-current", "container-confirmed"],
-                    "risk": "routine",
-                    "intended": {
-                        "type": "ga4-client",
-                        "claim_criteria": "Default GA4 Client claims GA4 collect requests",
-                        "priority": 10,
+                    "id": "REQ-PAGE",
+                    "authority": {
+                        "grade": "approved-input",
+                        "locator": "Tracking Plan / page_view",
                     },
-                },
-                {
-                    "target_id": "server-main",
-                    "resource_family": "tag",
-                    "name": "GA4 - page_view",
-                    "object_key": server_tag_key,
-                    "action": "create",
-                    "requirement_ids": ["REQ-PAGE"],
-                    "depends_on": [client_key, server_trigger_key],
-                    "justification": "Forwards the approved page_view from Event Data to GA4",
-                    "evidence": ["approved-input", "official-current"],
-                    "risk": "routine",
-                    "intended": {
-                        "type": "gaawc",
-                        "event_name": "page_view",
-                        "firingTriggerId": [server_trigger_key],
-                        "blockingTriggerId": [],
+                    "event_name": "page_view",
+                    "source_event": "page_view",
+                    "parameters": {
+                        "page_location": {
+                            "source": "page_location",
+                            "source_shape": "scalar:string",
+                            "destination_shape": "scalar:string",
+                            "provenance": {
+                                "grade": "approved-input",
+                                "locator": "Tracking Plan / page_view / page_location",
+                            },
+                        }
                     },
-                },
-                {
-                    "target_id": "web-main",
-                    "resource_family": "trigger",
-                    "name": "CMP - Analytics granted",
-                    "object_key": consent_trigger_key,
-                    "action": "create",
-                    "requirement_ids": ["REQ-PAGE"],
-                    "depends_on": [],
-                    "justification": "Runs the baseline Google tag after CMP analytics grant",
-                    "evidence": ["approved-input", "official-current"],
-                    "risk": "routine",
-                    "intended": {
-                        "type": "customEvent",
-                        "customEventFilter": "cmp_analytics_granted",
-                    },
-                },
-                {
-                    "target_id": "server-main",
-                    "resource_family": "trigger",
-                    "name": "Event Data - page_view",
-                    "object_key": server_trigger_key,
-                    "action": "create",
-                    "requirement_ids": ["REQ-PAGE"],
-                    "depends_on": [],
-                    "justification": "Matches the transported page_view Event Data event",
-                    "evidence": ["approved-input", "official-current"],
-                    "risk": "routine",
-                    "intended": {
-                        "type": "customEvent",
-                        "customEventFilter": "page_view",
-                    },
-                },
+                }
             ],
-        },
-        "execution_topologies": [
-            {
-                "tag_object_key": web_key,
-                "requirement_ids": ["REQ-PAGE"],
-                "lifecycle_role": "baseline-page-load",
-                "normal_triggers": [
+            "targets": [deepcopy(WEB_TARGET), deepcopy(SERVER_TARGET)],
+            "pipelines": [pipeline],
+            "consent_topologies": [
+                {
+                    "consent_topology_id": "CONSENT-GA4",
+                    "destination": "GA4",
+                    "requirement_ids": ["REQ-PAGE"],
+                    "consent_mode": "advanced-native",
+                    "transport_behavior": "always-transported",
+                    "web_enforcement": {"mechanism": "transport-trigger-only"},
+                    "server_enforcement": {"mechanism": "incoming-google-consent-native"},
+                    "signal_authority": "google-consent-mode",
+                    "signal_source": "Google Consent Mode parameters",
+                    "unknown_state_behavior": "native-product-behavior",
+                    "event_coverage": ["page_view"],
+                    "intentional_double_gate": False,
+                    "server_tag_keys": [server_tag_key],
+                    "transporter_tag_keys": [web_key],
+                    "transporter_destination_vendor_block": False,
+                }
+            ],
+            "dedup_contracts": [],
+            "implementation": {
+                "execution_mode": "isolated-durable",
+                "field_bindings": [
                     {
-                        "trigger_object_key": consent_trigger_key,
-                        "role": "cmp-readiness-grant",
-                        "type": "custom-event",
+                        "requirement_id": "REQ-PAGE",
+                        "field_scope": "event-parameter",
+                        "destination_field": "page_location",
+                        "shape_compatibility": "compatible",
+                        "mapping_method": "native-template",
+                        "gtm_resolution": "Native page location",
+                        "template_field": "page_location",
+                        "missing_behavior": "Use the native current location",
+                        "status": "mapped",
                     }
                 ],
-                "consent_mode": "strict-basic",
-                "consent_topology_ids": ["CONSENT-GA4"],
-                "blocking_trigger_keys": [],
-                "blocking_event_scope": None,
-                "built_in_consent_checks": ["analytics_storage"],
-                "additional_consent_checks": [],
-                "firing_option": "once-per-event",
-                "may_precede_cmp": False,
-                "pre_cmp_policy": "not-applicable",
-                "page_view_capable": True,
-                "page_view_destinations": ["G-TEST123"],
-                "ecommerce_route": "not-applicable",
-                "manual_ecommerce_fields": [],
-                "evidence": ["official-current", "container-confirmed"],
-            }
-        ],
-        "page_view_decisions": [
-            {
-                "target_id": "web-main",
-                "destination": "G-TEST123",
-                "requirement_ids": ["REQ-PAGE"],
-                "owner": "google-tag-automatic",
-                "owner_object_key": web_key,
-                "google_tag_object_key": web_key,
-                "send_page_view": True,
-                "external_dependency_ids": [],
-                "reason": "The Google tag is the single approved page_view owner.",
-                "evidence": ["approved-input", "official-current"],
-            }
-        ],
-        "first_party_data_routes": [],
-        "inventory_dispositions": [],
-        "evidence": [
-            {
-                "grade": "official-current",
-                "locator": "https://developers.google.com/tag-platform/tag-manager/server-side/send-data",
-                "title": "Send data to server-side Tag Manager",
-                "accessed_on": "2026-08-18",
-                "supports": ["REQ-PAGE"],
+                "objects": [
+                    web_action,
+                    {
+                        "target_id": "server-main",
+                        "resource_family": "client",
+                        "name": "GA4 Client - Web transport",
+                        "object_key": client_key,
+                        "action": "reuse",
+                        "requirement_ids": ["REQ-PAGE"],
+                        "depends_on": [],
+                        "justification": "Reuses the compatible default GA4 claiming Client",
+                        "evidence": ["official-current", "container-confirmed"],
+                        "risk": "routine",
+                        "intended": {
+                            "type": "ga4-client",
+                            "claim_criteria": "Default GA4 Client claims GA4 collect requests",
+                            "priority": 10,
+                        },
+                    },
+                    {
+                        "target_id": "server-main",
+                        "resource_family": "tag",
+                        "name": "GA4 - page_view",
+                        "object_key": server_tag_key,
+                        "action": "create",
+                        "requirement_ids": ["REQ-PAGE"],
+                        "depends_on": [client_key, server_trigger_key],
+                        "justification": "Forwards the approved page_view from Event Data to GA4",
+                        "evidence": ["approved-input", "official-current"],
+                        "risk": "routine",
+                        "intended": {
+                            "type": "gaawc",
+                            "event_name": "page_view",
+                            "firingTriggerId": [server_trigger_key],
+                            "blockingTriggerId": [],
+                        },
+                    },
+                    {
+                        "target_id": "web-main",
+                        "resource_family": "trigger",
+                        "name": "CMP - Analytics granted",
+                        "object_key": consent_trigger_key,
+                        "action": "create",
+                        "requirement_ids": ["REQ-PAGE"],
+                        "depends_on": [],
+                        "justification": "Runs the baseline Google tag after CMP analytics grant",
+                        "evidence": ["approved-input", "official-current"],
+                        "risk": "routine",
+                        "intended": {
+                            "type": "customEvent",
+                            "customEventFilter": "cmp_analytics_granted",
+                        },
+                    },
+                    {
+                        "target_id": "server-main",
+                        "resource_family": "trigger",
+                        "name": "Event Data - page_view",
+                        "object_key": server_trigger_key,
+                        "action": "create",
+                        "requirement_ids": ["REQ-PAGE"],
+                        "depends_on": [],
+                        "justification": "Matches the transported page_view Event Data event",
+                        "evidence": ["approved-input", "official-current"],
+                        "risk": "routine",
+                        "intended": {
+                            "type": "customEvent",
+                            "customEventFilter": "page_view",
+                        },
+                    },
+                ],
             },
-            {
-                "grade": "container-confirmed",
-                "locator": "Authorized web and server workspace readback",
-            },
-        ],
-        "external_dependencies": [],
-    }
+            "execution_topologies": [
+                {
+                    "tag_object_key": web_key,
+                    "requirement_ids": ["REQ-PAGE"],
+                    "lifecycle_role": "baseline-page-load",
+                    "normal_triggers": [
+                        {
+                            "trigger_object_key": consent_trigger_key,
+                            "role": "cmp-readiness-grant",
+                            "type": "custom-event",
+                        }
+                    ],
+                    "consent_mode": "advanced-native",
+                    "consent_topology_ids": ["CONSENT-GA4"],
+                    "blocking_trigger_keys": [],
+                    "blocking_event_scope": None,
+                    "built_in_consent_checks": ["analytics_storage"],
+                    "additional_consent_checks": [],
+                    "firing_option": "once-per-event",
+                    "may_precede_cmp": False,
+                    "pre_cmp_policy": "not-applicable",
+                    "page_view_capable": True,
+                    "page_view_destinations": ["G-TEST123"],
+                    "page_view_occurrences": ["initial-page-load"],
+                    "ecommerce_route": "not-applicable",
+                    "manual_ecommerce_fields": [],
+                    "evidence": ["official-current", "container-confirmed"],
+                }
+            ],
+            "page_view_decisions": [
+                {
+                    "target_id": "web-main",
+                    "destination": "G-TEST123",
+                    "occurrence": "initial-page-load",
+                    "requirement_ids": ["REQ-PAGE"],
+                    "owner": "google-tag-automatic",
+                    "owner_object_key": web_key,
+                    "google_tag_object_key": web_key,
+                    "send_page_view": True,
+                    "external_dependency_ids": [],
+                    "reason": "The Google tag is the single approved page_view owner.",
+                    "evidence": ["approved-input", "official-current"],
+                }
+            ],
+            "first_party_data_routes": [],
+            "inventory_dispositions": [],
+            "evidence": [
+                {
+                    "grade": "official-current",
+                    "locator": "https://developers.google.com/tag-platform/tag-manager/server-side/send-data",
+                    "title": "Send data to server-side Tag Manager",
+                    "decision": "Route the approved web GA4 events to the specified tagging-server endpoint and GA4 Client.",
+                    "accessed_on": "2026-08-18",
+                    "supports": ["REQ-PAGE"],
+                },
+                {
+                    "grade": "container-confirmed",
+                    "locator": "Authorized web and server workspace readback",
+                },
+            ],
+            "external_dependencies": [],
+        }
+    )
 
 
 def valid_web_contract() -> dict:
@@ -316,6 +359,10 @@ def valid_web_contract() -> dict:
     web_tag = next(
         item for item in contract["implementation"]["objects"] if item["object_key"] == web_key
     )
+    web_tag["depends_on"] = [
+        value for value in web_tag["depends_on"] if value.startswith("web-main::")
+    ]
+    web_tag["risk"] = "routine"
     web_tag["depends_on"].append(block_trigger_key)
     web_tag["intended"]["blockingTriggerId"] = [block_trigger_key]
     contract["implementation"]["objects"].append(
@@ -336,6 +383,7 @@ def valid_web_contract() -> dict:
     topology = contract["consent_topologies"][0]
     topology.update(
         {
+            "consent_mode": "strict-basic",
             "transport_behavior": "blocked",
             "web_enforcement": {"mechanism": "cmp-lifecycle-plus-vendor-block"},
             "server_enforcement": {"mechanism": "none"},
@@ -347,8 +395,44 @@ def valid_web_contract() -> dict:
         }
     )
     contract["execution_topologies"][0]["blocking_trigger_keys"] = [block_trigger_key]
+    contract["execution_topologies"][0]["consent_mode"] = "strict-basic"
     contract["execution_topologies"][0]["blocking_event_scope"] = ".*"
-    return contract
+    return approve_mutations(contract)
+
+
+def with_complete_baselines(run: dict) -> dict:
+    """Explicit synthetic baseline setup for offline controller tests."""
+    from run_state import _record_target_baseline
+
+    for target in run["run"]["targets"]:
+        resources = {
+            item["resource_family"]: []
+            for item in run["object_changes"]
+            if item["target_id"] == target["target_id"]
+        }
+        run = _record_target_baseline(
+            run,
+            target_id=target["target_id"],
+            resources=resources,
+            captured_at="2026-09-05T00:00:00Z",
+            preexisting_workspace_changes=[],
+            capture_evidence=complete_capture_evidence(resources, target),
+        )
+    return run
+
+
+def complete_capture_evidence(resources: dict, target: dict) -> dict:
+    return {
+        "captured_by": "authenticated-adapter-runtime",
+        "source_identity": {
+            field: target[field]
+            for field in ("account_id", "container_id", "workspace_id", "container_type")
+        },
+        "resource_pagination": {
+            family: {"pages_read": 1, "exhausted": True} for family in resources
+        },
+        "workspace_changes_pagination": {"pages_read": 1, "exhausted": True},
+    }
 
 
 def valid_server_contract() -> dict:
@@ -392,7 +476,7 @@ def add_nonpurchase_dual_dedup(contract: dict) -> dict:
         }
     )
     web_key = "web-main::tag::Google tag - Web transport"
-    variable_key = "web-main::variable::CJS - Shared Event ID"
+    variable_key = "web-main::variable::DLV - Shared Event ID"
     event_trigger_key = "web-main::trigger::CE - add_to_cart"
     web_block_key = "web-main::trigger::Block - Meta denied"
     browser_key = "web-main::tag::Meta - add_to_cart"
@@ -400,13 +484,13 @@ def add_nonpurchase_dual_dedup(contract: dict) -> dict:
     server_trigger_key = "server-main::trigger::Event Data - add_to_cart"
     server_block_key = "server-main::trigger::Block - Meta denied"
     server_tag_key = "server-main::tag::Meta CAPI - add_to_cart"
-    shared_reference = "{{CJS - Shared Event ID}}"
+    shared_reference = "{{DLV - Shared Event ID}}"
     value["implementation"]["objects"].extend(
         [
             {
                 "target_id": "web-main",
                 "resource_family": "variable",
-                "name": "CJS - Shared Event ID",
+                "name": "DLV - Shared Event ID",
                 "object_key": variable_key,
                 "action": "create",
                 "requirement_ids": ["REQ-ATC"],
@@ -414,13 +498,7 @@ def add_nonpurchase_dual_dedup(contract: dict) -> dict:
                 "justification": "Provides one occurrence-scoped ID to both Meta delivery routes",
                 "evidence": ["approved-input", "official-current"],
                 "risk": "routine",
-                "intended": {
-                    "type": "cjs",
-                    "code": (
-                        "function(){var gtmData=window.google_tag_manager[{{Container ID}}]"
-                        ".dataLayer.get('gtm');return gtmData.start+'.'+gtmData.uniqueEventId;}"
-                    ),
-                },
+                "intended": {"type": "v", "name": "event_id", "dataLayerVersion": 2},
             },
             {
                 "target_id": "web-main",
@@ -480,6 +558,7 @@ def add_nonpurchase_dual_dedup(contract: dict) -> dict:
                 "risk": "routine",
                 "intended": {
                     "type": "gaawe",
+                    "measurement_id": "G-TEST123",
                     "event_name": "add_to_cart",
                     "event_id": shared_reference,
                     "cmp_meta_allowed": "{{DLV - consent.meta_allowed}}",
@@ -549,6 +628,8 @@ def add_nonpurchase_dual_dedup(contract: dict) -> dict:
         value["pipelines"][0]["field_flows"].append(
             {
                 "status": "proved",
+                "field_scope": "control" if path == "cmp_meta_allowed" else "event-parameter",
+                "destination_field": path,
                 "requirement_ids": ["REQ-ATC"],
                 "source": {"path": path, "shape": "scalar"},
                 "wire": {"path": path, "shape": "scalar"},
@@ -606,29 +687,33 @@ def add_nonpurchase_dual_dedup(contract: dict) -> dict:
     value["pipelines"][0]["operation_dependencies"].extend(
         [server_trigger_key, server_block_key, server_tag_key]
     )
+    cutover = next(
+        item
+        for item in value["implementation"]["objects"]
+        if item["object_key"] == value["pipelines"][0]["cutover_operation_key"]
+    )
+    cutover["depends_on"].extend([server_trigger_key, server_block_key, server_tag_key])
     dedup = {
         "dedup_contract_id": "DEDUP-META-ATC",
         "requirement_id": "REQ-ATC",
         "event_name": "add_to_cart",
         "destination": "Meta",
         "strategy": "dual-shared-id",
-        "source_type": "gtm-event-scoped-fallback",
-        "source_reference": "{{CJS - Shared Event ID}}",
+        "source_type": "approved-event-id",
+        "source_reference": "{{DLV - Shared Event ID}}",
         "source_variable_key": variable_key,
-        "browser_reference": "{{CJS - Shared Event ID}}",
-        "transporter_reference": "{{CJS - Shared Event ID}}",
+        "browser_reference": "{{DLV - Shared Event ID}}",
+        "transporter_reference": "{{DLV - Shared Event ID}}",
         "browser_consumer_keys": [browser_key],
         "transporter_consumer_keys": [transporter_key],
         "transported_parameter": "event_id",
         "server_event_data_path": "event_id",
         "server_generates_id": False,
-        "same_gtm_event": True,
-        "runtime_verification_note": "Both requests expose the same defined ID for one add_to_cart",
+        "runtime_verification_note": "Both requests expose the same approved ID for one add_to_cart",
         "browser_field": "eventID",
         "server_field": "event_id",
         "occurrence_scope": "one add_to_cart dataLayer event",
         "companion_fields": ["event_name", "pixel_id"],
-        "compatibility_classification": "guarded-internal-gtm-model",
     }
     value["dedup_contracts"] = [dedup]
     value["pipelines"][0]["dedup_contract_ids"] = ["DEDUP-META-ATC"]
@@ -656,6 +741,7 @@ def add_nonpurchase_dual_dedup(contract: dict) -> dict:
                 "pre_cmp_policy": "not-applicable",
                 "page_view_capable": False,
                 "page_view_destinations": [],
+                "page_view_occurrences": [],
                 "ecommerce_route": "manual",
                 "manual_ecommerce_fields": [],
                 "evidence": ["official-current", "container-confirmed"],
@@ -682,6 +768,7 @@ def add_nonpurchase_dual_dedup(contract: dict) -> dict:
                 "pre_cmp_policy": "not-applicable",
                 "page_view_capable": False,
                 "page_view_destinations": [],
+                "page_view_occurrences": [],
                 "ecommerce_route": "manual",
                 "manual_ecommerce_fields": [],
                 "evidence": ["official-current", "container-confirmed"],
@@ -691,4 +778,4 @@ def add_nonpurchase_dual_dedup(contract: dict) -> dict:
     for evidence in value["evidence"]:
         if evidence.get("grade") == "official-current":
             evidence.setdefault("supports", []).append("REQ-ATC")
-    return value
+    return approve_mutations(value)

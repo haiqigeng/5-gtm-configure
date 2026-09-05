@@ -38,6 +38,12 @@ Create or reuse one only after proving:
 Use one compatible linker for aligned consumers rather than one per conversion tag. Separate only
 when current official behavior, domain scope, consent, or ownership requires it.
 
+Current [Google Conversion Linker guidance](https://support.google.com/tagmanager/answer/7549390)
+says a container that loads a Google tag on every page does not also need a separate linker tag,
+and Ads/Floodlight tags initiate a Google tag before sending events. Inspect actual landing-page
+coverage and any custom cross-domain/cookie requirements before adding or retiring a linker.
+This browser guidance does not remove a documented server Conversion Linker requirement.
+
 ## Configure cross-domain behavior
 
 From the current official documentation and visible template fields, resolve:
@@ -48,6 +54,9 @@ From the current official documentation and visible template fields, resolve:
 - query versus fragment placement;
 - trigger scope and initialization order;
 - the relationship with `_gl`, click identifiers, and current Google cookie behavior.
+
+Google's current guide limits form decoration to Query Parameter placement, not Fragment. Do not
+select both form decoration and fragment placement as if they jointly cover a form journey.
 
 Require an approved domain list. Do not discover domains from arbitrary outbound links or use a
 broad parent-domain substring without checking matching behavior. Keep payment providers and other

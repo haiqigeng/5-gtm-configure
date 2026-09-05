@@ -40,6 +40,8 @@ For every target require:
 - every create/delta/reuse read back with resolved references, template identity/permissions,
   trigger/consent, firing settings, folder, and semantic fingerprint;
 - exact analytics conformance or media-brief-to-current-schema mapping;
+- a source review that confirms each cited page supports the product, feature, and configuration
+  decision recorded for the affected requirements; locator/date checks alone do not establish this;
 - no unresolved duplicate/conflict within the requested graph; and
 - a target-local zero-mutation rerun.
 
@@ -66,6 +68,7 @@ Derive every view from the same validated run:
    normal/blocking triggers, variables/parameters, Client/Event Data mapping, consent, dedup,
    rationale, saved ID/readback, and external owner. For a refonte, preserve client inventory row
    identity/order and append only genuinely new tags.
+   Include each official source's title, URL, access date, affected requirements, and applied decision.
 3. **Machine-readable run record:** the same target identities, operation states, mappings,
    comparisons, saved readback, recovery state, and explicit no-publication assertion used to
    derive the human views.

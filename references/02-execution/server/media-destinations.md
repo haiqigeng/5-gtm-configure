@@ -34,6 +34,13 @@ Choose browser-only, server-only/replacement, dual delivery with one shared vend
 or template-native dedup. Preserve current companion fields, assets, event names, and windows. The
 browser and server tags must consume one occurrence source; the server never regenerates it.
 
+In a server-only authorization, a pre-existing browser route remains an external dependency: record
+its owner, exact occurrence source/field, asset and event match, and required browser disposition.
+Do not claim a verified dual-delivery dedup contract or browser replacement without an authorized
+web target. Field-test that overlap only after the external owner confirms the matching browser
+configuration; otherwise hold the overlapping destination while independent server-only routes may
+continue.
+
 ## Fail closed
 
 Block the destination when the product, official server schema, supported GTM implementation,

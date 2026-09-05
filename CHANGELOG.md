@@ -1,5 +1,128 @@
 # Changelog
 
+## 10.0.0
+
+### Why This Release Matters
+
+- Converts the evaluated web, server, and pipeline configurator into one current-only release and
+  removes obsolete public validation, migration, schema, and execution paths.
+- Closes correctness gaps found in independent utility reviews around page-view ownership,
+  consent topology, enhanced-conversion identity flow, saved-state convergence, and field coverage.
+
+### What Changed
+
+- Introduce `configuration-contract@7.0` and `configuration-run@4.0` for the revised field-flow,
+  occurrence-scoped page-view, and structured idempotency contracts.
+- Represent one page-view sender per destination and occurrence, including internal non-Google
+  owners; reject missing or duplicate ownership while preserving coherent automatic/manual GA4
+  behavior.
+- Distinguish CMP page/baseline lifecycle triggers from business-event triggers and distinguish a
+  configurable consent gate from incoming native consent behavior; reject redundant configurable
+  gates and falsely declared double gates.
+- Clarify browser `user_provided_data`, native User-Provided Data variables, transported
+  `user_data`, optional earlier-page User-Provided Data Event tags, and server Ads matching owners.
+- Require every approved scope-qualified field mapping to have exactly one complete pipeline flow.
+- Require fresh, recomputable, read-only saved-state observations for finalization; canonicalize
+  secret-bearing keyed rows without claiming secret value equality; support raw reference context
+  without counting context objects as intended targets.
+- Add official-first product coverage guidance, holdout corrections, current-only release checks,
+  and focused positive and negative regressions for the corrected utility surface.
+- Enforce approved-requirement-to-object coverage, exact GA4 event/destination binding, actual
+  occurrence-scoped page-view emitter uniqueness, native Google Ads user-provided-data routes,
+  complete server field-flow survival, and non-Google sender/identity semantics.
+- Fail closed on untrusted semantic references, secret-reference drift, malformed redaction
+  markers, and high-impact pause/unpause intent; preserve raw GTM pre-change IDs for drift checks.
+- Add adapter-only convergence that either proves an identical no-op rerun or reopens only the
+  drifted operations for safe repair; remove caller-supplied convergence and the internal GTM
+  event-ID fallback.
+- Use one approved-event resolver across contract, server, and pipeline validation; prove each
+  pipeline endpoint against its saved transport owner and every declared consent carrier against
+  the same direct or inherited route.
+- Accept only exact secret-reference descriptors, redact credential-bearing siblings recursively,
+  and replace the external-dependency shorthand with one structured current representation.
+- Support both documented same-event and explicitly authorized tag-wide Google-tag carriage under
+  the server user-data transport feature, with identical receiving Ads consumer/field-flow proof.
+- Remove the remaining callerless single-target header, operation, consent, and baseline validators;
+  the target-aware current validator is the sole run authority.
+- Require exhaustive, source-identified pagination receipts for every captured baseline family and
+  the workspace-change feed; require the full target resource surface for durable refonte work.
+- Redact generic token, refresh-token, and auth-token keys recursively, and bind each Google Ads
+  server user-data timing mode to the correct documented receiver class.
+- Verify authenticated adapter account/container/workspace/type identity before registration and
+  again at execution, restrict persisted secret markers to opaque provider references, and make
+  convergence available only through fresh identity-bound adapter reads; successful convergence
+  performs the sole finalization transition.
+- Require every pipeline transport owner to be its high-impact cutover operation with complete
+  receiver dependencies, resolve inherited Google Configuration Settings variables, and align
+  current client/server enhanced-conversion ownership with Google's documented routes.
+- Remove v9-named current test/support paths and redact complete nested `user_data` payloads while
+  retaining non-sensitive provenance descriptors.
+- Bind baseline evidence to the authorized structured GTM target identity, redact custom credential
+  headers and credential-bearing URLs, and checkpoint unexpected adapter failures without leaking
+  their sensitive text.
+- Add the distinct current server User-provided Data Event route for approved earlier-page data;
+  keep it separate from the server Ads Conversion Tracking enhanced-conversion route.
+- Require every mutation to carry an exact payload-hashed approval record from a linked
+  approved-input locator; any identity, action, requirement, payload, or governed-delta drift
+  requires scope reconciliation and a refreshed record. These records detect inconsistent edits,
+  not independently authenticated permission. Actual authority comes from approved user/source
+  instructions; current official guidance establishes mechanics, never permission.
+- Reject unauthorized `user_data`/`user_id` tag fields and orphan native User-Provided Data
+  variables, and require the browser prior-page Ads route to use `gtm.formSubmit` with the native
+  Form Submission trigger.
+- Remove the caller-supplied baseline command/API. Capture baselines directly through the
+  identity-verified adapter, generate pagination receipts internally, and retain the redacted
+  canonical resource graph for shared-consumer and recovery analysis.
+- Close shared Google Configuration Settings mutations over every referencing tag found in the
+  authenticated baseline, force tag enumeration for that closure, and recompute retained baseline
+  identities and fingerprints. Validate official locators and access-date windows while retaining
+  explicit source-relevance review, and preserve specific adapter outcome classifications.
+- Derive Google page-view emitters from effective tag fields, inherited settings, destinations,
+  and defaults; reject hidden or omitted destinations and tags sharing the same firing trigger
+  under supposedly disjoint occurrence labels. Preserve Ads-only Google tags and genuinely
+  separate initial/virtual page-view routes; resolve Enhanced Measurement history independently.
+- Require complete typed snapshots for typed resources. Treat shared Configuration Settings
+  mutations as high impact and enumerate current tag consumers again immediately before writing,
+  including resumed work and consumers introduced after baseline capture.
+- Detect complementary consent predicates in actual GTM Condition rows while preserving business
+  filters, lifecycle selectors, AND context, and exception event scope. Keep native Google consent
+  behavior distinct from configurable Additional Consent Checks and strict-basic vendor blocks.
+- Require each official source's title and applied decision and retain them in the human handoff.
+  Explicitly distinguish structural evidence checks from the agent's actual relevance review.
+- Preserve an uncertain outcome when a readback fails after a successful or ambiguous mutation;
+  never classify that case as a definite failed write eligible for blind retry.
+- Reconcile remaining ownership prose with the executable current routes: preserve automatic
+  initial views when only a separate virtual owner is external, and place standard client-side Ads
+  user data on the associated Google tag rather than an obsolete conversion-tag field.
+- Bind server prior-page user-data collection to its actual capture event and allow the documented
+  GA4 Event override; reject initialization-only ownership when the approved data arrives later.
+- Remove the fixed official-host catalog: current primary-source review establishes publisher and
+  applicability without making a newly verified documentation host depend on a skill release.
+  Preserve credential-free HTTPS, date, title, decision, and requirement traceability checks.
+- State the triggerless setup/cleanup-only execution boundary explicitly; do not synthesize dummy
+  triggers or ineffective exceptions to represent an unsupported caller-only path.
+
+### What Users Should Do
+
+- Generate new work only with contract 7.0 and run 4.0. Regenerate older mutation artifacts from
+  their approved source requirements; do not migrate or execute them.
+- Continue to inspect current official guidance and installed template capabilities for each exact
+  configuration. Use GTM Preview or the applicable recette skill for runtime acceptance.
+
+### Validation
+
+- Pass 234 tests and 236 scenario subtests, Ruff format/lint, byte-compilation, skill validation,
+  release coherence, deterministic archive rebuild, and isolated extracted-archive validation.
+- Preserve the complete supported client-side, server-container, and connected-pipeline surface
+  while removing obsolete compatibility tests and artifacts from the release package.
+
+### Known Limits
+
+- Local validation does not certify a client container, CMP lifecycle, network delivery,
+  attribution, vendor processing, reporting, or an installed template revision.
+- The skill still never publishes or creates a GTM version and does not provision tagging servers,
+  DNS/CDN, vendor accounts, tokens, websites, or direct backend integrations.
+
 ## 9.0.0
 
 ### Why This Release Matters

@@ -354,7 +354,7 @@ class SkillContractTest(unittest.TestCase):
         ):
             self.assertIn(term, surface)
         self.assertIn("explicit authority", surface)
-        self.assertIn("complete v8 client-side surface", skill.lower())
+        self.assertIn("complete supported client-side surface", skill.lower())
         self.assertIn("capability independently for workspace", adapters)
 
     def test_ga4_safety_and_multi_destination_routing_fail_closed(self) -> None:
@@ -401,8 +401,8 @@ class SkillContractTest(unittest.TestCase):
         run_model = read("scripts/run_model.py")
         graph_diff = read("scripts/diff_object_graph.py")
         package = read("scripts/build_skill_package.py")
-        self.assertIn('"schema_version": "6.0"', contract)
-        self.assertIn('CONTRACT_SCHEMA_VERSION = "6.0"', run_model)
+        self.assertIn('"schema_version": "7.0"', contract)
+        self.assertIn('CONTRACT_SCHEMA_VERSION = "7.0"', run_model)
         self.assertIn("approved-input", validator)
         self.assertIn("compare_graphs", graph_diff)
         self.assertIn('"scripts/validate_configuration_contract.py"', package)
@@ -427,7 +427,7 @@ class SkillContractTest(unittest.TestCase):
             "Machine-readable run record",
         ):
             self.assertIn(term, run_reference)
-        self.assertRegex(run_model, r'(?m)^SCHEMA_VERSION = "3\.0"$')
+        self.assertRegex(run_model, r'(?m)^SCHEMA_VERSION = "4\.0"$')
         self.assertIn("reopen_failed_operation", run_script)
         self.assertIn("collect_paginated", adapter_runtime)
         mandatory = (
@@ -503,7 +503,7 @@ class SkillContractTest(unittest.TestCase):
             "`url_passthrough`",
         ):
             self.assertIn(option, google)
-        self.assertIn("TCF 2.3", tcf)
+        self.assertIn("applicable framework/policy version", tcf)
         self.assertIn("Additional Consent", tcf)
         self.assertIn("User-Provided Data variable", user_data)
         self.assertIn("not pre-hash it", compact(user_data))

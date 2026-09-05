@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 import sys
 import unittest
-from copy import deepcopy
 from pathlib import Path
 
 from jsonschema import Draft202012Validator
@@ -18,26 +17,17 @@ from configuration_run import (  # noqa: E402
     RUN_STATUSES,
     SCHEMA_VERSION,
     RunValidationError,
-    checkpoint_operation,
     create_from_contract,
-    upgrade_document,
     validate_document,
 )
 from run_model import ACTIONS, RESOURCE_FAMILIES  # noqa: E402
 
-from tests.test_configuration_run import ready_run_document  # noqa: E402
-from tests.v9_support import valid_pipeline_contract  # noqa: E402
+from tests.current_support import valid_pipeline_contract  # noqa: E402
 
 
 def schema() -> dict:
     return json.loads(
         (ROOT / "schemas" / "configuration-run.schema.json").read_text(encoding="utf-8")
-    )
-
-
-def legacy_schema() -> dict:
-    return json.loads(
-        (ROOT / "schemas" / "configuration-run-2.1.schema.json").read_text(encoding="utf-8")
     )
 
 
@@ -59,9 +49,7 @@ class ConfigurationRunSchemaTest(unittest.TestCase):
         properties = value["properties"]
         operation = value["$defs"]["operation"]["properties"]
         run = value["$defs"]["run"]["properties"]
-        first_party = legacy_schema()["properties"]["first_party_data_routes"]["items"][
-            "properties"
-        ]
+        first_party = value["properties"]["first_party_data_routes"]["items"]["properties"]
         self.assertEqual(properties["schema_version"]["const"], SCHEMA_VERSION)
         self.assertEqual(set(operation["action"]["enum"]), ACTIONS)
         self.assertEqual(set(operation["resource_family"]["enum"]), RESOURCE_FAMILIES)
@@ -104,46 +92,6 @@ class ConfigurationRunSchemaTest(unittest.TestCase):
         self.assertTrue(errors)
         with self.assertRaisesRegex(RunValidationError, "only for tag objects"):
             validate_document(document)
-
-    def test_safe_legacy_run_upgrades_before_mutation(self) -> None:
-        document = ready_run_document()
-        document["schema_version"] = "2.0"
-        document["idempotency"].pop("evidence")
-        self.assertEqual(validate_document(document)["schema_version"], "2.0")
-        upgraded = upgrade_document(deepcopy(document))
-        self.assertEqual(upgraded["schema_version"], "3.0")
-        self.assertEqual(upgraded["run"]["targets"][0]["container_type"], "web")
-        checkpointed = checkpoint_operation(
-            deepcopy(document),
-            operation_id="OP-001",
-            state="in_progress",
-            note="Safe legacy run upgraded before the new write.",
-        )
-        self.assertEqual(checkpointed["schema_version"], "2.1")
-
-    def test_legacy_delta_history_without_pre_write_proof_is_not_upgraded(self) -> None:
-        document = ready_run_document()
-        operation = document["object_changes"][0]
-        operation.update(
-            {
-                "action": "update",
-                "pre_change": deepcopy(operation["intended"]),
-                "state": "in_progress",
-                "journal": [
-                    {
-                        "state": "in_progress",
-                        "at": "2026-08-01T10:01:00Z",
-                        "note": "Legacy mutation started without a v2.1 drift checkpoint.",
-                    }
-                ],
-            }
-        )
-        document["run"]["phase"] = "mutation"
-        document["schema_version"] = "2.0"
-        document["idempotency"].pop("evidence")
-        validate_document(document)
-        with self.assertRaisesRegex(RunValidationError, "lacks pre-write drift evidence"):
-            upgrade_document(document)
 
 
 if __name__ == "__main__":

@@ -1,10 +1,11 @@
-"""Server-container object and Event Data validation for configuration-run@3.0."""
+"""Server-container object and Event Data validation for configuration-run@4.0."""
 
 from __future__ import annotations
 
-import re
 from typing import Any, Callable
 
+from event_semantics import approved_event_name
+from event_semantics import trigger_accepts_event as matches_event
 from run_model import SERVER_RESOURCE_FAMILIES
 
 _WEB_ONLY_TRIGGER_MARKERS = {
@@ -54,22 +55,7 @@ def validate_server_operations(
                     expected_events[operation_id].add(flow.get("transported_event"))
 
     def trigger_accepts_event(trigger: dict[str, Any], event_name: str) -> bool:
-        def values(value: Any) -> list[str]:
-            if isinstance(value, dict):
-                return [item for child in value.values() for item in values(child)]
-            if isinstance(value, list):
-                return [item for child in value for item in values(child)]
-            return [value] if isinstance(value, str) else []
-
-        for value in values(trigger.get("intended", {})):
-            if value == event_name:
-                return True
-            try:
-                if re.fullmatch(value, event_name):
-                    return True
-            except re.error:
-                continue
-        return False
+        return matches_event(trigger.get("intended", {}), event_name)
 
     for index, operation in enumerate(operations):
         target_id = operation["target_id"]
@@ -127,7 +113,7 @@ def validate_server_operations(
             if not events:
                 for requirement_id in operation.get("requirement_ids", []):
                     requirement = requirement_by_id.get(requirement_id, {})
-                    event = requirement.get("source_event") or requirement.get("destination")
+                    event = approved_event_name(requirement)
                     if event:
                         events.add(event)
             for event in events:

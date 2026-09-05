@@ -116,12 +116,24 @@ policy/terms confirmation by the analyst, and the correct Google Ads/Google tag 
 `first-party-data.md` and `google-field-ownership.md` as the authoritative data, timing, and field-
 ownership contracts.
 
-When the data exists on the conversion event, use the conversion tag's current native enhanced-
-conversion field or documented event override. When it exists only on an earlier page, use the
-native User-Provided Data Event tag on that exact earlier event. Use tag-wide data only when that
+For standard same-page collection, the current Google procedure places the `user_data` event
+parameter on the Google tag associated with the Ads conversion, with a native User-Provided Data
+variable as its value. Use the ownership matrix and the documented event override when narrower
+event timing is required; do not restore an obsolete conversion-tag checkbox or field as an
+alternate route. A site key named `user_provided_data` is only an approved source name;
+it must be mapped into that variable and is not a second Google protocol field. When the data exists
+only on an earlier page, use the native Google Ads User-Provided Data Event tag at the approved
+earlier collection moment; do not create it in addition to a sufficient same-event route. Follow the current
+guide's Form Submission requirement and resolve compatibility with a custom application event
+before promising it; do not broaden the approved collection scope to every form. Use tag-wide data only when that
 wider consumer scope is explicit. Prefer deliberate dataLayer/controlled sources over automatic
 DOM collection. Use native raw-data hashing when supported, omit invalid/empty fields, require
-`ad_user_data`, and never double-hash or put the data in GA4 parameters.
+`ad_user_data`, and never double-hash or put the data in ordinary GA4 parameters. The documented
+server Ads route is distinct: the web event carries the User-Provided Data variable as event
+parameter `user_data`, the claiming GA4 Client must expose the corresponding Event Data
+`user_data` object, and only explicitly authorized server Ads consumers may use it. A server-side
+User-Provided Data Event implementation replaces the equivalent browser User-Provided Data Event
+tag after validation; it does not coexist as a duplicate.
 
 ## Apply consent
 

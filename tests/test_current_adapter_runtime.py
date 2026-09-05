@@ -16,14 +16,22 @@ from adapter_runtime import (  # noqa: E402
     RateLimitError,
     TargetAdapterRegistry,
     execute_ready_operations,
+    verify_idempotent_rerun,
 )
-from configuration_run import atomic_write, create_from_contract, load_document  # noqa: E402
-from redaction import redacted_marker  # noqa: E402
-from v9_support import (  # noqa: E402
+from configuration_run import (  # noqa: E402
+    atomic_write,
+    create_from_contract,
+    load_document,
+)
+from current_support import (  # noqa: E402
+    approve_mutations,
     valid_pipeline_contract,
     valid_server_contract,
     valid_web_contract,
+    with_complete_baselines,
 )
+from redaction import redacted_marker  # noqa: E402
+from resource_registry import required_baseline_families  # noqa: E402
 from verification import expected_graph  # noqa: E402
 
 
@@ -57,6 +65,18 @@ class FakeAdapter:
         self.mutations: list[str] = []
         self.attempts: dict[str, int] = {}
         self.received: list[dict] = []
+        self.observed_identity: dict[str, str] | None = None
+
+    def bind_target(self, target: dict) -> None:
+        self.observed_identity = {
+            field: target[field]
+            for field in ("account_id", "container_id", "workspace_id", "container_type")
+        }
+
+    def identity(self) -> dict[str, str]:
+        if self.observed_identity is None:
+            raise RuntimeError("fake adapter target is not bound")
+        return deepcopy(self.observed_identity)
 
     def read(self, operation: dict) -> dict | None:
         name = operation["name"]
@@ -82,6 +102,16 @@ class FakeAdapter:
         self.saved[name] = expected_graph(operation)
         return deepcopy(self.saved[name])
 
+    def list_resource_page(self, resource_family: str, cursor: str | None) -> dict:
+        if cursor is not None:
+            raise AssertionError("fake adapter has only one baseline page")
+        return {"items": [], "next_cursor": None}
+
+    def list_workspace_changes_page(self, cursor: str | None) -> dict:
+        if cursor is not None:
+            raise AssertionError("fake adapter has only one workspace-change page")
+        return {"items": [], "next_cursor": None}
+
 
 class StaticSecretProvider:
     def __init__(self, values: dict[str, str]) -> None:
@@ -91,23 +121,222 @@ class StaticSecretProvider:
         return self.values[reference]
 
 
-class V9AdapterRuntimeTest(unittest.TestCase):
+class CurrentAdapterRuntimeTest(unittest.TestCase):
+    def test_configuration_settings_mutation_requires_tag_consumer_inventory(self) -> None:
+        operation = {
+            "resource_family": "variable",
+            "action": "update",
+            "intended": {"type": "Google Tag Configuration Settings"},
+        }
+        self.assertEqual(
+            required_baseline_families([operation], "web"),
+            {"variable", "tag"},
+        )
+
+    def test_execution_captures_and_retains_authenticated_baseline(self) -> None:
+        class BaselineAdapter(FakeAdapter):
+            def list_resource_page(self, resource_family, cursor):
+                if resource_family == "tag":
+                    return {
+                        "items": [{"name": "Existing safe tag", "type": "html"}],
+                        "next_cursor": None,
+                    }
+                return {"items": [], "next_cursor": None}
+
+        run = create_from_contract(
+            valid_web_contract(), run_id="RUN-AUTH-BASELINE", source_locator="approved"
+        )
+        target = run["run"]["targets"][0]
+        adapter = BaselineAdapter()
+        adapter.bind_target(target)
+        registry = TargetAdapterRegistry()
+        registry.register(target, adapter, capabilities("tag", "trigger"))
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "run.json"
+            atomic_write(path, run)
+            execute_ready_operations(path, registry, sleep=lambda _: None, random_value=lambda: 0)
+            result = load_document(path)
+        baseline = result["container_baselines"][0]
+        self.assertEqual(
+            baseline["capture_evidence"]["captured_by"], "authenticated-adapter-runtime"
+        )
+        self.assertEqual(baseline["resources"]["tag"][0]["name"], "Existing safe tag")
+
+    def test_exhausted_rate_limit_keeps_its_specific_classification(self) -> None:
+        class AlwaysLimitedAdapter(FakeAdapter):
+            def mutate(self, operation):
+                raise RateLimitError("documented rate limit", retry_after_seconds=0)
+
+        run = create_from_contract(
+            valid_web_contract(), run_id="RUN-RATE-CLASS", source_locator="approved"
+        )
+        target = run["run"]["targets"][0]
+        adapter = AlwaysLimitedAdapter()
+        adapter.bind_target(target)
+        registry = TargetAdapterRegistry()
+        registry.register(target, adapter, capabilities("tag", "trigger"))
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "run.json"
+            atomic_write(path, run)
+            execute_ready_operations(
+                path,
+                registry,
+                max_rate_limit_retries=0,
+                sleep=lambda _: None,
+                random_value=lambda: 0,
+            )
+            persisted = path.read_text(encoding="utf-8")
+        self.assertIn("documented rate limit", persisted)
+        self.assertNotIn("unexpected_adapter_failure", persisted)
+
+    def test_unexpected_adapter_error_is_scrubbed_and_checkpointed(self) -> None:
+        class ExplodingAdapter(FakeAdapter):
+            def read(self, operation):
+                raise RuntimeError("X-API-Key: TOPSECRET123")
+
+        run = with_complete_baselines(
+            create_from_contract(
+                valid_web_contract(), run_id="RUN-ADAPTER-ERROR", source_locator="approved"
+            )
+        )
+        target = run["run"]["targets"][0]
+        adapter = ExplodingAdapter()
+        adapter.bind_target(target)
+        registry = TargetAdapterRegistry()
+        registry.register(target, adapter, capabilities("tag", "trigger"))
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "run.json"
+            atomic_write(path, run)
+            execute_ready_operations(path, registry, sleep=lambda _: None, random_value=lambda: 0)
+            persisted = path.read_text(encoding="utf-8")
+        self.assertNotIn("TOPSECRET123", persisted)
+        self.assertIn("unexpected_adapter_failure", persisted)
+
+    def test_adapter_identity_is_rechecked_before_execution(self) -> None:
+        run = with_complete_baselines(
+            create_from_contract(
+                valid_web_contract(), run_id="RUN-WRONG-TARGET", source_locator="approved input"
+            )
+        )
+        target = run["run"]["targets"][0]
+        adapter = FakeAdapter()
+        adapter.bind_target(target)
+        registry = TargetAdapterRegistry()
+        registry.register(target, adapter, capabilities("tag", "trigger"))
+        adapter.observed_identity["workspace_id"] = "different-workspace"
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "run.json"
+            atomic_write(path, run)
+            execute_ready_operations(path, registry, sleep=lambda _: None, random_value=lambda: 0)
+            result = load_document(path)
+        self.assertEqual(adapter.mutations, [])
+        errors = [
+            entry.get("error", "") for item in result["object_changes"] for entry in item["journal"]
+        ]
+        self.assertTrue(any("authenticated adapter identity differs" in value for value in errors))
+
+    def test_fresh_read_only_convergence_is_required_for_finalization(self) -> None:
+        run = with_complete_baselines(
+            create_from_contract(
+                valid_web_contract(),
+                run_id="RUN-CONVERGENCE",
+                source_locator="approved input",
+                timestamp="2026-08-18T00:00:00Z",
+            )
+        )
+        target = run["run"]["targets"][0]
+        adapter = FakeAdapter()
+        adapter.bind_target(target)
+        registry = TargetAdapterRegistry()
+        registry.register(target, adapter, capabilities("tag", "trigger"))
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "run.json"
+            atomic_write(path, run)
+            execute_ready_operations(
+                path,
+                registry,
+                timestamp=lambda: "2026-08-18T00:00:01Z",
+                sleep=lambda _: None,
+                random_value=lambda: 0,
+            )
+            mutation_count = len(adapter.mutations)
+            proof = verify_idempotent_rerun(
+                path, registry, timestamp=lambda: "2026-08-18T00:00:02Z"
+            )
+            self.assertTrue(proof["checked"])
+            self.assertEqual(len(proof["observations"]), len(run["object_changes"]))
+            self.assertEqual(len(adapter.mutations), mutation_count)
+            configured = load_document(path)
+            self.assertEqual(configured["run"]["status"], "Configured")
+
+    def test_convergence_mismatch_records_required_action_and_blocks_finalization(self) -> None:
+        run = with_complete_baselines(
+            create_from_contract(
+                valid_web_contract(), run_id="RUN-DRIFT", source_locator="approved input"
+            )
+        )
+        target = run["run"]["targets"][0]
+        adapter = FakeAdapter()
+        adapter.bind_target(target)
+        registry = TargetAdapterRegistry()
+        registry.register(target, adapter, capabilities("tag", "trigger"))
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "run.json"
+            atomic_write(path, run)
+            execute_ready_operations(path, registry, sleep=lambda _: None, random_value=lambda: 0)
+            drifted_operation = run["object_changes"][0]
+            drifted_name = drifted_operation["name"]
+            drifted = expected_graph(drifted_operation)
+            drifted["objects"][0]["type"] = "drifted-type"
+            adapter.read_overrides[drifted_name] = drifted
+            proof = verify_idempotent_rerun(path, registry)
+            self.assertFalse(proof["checked"])
+            self.assertTrue(proof["remaining_actions"])
+            self.assertNotEqual(load_document(path)["run"]["status"], "Configured")
+
+    def test_convergence_timestamp_must_follow_operation_verification(self) -> None:
+        run = with_complete_baselines(
+            create_from_contract(
+                valid_web_contract(), run_id="RUN-STALE-CONVERGENCE", source_locator="approved"
+            )
+        )
+        target = run["run"]["targets"][0]
+        adapter = FakeAdapter()
+        adapter.bind_target(target)
+        registry = TargetAdapterRegistry()
+        registry.register(target, adapter, capabilities("tag", "trigger"))
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "run.json"
+            atomic_write(path, run)
+            execute_ready_operations(
+                path,
+                registry,
+                timestamp=lambda: "2026-08-18T00:00:01Z",
+                sleep=lambda _: None,
+                random_value=lambda: 0,
+            )
+            with self.assertRaisesRegex(Exception, "newer than verification"):
+                verify_idempotent_rerun(path, registry, timestamp=lambda: "2026-08-18T00:00:01Z")
+
     def _execute(
         self,
         contract: dict,
         bindings: dict[str, tuple[FakeAdapter, dict, StaticSecretProvider | None]],
         **kwargs: object,
     ) -> tuple[dict, dict[str, FakeAdapter]]:
+        approve_mutations(contract)
         run = create_from_contract(
             contract,
             run_id="RUN-ADAPTER",
             source_locator="approved input",
             timestamp="2026-08-18T00:00:00Z",
         )
+        run = with_complete_baselines(run)
         target_by_id = {item["target_id"]: item for item in run["run"]["targets"]}
         registry = TargetAdapterRegistry()
         adapters: dict[str, FakeAdapter] = {}
         for target_id, (adapter, matrix, provider) in bindings.items():
+            adapter.bind_target(target_by_id[target_id])
             registry.register(
                 target_by_id[target_id],
                 adapter,
@@ -153,7 +382,6 @@ class V9AdapterRuntimeTest(unittest.TestCase):
                 },
                 "evidence": ["approved-input", "official-current"],
                 "risk": "high-impact",
-                "explicit_authority": True,
             }
         )
         contract["implementation"]["objects"].append(
@@ -172,7 +400,7 @@ class V9AdapterRuntimeTest(unittest.TestCase):
                 "evidence": ["approved-input", "official-current"],
                 "risk": "routine",
                 "intended": {
-                    "type": "gaawc",
+                    "type": "html",
                     "event_name": "diagnostic",
                     "firingTriggerId": ["web-main::trigger::CMP - Analytics granted"],
                     "blockingTriggerId": [block_key],
@@ -203,6 +431,7 @@ class V9AdapterRuntimeTest(unittest.TestCase):
                 "pre_cmp_policy": "not-applicable",
                 "page_view_capable": False,
                 "page_view_destinations": [],
+                "page_view_occurrences": [],
                 "ecommerce_route": "not-applicable",
                 "manual_ecommerce_fields": [],
                 "evidence": ["official-current", "container-confirmed"],
@@ -218,7 +447,7 @@ class V9AdapterRuntimeTest(unittest.TestCase):
             },
         )
         states = {item["name"]: item["state"] for item in run["object_changes"]}
-        self.assertEqual(states["GA4 Client - Web transport"], "uncertain")
+        self.assertEqual(states["GA4 Client - Web transport"], "failed")
         self.assertEqual(states["GA4 - page_view"], "planned")
         self.assertEqual(states["Google tag - Web transport"], "planned")
         self.assertEqual(states["Independent - Diagnostics"], "verified")
@@ -277,6 +506,11 @@ class V9AdapterRuntimeTest(unittest.TestCase):
         contract["pipelines"][0]["consent_topology_ids"].append("CONSENT-META")
         contract["pipelines"][0]["event_flows"][0]["server_consumer_keys"].append(meta_key)
         contract["pipelines"][0]["operation_dependencies"].append(meta_key)
+        next(
+            item
+            for item in contract["implementation"]["objects"]
+            if item["object_key"] == contract["pipelines"][0]["cutover_operation_key"]
+        )["depends_on"].append(meta_key)
         server = FakeAdapter(
             existing={"GA4 Client - Web transport"}, fail_names={"Meta - PageView"}
         )
@@ -290,8 +524,8 @@ class V9AdapterRuntimeTest(unittest.TestCase):
         )
         states = {item["name"]: item["state"] for item in run["object_changes"]}
         self.assertEqual(states["GA4 - page_view"], "verified")
-        self.assertEqual(states["Meta - PageView"], "uncertain")
-        self.assertEqual(states["Google tag - Web transport"], "verified")
+        self.assertEqual(states["Meta - PageView"], "failed")
+        self.assertEqual(states["Google tag - Web transport"], "planned")
 
     def test_cutover_executes_only_after_receiver_operations(self) -> None:
         contract = valid_pipeline_contract(cutover=True)
@@ -354,7 +588,6 @@ class V9AdapterRuntimeTest(unittest.TestCase):
                 "action": "replace",
                 "object_id": "tag-100",
                 "pre_change": deepcopy(operation["intended"]),
-                "destructive_authorization": True,
                 "replacement_reason": "Replace the incompatible saved Google tag",
                 "evidence": [
                     "approved-input",
@@ -362,7 +595,6 @@ class V9AdapterRuntimeTest(unittest.TestCase):
                     "container-confirmed",
                 ],
                 "risk": "high-impact",
-                "explicit_authority": True,
             }
         )
         matrix = capabilities("tag", "trigger")

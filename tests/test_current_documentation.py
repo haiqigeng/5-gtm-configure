@@ -28,7 +28,7 @@ def read(relative: str) -> str:
     return (ROOT / relative).read_text(encoding="utf-8")
 
 
-class V9DocumentationTest(unittest.TestCase):
+class CurrentDocumentationTest(unittest.TestCase):
     def test_route_classification_keeps_server_detail_conditional(self) -> None:
         skill = read("SKILL.md")
         pipeline_heading = skill.index("### Pipeline route")
@@ -64,7 +64,7 @@ class V9DocumentationTest(unittest.TestCase):
         duplicates = {text: names for text, names in owners.items() if len(names) > 1}
         self.assertEqual(duplicates, {})
 
-    def test_platform_fixture_covers_every_route_and_the_v8_wrongness_case(self) -> None:
+    def test_platform_fixture_covers_every_route_and_the_unsafe_dedup_case(self) -> None:
         fixture = json.loads(read("tests/fixtures/server_pipeline_scenarios.json"))
         records = fixture["platform_scenarios"]
         self.assertEqual({item["platform"] for item in records}, MEDIA)
@@ -72,17 +72,16 @@ class V9DocumentationTest(unittest.TestCase):
             self.assertTrue(item["server_route"])
             self.assertTrue(item["official_entry_point"])
             self.assertTrue(item["overlap_rule"])
-        wrongness = fixture["v8_wrongness_scenario"]
+        wrongness = fixture["unsafe_internal_dedup_scenario"]
         self.assertEqual(wrongness["event"], "add_to_cart")
         self.assertEqual(wrongness["delivery"], "dual")
         self.assertFalse(wrongness["stable_site_id_available"])
         self.assertIn("purchase fallback", wrongness["forbidden"])
 
-    def test_core_load_delta_is_measured_without_a_file_size_gate(self) -> None:
-        from check_release import MANDATORY_CORE, V8_MANDATORY_CORE_WORDS
+    def test_core_is_routed_without_a_file_size_gate(self) -> None:
+        from check_release import MANDATORY_CORE
 
         current = sum(len(WORD.findall(read(relative))) for relative in MANDATORY_CORE)
-        self.assertEqual(V8_MANDATORY_CORE_WORDS, 7214)
         self.assertGreater(current, 0)
         checker = read("scripts/check_release.py")
         self.assertNotIn("MAX_FILE_LINES", checker)
@@ -120,7 +119,7 @@ class V9DocumentationTest(unittest.TestCase):
         ):
             self.assertTrue((ROOT / "scripts" / module).is_file())
 
-    def test_web_compatibility_and_v9_boundaries_are_both_explicit(self) -> None:
+    def test_current_web_and_cross_target_boundaries_are_explicit(self) -> None:
         combined = " ".join(
             read(relative)
             for relative in (
@@ -130,7 +129,7 @@ class V9DocumentationTest(unittest.TestCase):
             )
         ).replace("\n", " ")
         for phrase in (
-            "preserve the complete v8 client-side surface",
+            "complete supported client-side surface",
             "Default every product to strict/basic CMP blocking",
             "payload-eligibility variables",
             "Web authority does not grant server authority",

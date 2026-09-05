@@ -4,7 +4,7 @@
 
 - [Purpose and priority](#purpose-and-priority)
 - [Keep business and implementation authority separate](#keep-business-and-implementation-authority-separate)
-- [Use configuration-contract 6.0](#use-configuration-contract-60)
+- [Use configuration-contract 7.0](#use-configuration-contract-70)
 - [Map requirements and targets](#map-requirements-and-targets)
 - [Map target-scoped object actions](#map-target-scoped-object-actions)
 - [Map pipeline flow](#map-pipeline-flow)
@@ -31,9 +31,9 @@ completion. Never weaken a higher priority to make a graph look complete.
 Technical infrastructure must serve approved requirements. A field does not gain analytics or media
 authority merely because an implementation object supports it.
 
-## Use configuration-contract 6.0
+## Use configuration-contract 7.0
 
-Every new mutation map uses `"schema_version": "6.0"` and
+Every new mutation map uses `"schema_version": "7.0"` and
 [`configuration-contract.schema.json`](../../schemas/configuration-contract.schema.json):
 
 | Section | Contents |
@@ -45,18 +45,18 @@ Every new mutation map uses `"schema_version": "6.0"` and
 | `targets` | Explicitly authorized stable web/server workspaces with independent target IDs |
 | `implementation.execution_mode` | `isolated-lightweight`, `isolated-durable`, or `refonte-durable` |
 | `implementation.objects` | Exact target-scoped GTM actions, intended state, and dependencies |
+| `implementation.field_bindings` | Explicit resolution of approved fields into mapped GTM/template fields; required for a mapped first-party route |
 | `pipelines` | Sender/receiver graph, request/Client, page-view, event/field flow, and cutover |
 | `consent_topologies` | Per-destination web, transport, server mechanism, signal, and event coverage |
 | `execution_topologies` | One bound firing/blocking/consent/lifecycle decision per executing web tag |
-| `page_view_decisions` | One effective owner and `send_page_view` decision per web destination |
+| `page_view_decisions` | One effective owner per web destination and occurrence role, with an applicable `send_page_view` decision |
 | `first_party_data_routes` | Approved user-data/User-ID feature, source, timing, hashing, consent, and consumers |
 | `inventory_dispositions` | Ordered one-row-per-tag refonte disposition linked to exact object actions |
 | `dedup_contracts` | Only overlapping delivery, with one occurrence identity and exact product fields |
 | `evidence` | Approved, official-current, container-confirmed, and sample provenance |
-| `external_dependencies` | Work outside the saved GTM graphs |
+| `external_dependencies` | Structured work outside the saved GTM graphs: `id`, affected `requirement_ids`, `owner`, `action`, and `status` (`open`, `resolved`, or `accepted`) |
 
-Versioned v5 web contracts remain on their preserved compatibility path. Explicitly versioned v4
-is read-compatible only with `--allow-legacy`. Unversioned inputs never authorize mutation.
+Only version 7.0 is accepted. Older and unversioned inputs cannot authorize mutation.
 
 ## Map requirements and targets
 
@@ -88,11 +88,24 @@ IDs, justification, evidence, risk, and exact pre-change state for every delta. 
 
 Every delta requires `object_id` and a non-empty `pre_change`. Every executing target action and
 every `reuse`/`untouched` action requires a non-empty `intended` compatibility target. `rename`
-also requires `new_name`; `remove` and `replace` require `destructive_authorization: true`;
+also requires `new_name`. Every mutating action requires an `approval` record that binds the
+approved-input locator, action, object key, requirement IDs, and exact mutation payload hash;
 `replace` requires a reason; and every template mutation records its permission delta. These are
 validation rules, not optional documentation conventions.
 
-Web resource families are the complete v8 surface: tag, trigger, variable, built-in variable,
+Keep the approval record consistent with the reviewed implementation. Changes to action, identity,
+requirements, intended/pre-change state, rename, replacement, permission, or scope invalidate its
+hash. Reconcile the change with the original approved source before rebuilding the record; request
+new authority only when existing authority does not cover it. The record provides traceability and
+change detection, not independent proof of user approval. Follow the
+[evidence and validation limits](../01-orientation/utility-contract.md#evidence-and-validation-limits).
+
+For typed resources (tags, triggers, variables, Clients, and Transformations), retain `type` in
+every applicable intended and pre-change snapshot. Use complete snapshots, even when the adapter
+accepts a patch. A shared Google Configuration Settings mutation is high impact and must account
+for consumers of its old and new type, including a type change or removal.
+
+Web resource families are the complete supported surface: tag, trigger, variable, built-in variable,
 folder, template, zone, environment, destination, Google tag configuration, container setting, and
 workspace. Server families are Client, tag, trigger, variable, folder, template, Transformation,
 container setting, and workspace. Subtypes remain in intended fields.
@@ -111,11 +124,19 @@ A rerun against final state must resolve completed objects to `reuse` or `untouc
 ## Map pipeline flow
 
 Each pipeline records sending target IDs, receiving server target, request class, transport owner,
-endpoint reference, exactly one intended claiming Client and its criteria, and one page-view owner
-with explicit effective `send_page_view`.
+endpoint reference, exactly one intended claiming Client and its criteria, and the initial-page-load
+transport owner with explicit effective `send_page_view`. The full web decision surface remains
+occurrence-scoped in `page_view_decisions`.
+
+The endpoint reference must resolve to the endpoint saved on the transport owner. Every linked
+consent topology lists the actual web tags that can emit its event occurrences. Each listed sender
+must either own that same endpoint directly or bind the same destination identity as the transport
+owner and therefore inherit its endpoint. An unrelated tag that merely shares a requirement ID is
+not a proved transporter.
 
 Each event-flow row binds an approved requirement/source event to the transported event and every
-receiver tag. Each field-flow row resolves:
+receiver tag. Every mapped field has exactly one pipeline identity composed of `requirement_id`,
+`field_scope`, and `destination_field`; missing or duplicate identities fail. Each field-flow row resolves:
 
 `approved source -> web variable -> wire field/shape -> claiming Client proof -> Event Data
 path/shape -> server owner -> template field -> destination field/shape -> missing behavior ->
@@ -133,10 +154,14 @@ operation. Configure and read back the receiver before cutover.
 
 ## Map consent and deduplication
 
-For web tags, preserve the strict/basic default: baseline tags use a verified CMP lifecycle event
-plus vendor block; business tags use the approved business trigger plus vendor block. Default every
+For web tags, preserve the strict/basic default: baseline/page-load tags use a verified CMP
+lifecycle event plus vendor block; business and interaction tags keep the approved business trigger
+plus vendor block. Default every
 product to strict/basic CMP blocking unless an explicitly approved and documented advanced/native
-route applies. Do not stack an equivalent Additional Consent Check.
+route applies. A template's built-in consent checks are intrinsic product behavior, not configurable
+Additional Consent Checks. Under strict/basic, remove duplicate consent conditions from the normal
+firing trigger, keep one vendor-denied blocking trigger as the configurable gate, and leave
+Additional Consent Checks empty.
 
 For each pipeline destination, record `consent_mode`, `transport_behavior`, exact web mechanism,
 exact server mechanism, signal source, denied/unknown behavior, and event coverage. Server mechanism
@@ -147,12 +172,10 @@ must not receive an equivalent server gate unless intentional double gating is e
 Record dedup only when the same destination occurrence can arrive twice. A `dual-shared-id` route
 binds browser and transporter to one occurrence source, transports it unchanged, and maps exact
 current browser/server field names and companion fields. Purchase uses approved transaction/order
-identity when the product supports it; do not substitute the GTM fallback for a dual purchase.
+identity when the product supports it; do not synthesize an occurrence identity from GTM internals.
 
-For another dual event with no stable site ID, the guarded GTM event-scoped CJS fallback is allowed
-only when both web tags resolve the same variable on the same GTM event, the server consumes the
-transported value without regeneration, compatibility is recorded as an internal GTM-model
-dependency, and recette must prove a defined stable value. This is not a payload eligibility gate.
+Every other dual event also needs an approved stable occurrence ID. If none exists, select one
+delivery channel or keep the overlap blocked; do not synthesize identity from GTM internals.
 
 ## Validate and materialize
 
@@ -160,10 +183,19 @@ Run `scripts/validate_configuration_contract.py` before mutation. For analytics,
 `validate_contract_conformance.py` to prove identical requirement IDs, events, timing/filters,
 outgoing field set, and approved sources/literals.
 
-The validated contract deterministically materializes active `configuration-run@3.0` sections.
+The validated contract deterministically materializes active `configuration-run@4.0` sections.
 Do not hand-edit requirements, pipelines, immutable operation intention/dependencies, payload maps,
 consent topologies, dedup contracts, or publication dependencies; section fingerprints detect
 drift. Adapters may populate baselines, journals, readbacks, comparisons, and results only.
+
+Resolve field implementation in the contract, not by editing the materialized run. Each
+`implementation.field_bindings` row has exactly `requirement_id`, `field_scope`,
+`destination_field`, `status`,
+`shape_compatibility`, `mapping_method`, `gtm_resolution`, `template_field`, and `missing_behavior`.
+Use the existing payload-mapping enums. The approved requirement supplies source, provenance, and
+source/destination shapes; a binding cannot rewrite them. For example, the Ads carrier maps
+`user_data` with `native-template`, `compatible`, the actual UPD variable reference, the documented
+template field, and explicit omission behavior. Unbound fields stay `pending`, not implicitly mapped.
 
 Use only the canonical statuses in `acceptance-and-handoff.md`. External site/dataLayer, CMP,
 analytics/media account, credentials, catalog/feed, cloud/DNS, publication, and recette work remains

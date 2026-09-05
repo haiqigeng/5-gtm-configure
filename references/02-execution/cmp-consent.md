@@ -32,6 +32,19 @@ Use a normal Custom Event trigger for the business action and a separate vendor 
 
 Do not repeat consent conditions inside every business trigger when a shared vendor block expresses the approved policy safely.
 
+Before changing a tag, inspect all normal-trigger filters, exception predicates, Additional Consent
+Checks, built-in behavior, and setup/cleanup callers. Remove only equivalent custom eligibility
+conditions from in-scope firing triggers when the shared block takes ownership. Retain business,
+host, environment, and genuinely independent consent predicates. Never edit a shared trigger for
+unrelated consumers without authority. A CMP lifecycle event is a firing opportunity, not a duplicate
+custom consent condition to remove.
+
+The static validator detects structurally complementary firing/block predicates only when the
+exception's event constraints are also covered. It does not prove arbitrary regex equivalence,
+variable aliases, or CMP value semantics. Review actual event coverage and supplied denied/unknown
+values before removing a condition; a narrower exception is not evidence that the firing condition
+is redundant.
+
 Under this strict/basic topology, leave Additional Consent Checks unset rather than adding a second
 copy of the same consent predicate. Template-owned built-in consent checks remain visible and are
 recorded separately; do not claim that they were removed. For explicitly approved advanced/native
@@ -77,7 +90,7 @@ the authority. Never copy one client's category IDs or another CMP's event names
 ## Route TCF conditionally
 
 Load `tcf-consent.md` only when the approved site/CMP architecture actually uses IAB Europe TCF.
-Use the current TCF 2.3 route and the CMP's documented TC/Additional Consent plumbing. Do not select
+Verify the applicable current TCF version and the CMP's documented TC/Additional Consent plumbing. Do not select
 purposes, legal bases, vendors, publisher restrictions, or CMP certification on the client's
 behalf, and do not add TCF machinery to a non-TCF consent implementation.
 
@@ -120,12 +133,21 @@ If a non-Google vendor offers consent mode, native cookie control, anonymous col
 
 Page-view source events often occur before CMP state is initialized. Under strict/basic gating:
 
-1. Identify an official CMP event with the required one-time readiness semantics.
-2. Verify that it occurs after the state is readable.
-3. Trigger the separate page-view tag from that event with the vendor block.
+1. Choose the effective page-view owner using `google-field-ownership.md`: Google-tag automatic or
+   explicit event, not both for the same occurrence and destination. Keep a correct existing owner
+   during a narrow delta; prefer the analyst's explicit-event choice when it meets the requirements.
+2. Identify the official CMP lifecycle opportunity and verify that its state is readable.
+3. Give the chosen owner a verified CMP lifecycle firing opportunity and the required vendor block.
+   Readiness alone may still mean unknown consent. If later grant must produce the initial view,
+   prove a later firing opportunity too; a blocked one-time ready event does not retry itself.
 4. Revalidate from the approved source contract that every page-view value is current and available on that CMP event; do not assume an earlier event-scoped payload persists.
 5. Define whether a later grant sends a page view.
 6. Prevent duplicate initial and consent-change page views.
+
+Apply this lifecycle choice to page-load, page-view, and once-per-page work, not to purchase, lead,
+cart, or other business events. For an SPA, once-per-page initialization must not suppress legitimate
+virtual page views. Inspect Enhanced Measurement history collection and other automatic collectors
+separately; `send_page_view: false` alone does not disable every automatic page-view source.
 
 Do not attach a page-view tag to a generic repeatable consent-change event without an explicit state and duplicate policy.
 

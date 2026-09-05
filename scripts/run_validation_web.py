@@ -1,35 +1,23 @@
 #!/usr/bin/env python3
-"""Active shared web-domain rules plus the configuration-run@2.1 compatibility engine.
-
-Run@3.0 web records are adapted through ``web_domain_validation`` and validated here, so this
-module remains authoritative for web semantics. Its run-state/CLI compatibility functions are
-retained for safe v8 artifact migration.
-"""
+"""Shared current web-domain normalization and validation rules."""
 
 from __future__ import annotations
 
-import argparse
 import hashlib
 import json
-import os
-import sys
-from contextlib import contextmanager
 from copy import deepcopy
-from datetime import datetime, timezone
-from pathlib import Path
+from datetime import datetime
 from typing import Any
 from urllib.parse import urlparse
 
+from requirement_validation import DELTA_ACTIONS
+from resource_registry import CONFIGURATION_SETTINGS_VARIABLE_TYPES
 from run_model_web import (
-    ALLOWED_TRANSITIONS,
     BUILT_IN_TRIGGER_TYPES,
     CONFIGURATION_FIELD_ALIASES,
-    CONSENT_MECHANISMS,
     CONSENT_MODES,
     CUSTOM_CODE_TAG_TYPES,
-    DEFAULT_VENDOR_BLOCK_SCOPE,
     ECOMMERCE_ROUTES,
-    EXECUTION_MODES,
     EXTENDED_MAPPING_KEYS,
     FIRING_OPTIONS,
     FIRST_PARTY_FEATURES,
@@ -38,38 +26,41 @@ from run_model_web import (
     GOOGLE_ADS_CONVERSION_TAG_TYPES,
     GOOGLE_CONFIGURATION_TAG_TYPES,
     INVENTORY_DISPOSITIONS,
-    LEGACY_SCHEMA_VERSIONS,
     LIFECYCLE_ROLES,
     MAPPING_METHODS,
     MAPPING_STATUSES,
     NON_EXECUTING_TAG_ACTIONS,
     NORMAL_TRIGGER_ROLES,
     NORMAL_TRIGGER_TYPES,
-    OPERATION_STATES,
     PAGE_LOAD_TRIGGER_TYPES,
+    PAGE_VIEW_OCCURRENCES,
     PAGE_VIEW_OWNERS,
     PRE_CMP_POLICIES,
-    REQUIREMENT_STATUSES,
-    RUN_PHASES,
-    RUN_STATUSES,
     SCHEMA_VERSION,
     SHAPE_COMPATIBILITY,
     TAG_TYPE_ALIASES,
-    TOP_LEVEL_KEYS,
     TRIGGER_TYPE_ALIASES,
     VERIFICATION_SCHEMA_VERSION,
 )
-from strict_json import StrictJsonError, load_json, write_json_atomic, write_text_atomic
-from validate_configuration_contract_v5 import (
-    ACTIONS,
-    DELTA_ACTIONS,
-    MUTATING_ACTIONS,
-    OBJECT_RESOURCE_FAMILIES,
-    ContractValidationError,
+
+# Google product support, native type IDs, and consent parameters checked 2026-09-05:
+# https://support.google.com/tagmanager/answer/10000067
+# https://developers.google.com/tag-platform/tag-manager/restrict
+# https://developers.google.com/tag-platform/gtagjs/reference#consent
+# This bounds declared names, not the exact checks exposed by each installed template.
+# Custom templates/CMPs can define their own types; this is NOT a GTM-wide allowlist.
+_GOOGLE_NATIVE_CONSENT_TAG_TYPES = (
+    GOOGLE_CONFIGURATION_TAG_TYPES
+    | GA4_EVENT_TAG_TYPES
+    | GOOGLE_ADS_CONVERSION_TAG_TYPES
+    | {"sp", "flc", "fls", "gclidw"}
 )
-from validate_configuration_contract_v5 import (
-    validate_document as validate_configuration_contract,
-)
+_GOOGLE_NATIVE_CONSENT_TYPES = {
+    "ad_storage",
+    "analytics_storage",
+    "ad_user_data",
+    "ad_personalization",
+}
 
 
 class RunValidationError(ValueError):
@@ -488,6 +479,25 @@ def _configuration_value(target: dict[str, Any], names: set[str]) -> tuple[bool,
             key = item.get("key") or item.get("name")
             if isinstance(key, str) and _normalized_token(key) in normalized_names:
                 return True, _decode_parameter_value(item)
+            if isinstance(key, str) and _normalized_token(key) == "configsettingstable":
+                rows = item.get("list", [])
+                if not isinstance(rows, list):
+                    continue
+                for row in rows:
+                    entries = row.get("map", []) if isinstance(row, dict) else []
+                    if not isinstance(entries, list):
+                        continue
+                    decoded = {
+                        entry.get("key"): _decode_parameter_value(entry)
+                        for entry in entries
+                        if isinstance(entry, dict) and isinstance(entry.get("key"), str)
+                    }
+                    parameter_name = decoded.get("parameter") or decoded.get("name")
+                    if (
+                        isinstance(parameter_name, str)
+                        and _normalized_token(parameter_name) in normalized_names
+                    ):
+                        return True, decoded.get("parameterValue", decoded.get("value"))
     return False, None
 
 
@@ -543,8 +553,75 @@ def _tag_firing_option(target: dict[str, Any], path: str) -> str:
     return normalized
 
 
-def _send_page_view_value(target: dict[str, Any], path: str) -> bool:
-    present, raw = _configuration_value(target, {"send_page_view", "sendPageView"})
+def _configuration_settings_target(
+    target: dict[str, Any],
+    operations: dict[str, dict[str, Any]] | None,
+    path: str,
+) -> dict[str, Any] | None:
+    present, reference = _configuration_value(
+        target,
+        {
+            "configSettingsVariable",
+            "configuration_settings_variable",
+            "configurationSettingsVariable",
+        },
+    )
+    if not present:
+        return None
+    if operations is None:
+        raise RunValidationError(f"{path} cannot resolve its Configuration Settings variable")
+    if not isinstance(reference, str) or not reference.strip():
+        raise RunValidationError(f"{path} Configuration Settings reference must be a string")
+    reference = reference.strip()
+    name = (
+        reference[2:-2].strip() if reference.startswith("{{") and reference.endswith("}}") else None
+    )
+    operation = operations.get(reference)
+    if operation is None and name:
+        operation = next(
+            (
+                item
+                for item in operations.values()
+                if (item.get("object_type") or item.get("resource_family")) == "variable"
+                and item.get("name") == name
+            ),
+            None,
+        )
+    if (
+        operation is None
+        or (operation.get("object_type") or operation.get("resource_family")) != "variable"
+    ):
+        raise RunValidationError(f"{path} Configuration Settings variable is unresolved")
+    settings = _effective_target(operation, f"{path}.configuration_settings")
+    settings_type = _normalized_token(str(settings.get("type", "")))
+    if settings_type not in CONFIGURATION_SETTINGS_VARIABLE_TYPES:
+        raise RunValidationError(
+            f"{path} reference is not a Google tag Configuration Settings variable"
+        )
+    return settings
+
+
+def _effective_configuration_value(
+    target: dict[str, Any],
+    names: set[str],
+    operations: dict[str, dict[str, Any]] | None,
+    path: str,
+) -> tuple[bool, Any]:
+    direct = _configuration_value(target, names)
+    if direct[0]:
+        return direct
+    settings = _configuration_settings_target(target, operations, path)
+    return _configuration_value(settings, names) if settings is not None else (False, None)
+
+
+def _send_page_view_value(
+    target: dict[str, Any],
+    path: str,
+    operations: dict[str, dict[str, Any]] | None = None,
+) -> bool:
+    present, raw = _effective_configuration_value(
+        target, {"send_page_view", "sendPageView"}, operations, path
+    )
     if not present:
         return True
     if isinstance(raw, bool):
@@ -554,7 +631,38 @@ def _send_page_view_value(target: dict[str, Any], path: str) -> bool:
     raise RunValidationError(f"{path}.send_page_view must resolve to a boolean")
 
 
-def _validate_google_destination(target: dict[str, Any], destination: str, path: str) -> None:
+def _resolve_constant_reference(
+    value: Any, operations: dict[str, dict[str, Any]], path: str
+) -> Any:
+    if not isinstance(value, str) or not (value.startswith("{{") and value.endswith("}}")):
+        return value
+    name = value[2:-2].strip()
+    operation = next(
+        (
+            item
+            for item in operations.values()
+            if (item.get("object_type") or item.get("resource_family")) == "variable"
+            and item.get("name") == name
+        ),
+        None,
+    )
+    if operation is None:
+        raise RunValidationError(f"{path} contains unresolved variable reference {value!r}")
+    target = _effective_target(operation, path)
+    if _normalized_token(str(target.get("type", ""))) not in {"c", "constant"}:
+        raise RunValidationError(f"{path} destination reference must use a Constant variable")
+    present, resolved = _configuration_value(target, {"value"})
+    if not present or not isinstance(resolved, str) or not resolved.strip():
+        raise RunValidationError(f"{path} Constant variable has no literal value")
+    return resolved.strip()
+
+
+def _configured_destinations(
+    target: dict[str, Any],
+    operations: dict[str, dict[str, Any]],
+    path: str,
+) -> set[str]:
+    candidates: set[str] = set()
     present, value = _configuration_value(
         target,
         {
@@ -566,12 +674,9 @@ def _validate_google_destination(target: dict[str, Any], destination: str, path:
             "destinationId",
         },
     )
-    candidates = {value} if present and isinstance(value, str) else set()
-    for collection_name in {
-        "destinations",
-        "destination_ids",
-        "destinationIds",
-    }:
+    if present and isinstance(value, str):
+        candidates.add(_resolve_constant_reference(value, operations, path))
+    for collection_name in {"destinations", "destination_ids", "destinationIds"}:
         collection_present, collection = _configuration_value(target, {collection_name})
         if not collection_present:
             continue
@@ -579,267 +684,64 @@ def _validate_google_destination(target: dict[str, Any], destination: str, path:
             collection = [collection]
         for item in collection:
             if isinstance(item, str):
-                candidates.add(item)
+                candidates.add(_resolve_constant_reference(item, operations, path))
             elif isinstance(item, dict):
                 for key in ("id", "value", "destinationId", "measurementId"):
                     candidate = item.get(key)
                     if isinstance(candidate, str):
-                        candidates.add(candidate)
+                        candidates.add(_resolve_constant_reference(candidate, operations, path))
+    return candidates
+
+
+def _configured_transport_endpoint(
+    operation: dict[str, Any],
+    operations: dict[str, dict[str, Any]],
+    path: str,
+) -> str | None:
+    target = _effective_target(operation, path)
+    present, value = _effective_configuration_value(
+        target,
+        {
+            "server_container_url",
+            "serverContainerUrl",
+            "transport_url",
+            "transportUrl",
+        },
+        operations,
+        path,
+    )
+    if not present:
+        return None
+    resolved = _resolve_constant_reference(value, operations, path)
+    if not isinstance(resolved, str) or not resolved.strip():
+        raise RunValidationError(f"{path} transport endpoint must resolve to a non-empty string")
+    return _normalize_transport_endpoint(resolved, path)
+
+
+def _normalize_transport_endpoint(value: str, path: str) -> str:
+    endpoint = value.strip().rstrip("/")
+    parsed = urlparse(endpoint)
+    if parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password:
+        raise RunValidationError(
+            f"{path} transport endpoint must be an absolute credential-free HTTPS URL"
+        )
+    return endpoint
+
+
+def _validate_google_destination(
+    target: dict[str, Any],
+    destination: str,
+    path: str,
+    operations: dict[str, dict[str, Any]] | None = None,
+) -> None:
+    operations = operations or {}
+    candidates = _configured_destinations(target, operations, path)
     if destination not in candidates:
         raise RunValidationError(f"{path} does not bind destination {destination!r}")
 
 
-def _validate_run_header(raw: Any) -> tuple[dict[str, Any], set[str], str]:
-    run = _object(raw, "$.run")
-    _text(run.get("id"), "$.run.id")
-    phase = _text(run.get("phase"), "$.run.phase")
-    if phase not in RUN_PHASES:
-        raise RunValidationError(f"$.run.phase has unsupported value {phase!r}")
-    status = _text(run.get("status"), "$.run.status")
-    if status not in RUN_STATUSES:
-        raise RunValidationError(f"$.run.status has unsupported value {status!r}")
-    _timestamp(run.get("started_at"), "$.run.started_at")
-    _timestamp(run.get("updated_at"), "$.run.updated_at")
-
-    target = _object(run.get("target"), "$.run.target")
-    for field in ("account_id", "container_id", "workspace_id"):
-        _text(target.get(field), f"$.run.target.{field}")
-    if _text(target.get("container_type"), "$.run.target.container_type").casefold() != "web":
-        raise RunValidationError("$.run.target.container_type must be 'web'")
-
-    contract = _object(run.get("contract"), "$.run.contract")
-    _text(contract.get("schema_version"), "$.run.contract.schema_version")
-    requirement_ids = set(
-        _unique_texts(
-            contract.get("requirement_ids"),
-            "$.run.contract.requirement_ids",
-            allow_empty=False,
-        )
-    )
-    _text(contract.get("source_locator"), "$.run.contract.source_locator")
-    _text(contract.get("fingerprint"), "$.run.contract.fingerprint")
-
-    execution_mode = _text(run.get("execution_mode"), "$.run.execution_mode")
-    if execution_mode not in EXECUTION_MODES:
-        raise RunValidationError(f"$.run.execution_mode has unsupported value {execution_mode!r}")
-
-    publication = _object(run.get("publication"), "$.run.publication")
-    if publication.get("performed") is not False:
-        raise RunValidationError("$.run.publication.performed must be false")
-    if publication.get("version_created") is not False:
-        raise RunValidationError("$.run.publication.version_created must be false")
-    return run, requirement_ids, status
-
-
-def _validate_requirements(raw: Any, expected_ids: set[str]) -> dict[str, dict[str, Any]]:
-    records: dict[str, dict[str, Any]] = {}
-    for index, item_raw in enumerate(_array(raw, "$.requirements")):
-        path = f"$.requirements[{index}]"
-        item = _object(item_raw, path)
-        requirement_id = _text(item.get("id"), f"{path}.id")
-        if requirement_id in records:
-            raise RunValidationError(f"duplicate requirement id {requirement_id!r}")
-        kind = _text(item.get("kind"), f"{path}.kind")
-        if kind not in {"analytics", "media", "consent"}:
-            raise RunValidationError(f"{path}.kind has unsupported value {kind!r}")
-        _text(item.get("source_locator"), f"{path}.source_locator")
-        _optional_text(item.get("source_event"), f"{path}.source_event")
-        _optional_text(item.get("destination"), f"{path}.destination")
-        status = _text(item.get("status"), f"{path}.status")
-        if status not in REQUIREMENT_STATUSES:
-            raise RunValidationError(f"{path}.status has unsupported value {status!r}")
-        _unique_texts(item.get("object_keys"), f"{path}.object_keys")
-        records[requirement_id] = item
-    if set(records) != expected_ids:
-        raise RunValidationError("$.requirements IDs must equal $.run.contract.requirement_ids")
-    return records
-
-
-def _validate_permission_delta(value: Any, path: str) -> None:
-    delta = _object(value, path)
-    _exact_keys(delta, path, required={"added", "removed", "evidence_locator"})
-    _unique_texts(delta.get("added"), f"{path}.added")
-    _unique_texts(delta.get("removed"), f"{path}.removed")
-    _text(delta.get("evidence_locator"), f"{path}.evidence_locator")
-
-
-def _validate_object_changes(
-    raw: Any,
-    *,
-    requirement_ids: set[str],
-    schema_version: str,
-) -> tuple[dict[str, dict[str, Any]], dict[str, str]]:
-    operations: dict[str, dict[str, Any]] = {}
-    object_claims: dict[str, str] = {}
-    dependency_map: dict[str, list[str]] = {}
-    for index, item_raw in enumerate(_array(raw, "$.object_changes")):
-        path = f"$.object_changes[{index}]"
-        item = _object(item_raw, path)
-        _exact_keys(
-            item,
-            path,
-            required={
-                "operation_id",
-                "requirement_ids",
-                "action",
-                "object_type",
-                "name",
-                "object_key",
-                "dependencies",
-                "state",
-                "evidence",
-                "journal",
-            },
-            optional={
-                "object_id",
-                "intended",
-                "pre_change",
-                "replacement_reason",
-                "destructive_authorization",
-                "permission_delta",
-                "result",
-                "comparison",
-                "pre_write_comparison",
-                "error",
-            },
-        )
-        operation_id = _text(item.get("operation_id"), f"{path}.operation_id")
-        if operation_id in operations:
-            raise RunValidationError(f"duplicate operation_id {operation_id!r}")
-        linked_ids = set(
-            _unique_texts(
-                item.get("requirement_ids"),
-                f"{path}.requirement_ids",
-                allow_empty=False,
-            )
-        )
-        unknown_ids = sorted(linked_ids - requirement_ids)
-        if unknown_ids:
-            raise RunValidationError(
-                f"{path}.requirement_ids contains unknown IDs: {', '.join(unknown_ids)}"
-            )
-        action = _text(item.get("action"), f"{path}.action")
-        if action not in ACTIONS:
-            raise RunValidationError(f"{path}.action has unsupported value {action!r}")
-        object_type = _text(item.get("object_type"), f"{path}.object_type")
-        if object_type not in OBJECT_RESOURCE_FAMILIES:
-            raise RunValidationError(f"{path}.object_type is not a canonical resource family")
-        if action in {"pause", "unpause"} and object_type != "tag":
-            raise RunValidationError(f"{path}.{action} is supported only for tag objects")
-        name = _text(item.get("name"), f"{path}.name")
-        object_key = _text(item.get("object_key"), f"{path}.object_key")
-        expected_key = _canonical_object_key(object_type, name)
-        if object_key != expected_key:
-            raise RunValidationError(f"{path}.object_key must be {expected_key!r}")
-        if object_key in object_claims:
-            raise RunValidationError(
-                f"{path}.object_key is already claimed by {object_claims[object_key]!r}"
-            )
-        object_claims[object_key] = operation_id
-        dependencies = _unique_texts(item.get("dependencies"), f"{path}.dependencies")
-        if operation_id in dependencies:
-            raise RunValidationError(f"{path}.dependencies cannot contain itself")
-        dependency_map[operation_id] = dependencies
-        state = _text(item.get("state"), f"{path}.state")
-        if state not in OPERATION_STATES:
-            raise RunValidationError(f"{path}.state has unsupported value {state!r}")
-        _unique_texts(item.get("evidence"), f"{path}.evidence", allow_empty=False)
-
-        if action in MUTATING_ACTIONS - {"remove"}:
-            intended = _object(item.get("intended"), f"{path}.intended")
-            if not intended:
-                raise RunValidationError(f"{path}.intended must not be empty for {action}")
-        if action in DELTA_ACTIONS:
-            pre_change = _object(item.get("pre_change"), f"{path}.pre_change")
-            if not pre_change:
-                raise RunValidationError(f"{path}.pre_change must not be empty for {action}")
-        if action in {"remove", "replace"} and item.get("destructive_authorization") is not True:
-            raise RunValidationError(f"{path}.destructive_authorization must be true for {action}")
-        if action == "replace":
-            _text(item.get("object_id"), f"{path}.object_id")
-            _text(item.get("replacement_reason"), f"{path}.replacement_reason")
-        if object_type == "template" and action in MUTATING_ACTIONS:
-            _validate_permission_delta(item.get("permission_delta"), f"{path}.permission_delta")
-
-        journal = _array(item.get("journal"), f"{path}.journal")
-        for journal_index, entry_raw in enumerate(journal):
-            journal_path = f"{path}.journal[{journal_index}]"
-            entry = _object(entry_raw, journal_path)
-            _exact_keys(entry, journal_path, required={"state", "at", "note"})
-            entry_state = _text(entry.get("state"), f"{journal_path}.state")
-            if entry_state not in OPERATION_STATES:
-                raise RunValidationError(
-                    f"{journal_path}.state has unsupported value {entry_state!r}"
-                )
-            _timestamp(entry.get("at"), f"{journal_path}.at")
-            _text(entry.get("note"), f"{journal_path}.note")
-        if journal and journal[-1].get("state") != state:
-            raise RunValidationError(f"{path}.journal final state must equal {path}.state")
-        if state in {"saved", "verified"}:
-            _object(item.get("result"), f"{path}.result")
-        if state == "verified":
-            validate_verification_comparison(
-                item.get("comparison"),
-                operation=item,
-                require_pass=True,
-            )
-        pre_write_comparison = item.get("pre_write_comparison")
-        if pre_write_comparison is not None:
-            validate_pre_write_comparison(
-                pre_write_comparison,
-                operation=item,
-                require_pass=False,
-            )
-        mutation_started = any(entry.get("state") == "in_progress" for entry in journal)
-        if schema_version == SCHEMA_VERSION and action in DELTA_ACTIONS and mutation_started:
-            if pre_write_comparison is None:
-                raise RunValidationError(
-                    f"{path}.pre_write_comparison is required before a delta mutation"
-                )
-            validate_pre_write_comparison(
-                pre_write_comparison,
-                operation=item,
-                require_pass=True,
-            )
-        if state in {"failed", "uncertain"}:
-            _text(item.get("error"), f"{path}.error")
-        operations[operation_id] = item
-
-    operation_ids = set(operations)
-    for operation_id, dependencies in dependency_map.items():
-        unknown = sorted(set(dependencies) - operation_ids)
-        if unknown:
-            raise RunValidationError(
-                f"operation {operation_id!r} has unknown dependencies: {', '.join(unknown)}"
-            )
-
-    state: dict[str, int] = {}
-    for root in operations:
-        if state.get(root) == 2:
-            continue
-        stack: list[tuple[str, bool]] = [(root, False)]
-        while stack:
-            operation_id, exiting = stack.pop()
-            if exiting:
-                state[operation_id] = 2
-                continue
-            current = state.get(operation_id, 0)
-            if current == 2:
-                continue
-            if current == 1:
-                raise RunValidationError(f"operation dependency cycle includes {operation_id!r}")
-            state[operation_id] = 1
-            stack.append((operation_id, True))
-            for dependency in reversed(dependency_map[operation_id]):
-                if state.get(dependency) == 1:
-                    raise RunValidationError(f"operation dependency cycle includes {dependency!r}")
-                if state.get(dependency) != 2:
-                    stack.append((dependency, False))
-    return operations, object_claims
-
-
 def _validate_payload_mappings(raw: Any, requirement_ids: set[str]) -> list[dict[str, Any]]:
-    identities: set[tuple[str, str]] = set()
+    identities: set[tuple[str, str, str]] = set()
     records: list[dict[str, Any]] = []
     for index, item_raw in enumerate(_array(raw, "$.payload_mappings")):
         path = f"$.payload_mappings[{index}]"
@@ -866,7 +768,7 @@ def _validate_payload_mappings(raw: Any, requirement_ids: set[str]) -> list[dict
         if field_scope not in {"event-parameter", "user-property", "item-parameter"}:
             raise RunValidationError(f"{path}.field_scope has unsupported value {field_scope!r}")
         destination_field = _text(item.get("destination_field"), f"{path}.destination_field")
-        identity = (requirement_id, destination_field)
+        identity = (requirement_id, field_scope, destination_field)
         if identity in identities:
             raise RunValidationError(f"duplicate payload mapping {identity!r}")
         identities.add(identity)
@@ -965,254 +867,6 @@ def _validate_payload_mappings(raw: Any, requirement_ids: set[str]) -> list[dict
     return records
 
 
-def _validate_consent_routes(
-    raw: Any,
-    requirement_ids: set[str],
-    *,
-    trigger_types: dict[str, str],
-) -> None:
-    seen: set[str] = set()
-    for index, item_raw in enumerate(_array(raw, "$.consent_routes")):
-        path = f"$.consent_routes[{index}]"
-        item = _object(item_raw, path)
-        _exact_keys(
-            item,
-            path,
-            required={
-                "requirement_id",
-                "product",
-                "mode",
-                "mechanism",
-                "normal_trigger",
-                "blocking_triggers",
-                "built_in_consent_checks",
-                "additional_consent_checks",
-                "unknown_behavior",
-                "evidence",
-            },
-            optional={"blocking_event_scope", "scope_exception_reason"},
-        )
-        requirement_id = _text(item.get("requirement_id"), f"{path}.requirement_id")
-        if requirement_id not in requirement_ids:
-            raise RunValidationError(f"{path}.requirement_id is unknown")
-        if requirement_id in seen:
-            raise RunValidationError(f"duplicate consent route for {requirement_id!r}")
-        seen.add(requirement_id)
-        _text(item.get("product"), f"{path}.product")
-        mode = _text(item.get("mode"), f"{path}.mode")
-        if mode not in CONSENT_MODES:
-            raise RunValidationError(f"{path}.mode has unsupported value {mode!r}")
-        mechanism = _text(item.get("mechanism"), f"{path}.mechanism")
-        if mechanism not in CONSENT_MECHANISMS:
-            raise RunValidationError(f"{path}.mechanism has unsupported value {mechanism!r}")
-        normal_trigger = _semantic_trigger_reference(
-            item.get("normal_trigger"),
-            f"{path}.normal_trigger",
-        )
-        blocking = _semantic_trigger_references(
-            item.get("blocking_triggers"),
-            f"{path}.blocking_triggers",
-        )
-        if normal_trigger not in trigger_types:
-            raise RunValidationError(f"{path}.normal_trigger references an unresolved trigger")
-        for trigger_key in blocking:
-            if trigger_types.get(trigger_key) != "custom-event":
-                raise RunValidationError(
-                    f"{path}.blocking_triggers contains an unresolved/non-Custom Event trigger"
-                )
-        _unique_texts(
-            item.get("built_in_consent_checks"),
-            f"{path}.built_in_consent_checks",
-        )
-        additional = _unique_texts(
-            item.get("additional_consent_checks"),
-            f"{path}.additional_consent_checks",
-        )
-        _text(item.get("unknown_behavior"), f"{path}.unknown_behavior")
-        _unique_texts(item.get("evidence"), f"{path}.evidence", allow_empty=False)
-        block_scope = _optional_text(
-            item.get("blocking_event_scope"),
-            f"{path}.blocking_event_scope",
-        )
-        scope_reason = _optional_text(
-            item.get("scope_exception_reason"),
-            f"{path}.scope_exception_reason",
-        )
-        if mode == "strict-basic":
-            if not blocking:
-                raise RunValidationError(
-                    f"{path}.blocking_triggers must not be empty under strict-basic consent"
-                )
-            if not block_scope:
-                raise RunValidationError(
-                    f"{path}.blocking_event_scope is required under strict-basic consent"
-                )
-            if block_scope != DEFAULT_VENDOR_BLOCK_SCOPE and not scope_reason:
-                raise RunValidationError(
-                    f"{path}.scope_exception_reason is required when blocking_event_scope is not "
-                    f"{DEFAULT_VENDOR_BLOCK_SCOPE!r}"
-                )
-            if additional:
-                raise RunValidationError(
-                    f"{path}.additional_consent_checks must be empty when the strict/basic "
-                    "vendor block owns eligibility"
-                )
-        if mechanism == "native-advanced" and mode != "advanced-native":
-            raise RunValidationError(f"{path}.native-advanced requires advanced-native mode")
-        if mode == "advanced-native":
-            if mechanism != "native-advanced":
-                raise RunValidationError(f"{path}.advanced-native requires native-advanced")
-            if blocking or block_scope or additional:
-                raise RunValidationError(
-                    f"{path}.advanced-native must not carry a defeating block or Additional "
-                    "Consent Check"
-                )
-
-
-def _validate_container_baseline(raw: Any, *, execution_mode: str) -> dict[str, Any]:
-    baseline = _object(raw, "$.container_baseline")
-    _exact_keys(
-        baseline,
-        "$.container_baseline",
-        required={
-            "strategy",
-            "captured_at",
-            "complete",
-            "resource_families",
-            "family_counts",
-            "in_scope_tag_keys",
-            "trigger_index",
-            "preexisting_workspace_changes",
-            "fingerprint",
-        },
-    )
-    strategy = _text(baseline.get("strategy"), "$.container_baseline.strategy")
-    if strategy not in {"relevant-families", "full-paginated"}:
-        raise RunValidationError(
-            f"$.container_baseline.strategy has unsupported value {strategy!r}"
-        )
-    complete = baseline.get("complete")
-    if not isinstance(complete, bool):
-        raise RunValidationError("$.container_baseline.complete must be a boolean")
-    captured_at = baseline.get("captured_at")
-    if captured_at is not None:
-        _timestamp(captured_at, "$.container_baseline.captured_at")
-    families = _unique_texts(
-        baseline.get("resource_families"),
-        "$.container_baseline.resource_families",
-    )
-    family_counts = _object(
-        baseline.get("family_counts"),
-        "$.container_baseline.family_counts",
-    )
-    if set(family_counts) != set(families):
-        raise RunValidationError(
-            "$.container_baseline.family_counts must cover each resource family exactly"
-        )
-    for family, count in family_counts.items():
-        if not isinstance(count, int) or isinstance(count, bool) or count < 0:
-            raise RunValidationError(
-                f"$.container_baseline.family_counts.{family} must be a non-negative integer"
-            )
-    in_scope_tag_keys = set(
-        _unique_texts(
-            baseline.get("in_scope_tag_keys"),
-            "$.container_baseline.in_scope_tag_keys",
-        )
-    )
-    change_count = baseline.get("preexisting_workspace_changes")
-    if change_count is not None and (
-        not isinstance(change_count, int) or isinstance(change_count, bool) or change_count < 0
-    ):
-        raise RunValidationError(
-            "$.container_baseline.preexisting_workspace_changes must be a non-negative integer "
-            "or null"
-        )
-    fingerprint = _optional_text(
-        baseline.get("fingerprint"),
-        "$.container_baseline.fingerprint",
-    )
-    if fingerprint is not None:
-        if len(fingerprint) != 71 or not fingerprint.startswith("sha256:"):
-            raise RunValidationError(
-                "$.container_baseline.fingerprint must be a sha256 fingerprint"
-            )
-        try:
-            int(fingerprint.removeprefix("sha256:"), 16)
-        except ValueError as exc:
-            raise RunValidationError(
-                "$.container_baseline.fingerprint must be a sha256 fingerprint"
-            ) from exc
-    if complete and (
-        captured_at is None or not families or change_count is None or fingerprint is None
-    ):
-        raise RunValidationError(
-            "a complete container baseline requires captured_at, resource_families, "
-            "preexisting_workspace_changes, and fingerprint"
-        )
-    if execution_mode == "refonte-durable" and strategy != "full-paginated":
-        raise RunValidationError("refonte-durable requires a full-paginated container baseline")
-    if (
-        complete
-        and strategy == "full-paginated"
-        and not {
-            "tag",
-            "trigger",
-            "variable",
-        }
-        <= set(families)
-    ):
-        raise RunValidationError(
-            "a full-paginated baseline must include tag, trigger, and variable families"
-        )
-    if "tag" in family_counts and len(in_scope_tag_keys) > family_counts["tag"]:
-        raise RunValidationError(
-            "$.container_baseline.in_scope_tag_keys exceeds the captured tag family count"
-        )
-
-    trigger_types: dict[str, str] = dict(BUILT_IN_TRIGGER_TYPES)
-    indexed_triggers = _array(
-        baseline.get("trigger_index"),
-        "$.container_baseline.trigger_index",
-    )
-    for index, raw_trigger in enumerate(indexed_triggers):
-        path = f"$.container_baseline.trigger_index[{index}]"
-        trigger = _object(raw_trigger, path)
-        _exact_keys(
-            trigger,
-            path,
-            required={"object_key", "type", "fingerprint"},
-        )
-        object_key = _semantic_trigger_reference(
-            trigger.get("object_key"),
-            f"{path}.object_key",
-        )
-        if object_key in trigger_types:
-            raise RunValidationError(f"duplicate baseline trigger index entry {object_key!r}")
-        trigger_types[object_key] = _normalized_trigger_type(
-            trigger.get("type"),
-            f"{path}.type",
-        )
-        fingerprint_value = _optional_text(trigger.get("fingerprint"), f"{path}.fingerprint")
-        if fingerprint_value is not None:
-            if len(fingerprint_value) != 71 or not fingerprint_value.startswith("sha256:"):
-                raise RunValidationError(f"{path}.fingerprint must be a sha256 fingerprint")
-            try:
-                int(fingerprint_value.removeprefix("sha256:"), 16)
-            except ValueError as exc:
-                raise RunValidationError(
-                    f"{path}.fingerprint must be a sha256 fingerprint"
-                ) from exc
-    if "trigger" in family_counts and len(indexed_triggers) > family_counts["trigger"]:
-        raise RunValidationError(
-            "$.container_baseline.trigger_index exceeds the captured trigger family count"
-        )
-    return {
-        "in_scope_tag_keys": in_scope_tag_keys,
-        "trigger_types": trigger_types,
-    }
-
-
 def _resolved_trigger_types(
     operations: dict[str, dict[str, Any]],
     baseline_trigger_types: dict[str, str],
@@ -1293,6 +947,104 @@ def _validate_normal_trigger_bindings(
     return records
 
 
+def _trigger_filter_predicates(
+    target: dict[str, Any],
+    path: str,
+) -> tuple[dict[tuple[str, bool], str], set[tuple[str, bool]]]:
+    """Index actual non-event Conditions by operand/operator/options and polarity.
+
+    GTM's Condition API stores operands and flags as unordered named parameter rows:
+    https://developers.google.com/tag-platform/tag-manager/api/reference/rest/v2/Condition
+    Only structural complements are proved; no variable-name heuristics, CMP value-domain
+    assumptions, regex equivalence, or runtime evaluation belongs in this static check.
+    """
+    predicates: dict[tuple[str, bool], str] = {}
+    event_context: set[tuple[str, bool]] = set()
+    for field in ("filter", "customEventFilter", "autoEventFilter"):
+        rows = target.get(field, [])
+        if field == "customEventFilter" and isinstance(rows, str):
+            if rows != ".*":
+                event_context.add((canonical_sha256({"compact_event_regex": rows}), False))
+            continue  # The contract's compact event selector is lifecycle, not eligibility.
+        for index, raw in enumerate(_array(rows, f"{path}.{field}")):
+            row_path = f"{path}.{field}[{index}]"
+            row = _object(raw, row_path)
+            operator = _text(row.get("type"), f"{row_path}.type")
+            parameters: dict[str, Any] = {}
+            for entry in _array(row.get("parameter"), f"{row_path}.parameter"):
+                entry = _object(entry, f"{row_path}.parameter[]")
+                key = _text(entry.get("key"), f"{row_path}.parameter[].key")
+                if key in parameters:
+                    raise RunValidationError(f"{row_path}.parameter repeats key {key!r}")
+                parameters[key] = _decode_parameter_value(entry)
+            if not {"arg0", "arg1"} <= parameters.keys():
+                raise RunValidationError(f"{row_path} requires GTM arg0 and arg1 parameters")
+            negate = parameters.pop("negate", False)
+            ignore_case = parameters.pop("ignore_case", False)
+            if not isinstance(negate, bool) or not isinstance(ignore_case, bool):
+                raise RunValidationError(f"{row_path} negate/ignore_case must be boolean flags")
+            if operator == "matchRegex":
+                parameters["ignore_case"] = ignore_case
+            if parameters["arg0"] in ("{{_event}}", "{{Event}}"):
+                parameters["arg0"] = "{{_event}}"
+                if operator == "matchRegex" and parameters["arg1"] == ".*" and not negate:
+                    continue  # An unrestricted event selector adds no coverage constraint.
+                event_context.add(
+                    (canonical_sha256({"type": operator, "parameters": parameters}), negate)
+                )
+                continue
+            signature = canonical_sha256({"type": operator, "parameters": parameters})
+            predicates[(signature, negate)] = row_path
+    return predicates, event_context
+
+
+def _validate_trigger_consent_predicates(
+    normal_triggers: list[dict[str, str]],
+    blocking: list[str],
+    operation_by_key: dict[str, dict[str, Any]],
+    path: str,
+) -> None:
+    """Reject a repeated custom grant whose inverse is already an attached block.
+
+    Filter rows are ANDed. A block with additional independent predicates is not the
+    inverse of one firing condition. Shared business/host/environment filters can supply
+    that context, but must never themselves be rejected merely for appearing in both.
+    """
+    by_trigger: dict[str, dict[tuple[str, bool], str]] = {}
+    event_contexts: dict[str, set[tuple[str, bool]]] = {}
+    for key in dict.fromkeys(
+        [trigger["trigger_object_key"] for trigger in normal_triggers] + blocking
+    ):
+        if key in BUILT_IN_TRIGGER_TYPES:
+            by_trigger[key] = {}
+            event_contexts[key] = set()
+            continue
+        operation = operation_by_key.get(key)
+        if operation is None or operation["object_type"] != "trigger":
+            raise RunValidationError(f"{path} requires bound trigger snapshot for {key!r}")
+        trigger_path = f"{path}.bound_trigger[{key!r}]"
+        by_trigger[key], event_contexts[key] = _trigger_filter_predicates(
+            _effective_target(operation, trigger_path), trigger_path
+        )
+    for trigger in normal_triggers:
+        normal = by_trigger[trigger["trigger_object_key"]]
+        for block_key in blocking:
+            if not event_contexts[block_key] <= event_contexts[trigger["trigger_object_key"]]:
+                # Do not remove a firing condition on the strength of an exception whose
+                # event coverage is unproved. Exact lifecycle coverage remains a source/UI
+                # review duty; this check does not infer arbitrary regex containment.
+                continue
+            block = by_trigger[block_key]
+            for (signature, negate), normal_path in normal.items():
+                inverse = (signature, not negate)
+                if inverse in block and block.keys() - {inverse} <= normal.keys():
+                    raise RunValidationError(
+                        f"{path}: duplicated consent predicate between normal firing "
+                        f"{normal_path} and blocking {block[inverse]}; "
+                        "the attached block already owns this custom eligibility condition"
+                    )
+
+
 def _validate_execution_topologies(
     raw: Any,
     *,
@@ -1326,6 +1078,7 @@ def _validate_execution_topologies(
                 "pre_cmp_policy",
                 "page_view_capable",
                 "page_view_destinations",
+                "page_view_occurrences",
                 "ecommerce_route",
                 "manual_ecommerce_fields",
                 "evidence",
@@ -1378,12 +1131,14 @@ def _validate_execution_topologies(
                 raise RunValidationError(
                     f"{path}.page-load trigger types require baseline-page-load lifecycle"
                 )
-        expected_baseline_role = (
-            "cmp-readiness-grant" if mode == "strict-basic" else "initialization-page-load"
+        expected_baseline_roles = (
+            {"cmp-readiness-grant"}
+            if mode == "strict-basic"
+            else {"initialization-page-load", "cmp-readiness-grant"}
         )
-        if role == "baseline-page-load" and expected_baseline_role not in trigger_roles:
+        if role == "baseline-page-load" and not expected_baseline_roles & trigger_roles:
             raise RunValidationError(
-                f"{path}.baseline-page-load under {mode} requires a {expected_baseline_role} trigger"
+                f"{path}.baseline-page-load under {mode} requires a {' or '.join(sorted(expected_baseline_roles))} trigger"
             )
 
         blocking = _semantic_trigger_references(
@@ -1407,10 +1162,21 @@ def _validate_execution_topologies(
             item.get("blocking_event_scope"),
             f"{path}.blocking_event_scope",
         )
-        _unique_texts(
+        built_in = _unique_texts(
             item.get("built_in_consent_checks"),
             f"{path}.built_in_consent_checks",
         )
+        # Built-in checks are template behavior, never another configurable firing gate.
+        # They can coexist with a strict-basic vendor block. Additional checks below
+        # are different: GTM requires all their configured types to be granted.
+        # https://support.google.com/tagmanager/answer/10718549
+        if _tag_type(target, f"{path}.bound_tag") in _GOOGLE_NATIVE_CONSENT_TAG_TYPES and (
+            unsupported := set(built_in) - _GOOGLE_NATIVE_CONSENT_TYPES
+        ):
+            raise RunValidationError(
+                f"{path}.built_in_consent_checks contains undocumented Google native "
+                f"consent types: {sorted(unsupported)}"
+            )
         additional = _unique_texts(
             item.get("additional_consent_checks"),
             f"{path}.additional_consent_checks",
@@ -1431,6 +1197,10 @@ def _validate_execution_topologies(
             if additional:
                 raise RunValidationError(
                     f"{path}.additional_consent_checks must be empty under strict-basic"
+                )
+            if blocking:
+                _validate_trigger_consent_predicates(
+                    normal_triggers, blocking, operation_by_key, path
                 )
         elif blocking or block_scope or additional:
             raise RunValidationError(
@@ -1471,6 +1241,16 @@ def _validate_execution_topologies(
             raise RunValidationError(
                 f"{path}.page_view_destinations must be populated exactly when page_view_capable"
             )
+        page_view_occurrences = _unique_texts(
+            item.get("page_view_occurrences"),
+            f"{path}.page_view_occurrences",
+        )
+        if set(page_view_occurrences) - PAGE_VIEW_OCCURRENCES:
+            raise RunValidationError(f"{path}.page_view_occurrences contains unsupported values")
+        if item["page_view_capable"] != bool(page_view_occurrences):
+            raise RunValidationError(
+                f"{path}.page_view_occurrences must be populated exactly when page_view_capable"
+            )
         ecommerce_route = _text(item.get("ecommerce_route"), f"{path}.ecommerce_route")
         if ecommerce_route not in ECOMMERCE_ROUTES:
             raise RunValidationError(
@@ -1508,7 +1288,7 @@ def _validate_page_view_decisions(
             raise RunValidationError(f"{field_path} must reference an executing target tag")
         return operation, _effective_target(operation, field_path)
 
-    seen: set[str] = set()
+    seen: set[tuple[str, str]] = set()
     records: list[dict[str, Any]] = []
     for index, item_raw in enumerate(_array(raw, "$.page_view_decisions")):
         path = f"$.page_view_decisions[{index}]"
@@ -1518,6 +1298,7 @@ def _validate_page_view_decisions(
             path,
             required={
                 "destination",
+                "occurrence",
                 "requirement_ids",
                 "owner",
                 "owner_object_key",
@@ -1529,9 +1310,15 @@ def _validate_page_view_decisions(
             },
         )
         destination = _text(item.get("destination"), f"{path}.destination")
-        if destination in seen:
-            raise RunValidationError(f"duplicate page-view decision for {destination!r}")
-        seen.add(destination)
+        occurrence = _text(item.get("occurrence"), f"{path}.occurrence")
+        if occurrence not in PAGE_VIEW_OCCURRENCES:
+            raise RunValidationError(f"{path}.occurrence has unsupported value {occurrence!r}")
+        decision_key = (destination, occurrence)
+        if decision_key in seen:
+            raise RunValidationError(
+                f"duplicate page-view decision for {destination!r} / {occurrence!r}"
+            )
+        seen.add(decision_key)
         linked = set(
             _unique_texts(
                 item.get("requirement_ids"),
@@ -1565,10 +1352,15 @@ def _validate_page_view_decisions(
                 f"{path}.external_dependency_ids contains a dependency outside the requirements"
             )
         send_page_view = item.get("send_page_view")
-        if not isinstance(send_page_view, bool):
-            raise RunValidationError(f"{path}.send_page_view must be a boolean")
+        if send_page_view is not None and not isinstance(send_page_view, bool):
+            raise RunValidationError(f"{path}.send_page_view must be boolean or null")
         if owner == "google-tag-automatic":
-            if not owner_key or owner_key != google_tag_key or not send_page_view:
+            if occurrence != "initial-page-load":
+                raise RunValidationError(
+                    f"{path}.google-tag-automatic covers only the initial page load; "
+                    "model history-based collection separately"
+                )
+            if not owner_key or owner_key != google_tag_key or send_page_view is not True:
                 raise RunValidationError(
                     f"{path}.google-tag-automatic requires the same owner and Google tag key "
                     "with send_page_view true"
@@ -1576,13 +1368,13 @@ def _validate_page_view_decisions(
             owner_operation, owner_target = bound_tag(owner_key, f"{path}.owner_object_key")
             if _tag_type(owner_target, f"{path}.owner") not in GOOGLE_CONFIGURATION_TAG_TYPES:
                 raise RunValidationError(f"{path}.google-tag-automatic owner is not a Google tag")
-            if not _send_page_view_value(owner_target, f"{path}.owner"):
+            if not _send_page_view_value(owner_target, f"{path}.owner", operations):
                 raise RunValidationError(f"{path}.send_page_view differs from the bound Google tag")
-            _validate_google_destination(owner_target, destination, f"{path}.owner")
+            _validate_google_destination(owner_target, destination, f"{path}.owner", operations)
             if not linked <= set(owner_operation["requirement_ids"]):
                 raise RunValidationError(f"{path}.owner does not cover its requirement_ids")
         elif owner == "dedicated-ga4-event":
-            if not owner_key or not google_tag_key or send_page_view:
+            if not owner_key or not google_tag_key or send_page_view is not False:
                 raise RunValidationError(
                     f"{path}.dedicated-ga4-event requires owner and Google tag keys with "
                     "send_page_view false"
@@ -1595,6 +1387,7 @@ def _validate_page_view_decisions(
                 raise RunValidationError(
                     f"{path}.dedicated-ga4-event owner must send the page_view event"
                 )
+            _validate_google_destination(owner_target, destination, f"{path}.owner", operations)
             if not linked <= set(owner_operation["requirement_ids"]):
                 raise RunValidationError(f"{path}.owner does not cover its requirement_ids")
             google_operation, google_target = bound_tag(
@@ -1603,17 +1396,27 @@ def _validate_page_view_decisions(
             )
             if _tag_type(google_target, f"{path}.google_tag") not in GOOGLE_CONFIGURATION_TAG_TYPES:
                 raise RunValidationError(f"{path}.google_tag_object_key is not a Google tag")
-            if _send_page_view_value(google_target, f"{path}.google_tag"):
+            if _send_page_view_value(google_target, f"{path}.google_tag", operations):
                 raise RunValidationError(
                     f"{path}.dedicated-ga4-event requires bound Google tag send_page_view false"
                 )
-            _validate_google_destination(google_target, destination, f"{path}.google_tag")
+            _validate_google_destination(
+                google_target, destination, f"{path}.google_tag", operations
+            )
             if not linked <= set(google_operation["requirement_ids"]):
                 raise RunValidationError(f"{path}.Google tag does not cover its requirement_ids")
-        else:
-            if owner_key is not None or send_page_view:
+        elif owner == "internal-tag":
+            if not owner_key or google_tag_key is not None or send_page_view is not None:
                 raise RunValidationError(
-                    f"{path}.{owner} requires a null owner_object_key and send_page_view false"
+                    f"{path}.internal-tag requires an owner, no Google tag, and null send_page_view"
+                )
+            owner_operation, _ = bound_tag(owner_key, f"{path}.owner_object_key")
+            if not linked <= set(owner_operation["requirement_ids"]):
+                raise RunValidationError(f"{path}.owner does not cover its requirement_ids")
+        else:
+            if owner_key is not None or send_page_view is not None:
+                raise RunValidationError(
+                    f"{path}.{owner} requires a null owner_object_key and send_page_view null"
                 )
             if owner == "external" and not dependency_ids:
                 raise RunValidationError(f"{path}.external requires an external dependency")
@@ -1634,11 +1437,15 @@ def _validate_page_view_decisions(
                     not in GOOGLE_CONFIGURATION_TAG_TYPES
                 ):
                     raise RunValidationError(f"{path}.google_tag_object_key is not a Google tag")
-                if _send_page_view_value(google_target, f"{path}.google_tag"):
+                if occurrence == "initial-page-load" and _send_page_view_value(
+                    google_target, f"{path}.google_tag", operations
+                ):
                     raise RunValidationError(
                         f"{path}.{owner} requires bound Google tag send_page_view false"
                     )
-                _validate_google_destination(google_target, destination, f"{path}.google_tag")
+                _validate_google_destination(
+                    google_target, destination, f"{path}.google_tag", operations
+                )
                 if not linked <= set(google_operation["requirement_ids"]):
                     raise RunValidationError(
                         f"{path}.Google tag does not cover its requirement_ids"
@@ -1662,6 +1469,24 @@ def _validate_first_party_feature_contract(
     consent_types: set[str],
 ) -> None:
     product_types = {_tag_type(target, f"{path}.consumer") for target in consumer_targets}
+    if feature == "analytics-user-id":
+        if (
+            hashing_owner != "not-applicable"
+            or timing not in {"tag-wide", "same-event"}
+            or destination_field != "user_id"
+            or field_names != {"user_id"}
+        ):
+            raise RunValidationError(
+                f"{path}.analytics-user-id requires user_id, tag-wide or same-event timing, "
+                "one user_id field, and no hashing"
+            )
+        if product_types & (
+            GOOGLE_CONFIGURATION_TAG_TYPES | GA4_EVENT_TAG_TYPES | GOOGLE_ADS_CONVERSION_TAG_TYPES
+        ):
+            raise RunValidationError(
+                f"{path}.analytics-user-id is reserved for non-Google analytics consumers"
+            )
+        return
     if feature == "ga4-user-id":
         if (
             hashing_owner != "not-applicable"
@@ -1689,10 +1514,10 @@ def _validate_first_party_feature_contract(
             raise RunValidationError(
                 f"{path}.google-ads-enhanced-conversions requires same-event user_data"
             )
-        if not product_types <= GOOGLE_ADS_CONVERSION_TAG_TYPES:
+        if not product_types <= {"googtag"}:
             raise RunValidationError(
-                f"{path}.google-ads-enhanced-conversions requires the native Google Ads "
-                "conversion tag"
+                f"{path}.google-ads-enhanced-conversions requires the Google tag associated "
+                "with the Ads conversion action"
             )
     elif feature == "google-ads-tag-wide-user-data":
         if destination_field != "user_data" or timing != "tag-wide":
@@ -1708,8 +1533,36 @@ def _validate_first_party_feature_contract(
             raise RunValidationError(
                 f"{path}.google-ads-user-provided-data-event requires prior-page user_data"
             )
+        if product_types != {"googleadsuserprovideddataevent"}:
+            raise RunValidationError(
+                f"{path}.google-ads-user-provided-data-event requires the native "
+                "Google Ads User-Provided Data Event tag"
+            )
+    elif feature == "google-ads-server-user-data-transport":
+        if destination_field != "user_data" or timing not in {"same-event", "tag-wide"}:
+            raise RunValidationError(
+                f"{path}.{feature} requires same-event or explicitly authorized tag-wide user_data"
+            )
+        expected_types = GA4_EVENT_TAG_TYPES if timing == "same-event" else {"googtag"}
+        if not product_types <= expected_types:
+            owner = "GA4 Event sender" if timing == "same-event" else "Google tag sender"
+            raise RunValidationError(f"{path}.{feature} requires the documented {owner}")
+    elif feature == "google-ads-server-user-provided-data-event":
+        if destination_field != "user_data" or timing != "prior-page":
+            raise RunValidationError(
+                f"{path}.{feature} requires prior-page user_data on the event where it is available"
+            )
+        if not product_types <= ({"googtag"} | GA4_EVENT_TAG_TYPES):
+            raise RunValidationError(
+                f"{path}.{feature} requires a Google tag or GA4 Event user_data sender"
+            )
 
-    if feature.startswith("google-ads-") and feature != "google-ads-tag-wide-user-data":
+    if feature.startswith("google-ads-") and feature not in {
+        "google-ads-enhanced-conversions",
+        "google-ads-tag-wide-user-data",
+        "google-ads-server-user-data-transport",
+        "google-ads-server-user-provided-data-event",
+    }:
         if product_types & (GOOGLE_CONFIGURATION_TAG_TYPES | GA4_EVENT_TAG_TYPES):
             raise RunValidationError(
                 f"{path}.{feature} must not bind a GA4 or generic Google configuration tag"
@@ -1719,6 +1572,8 @@ def _validate_first_party_feature_contract(
         "google-ads-enhanced-conversions",
         "google-ads-tag-wide-user-data",
         "google-ads-user-provided-data-event",
+        "google-ads-server-user-data-transport",
+        "google-ads-server-user-provided-data-event",
     }
     if feature in externally_administered and not dependency_ids:
         raise RunValidationError(f"{path}.{feature} requires an external administration dependency")
@@ -1818,6 +1673,11 @@ def _validate_first_party_data_routes(
         for item in payload_mappings
         if item["status"] == "mapped"
     }
+    mapping_by_identity = {
+        (item["requirement_id"], item["destination_field"]): item
+        for item in payload_mappings
+        if item["status"] == "mapped"
+    }
     identities: set[tuple[str, str]] = set()
     records: list[dict[str, Any]] = []
     for index, item_raw in enumerate(_array(raw, "$.first_party_data_routes")):
@@ -1837,6 +1697,11 @@ def _validate_first_party_data_routes(
             "evidence",
         }
         optional_keys: set[str] = set()
+        if item.get("feature") in {
+            "google-ads-server-user-data-transport",
+            "google-ads-server-user-provided-data-event",
+        }:
+            required_keys.add("server_consumer_object_keys")
         if schema_version == SCHEMA_VERSION:
             required_keys.add("consumer_bindings")
         else:
@@ -1888,10 +1753,18 @@ def _validate_first_party_data_routes(
                     f"{path}.consumer_object_keys contains a tag outside the requirement"
                 )
             target = _effective_target(operation, f"{path}.consumer_object_keys")
-            present, _ = _configuration_value(target, {destination_field})
+            present, configured_value = _configuration_value(target, {destination_field})
             if not present:
                 raise RunValidationError(
                     f"{path}.consumer {object_key!r} does not configure {destination_field!r}"
+                )
+            expected_binding = mapping_by_identity[(requirement_id, destination_field)].get(
+                "gtm_resolution"
+            )
+            if expected_binding is not None and configured_value != expected_binding:
+                raise RunValidationError(
+                    f"{path}.consumer {object_key!r} {destination_field!r} binding differs "
+                    "from the approved field binding"
                 )
             consumer_targets[object_key] = target
         if "consumer_bindings" in item:
@@ -2123,383 +1996,6 @@ def _validate_inventory_dispositions(
     return records
 
 
-def _validate_readback(
-    raw: Any,
-    *,
-    operations: dict[str, dict[str, Any]],
-) -> dict[str, dict[str, Any]]:
-    records: dict[str, dict[str, Any]] = {}
-    for index, item_raw in enumerate(_array(raw, "$.saved_readback")):
-        path = f"$.saved_readback[{index}]"
-        item = _object(item_raw, path)
-        operation_id = _text(item.get("operation_id"), f"{path}.operation_id")
-        if operation_id not in operations:
-            raise RunValidationError(f"{path}.operation_id is unknown")
-        if operation_id in records:
-            raise RunValidationError(f"duplicate saved readback for {operation_id!r}")
-        if (
-            _text(item.get("object_key"), f"{path}.object_key")
-            != operations[operation_id]["object_key"]
-        ):
-            raise RunValidationError(f"{path}.object_key does not match its operation")
-        if item.get("verified") is not True:
-            raise RunValidationError(f"{path}.verified must be true")
-        differences = _array(item.get("differences"), f"{path}.differences")
-        if differences:
-            raise RunValidationError(f"{path}.differences must be empty when verified")
-        _optional_text(item.get("object_id"), f"{path}.object_id")
-        _optional_text(item.get("fingerprint"), f"{path}.fingerprint")
-        _timestamp(item.get("verified_at"), f"{path}.verified_at")
-        comparison = validate_verification_comparison(
-            item.get("comparison"),
-            operation=operations[operation_id],
-            require_pass=True,
-        )
-        if comparison != operations[operation_id].get("comparison"):
-            raise RunValidationError(f"{path}.comparison does not match its verified operation")
-        records[operation_id] = item
-    return records
-
-
-def _validate_official_sources(raw: Any) -> None:
-    for index, item_raw in enumerate(_array(raw, "$.official_sources")):
-        path = f"$.official_sources[{index}]"
-        item = _object(item_raw, path)
-        url = _text(item.get("url"), f"{path}.url")
-        parsed = urlparse(url)
-        if parsed.scheme != "https" or not parsed.netloc:
-            raise RunValidationError(f"{path}.url must be an absolute HTTPS URL")
-        _text(item.get("title"), f"{path}.title")
-        _date(item.get("access_date"), f"{path}.access_date")
-        _unique_texts(item.get("supports"), f"{path}.supports", allow_empty=False)
-
-
-def _validate_external_dependencies(
-    raw: Any,
-    requirement_ids: set[str],
-) -> dict[str, dict[str, Any]]:
-    records: dict[str, dict[str, Any]] = {}
-    for index, item_raw in enumerate(_array(raw, "$.external_dependencies")):
-        path = f"$.external_dependencies[{index}]"
-        item = _object(item_raw, path)
-        _exact_keys(
-            item,
-            path,
-            required={"id", "requirement_ids", "owner", "action", "status"},
-        )
-        dependency_id = _text(item.get("id"), f"{path}.id")
-        if dependency_id in records:
-            raise RunValidationError(f"duplicate external dependency id {dependency_id!r}")
-        linked = set(_unique_texts(item.get("requirement_ids"), f"{path}.requirement_ids"))
-        if linked - requirement_ids:
-            raise RunValidationError(f"{path}.requirement_ids contains unknown IDs")
-        _text(item.get("owner"), f"{path}.owner")
-        _text(item.get("action"), f"{path}.action")
-        if _text(item.get("status"), f"{path}.status") not in {"open", "resolved", "deferred"}:
-            raise RunValidationError(f"{path}.status is unsupported")
-        records[dependency_id] = item
-    return records
-
-
-def _validate_recovery_boundary(value: Any, *, required: bool) -> None:
-    if value is None:
-        if required:
-            raise RunValidationError("$.recovery_boundary is required for Partial")
-        return
-    boundary = _object(value, "$.recovery_boundary")
-    _text(boundary.get("reason"), "$.recovery_boundary.reason")
-    _optional_text(
-        boundary.get("last_verified_operation"),
-        "$.recovery_boundary.last_verified_operation",
-    )
-    _unique_texts(boundary.get("unsafe_operations"), "$.recovery_boundary.unsafe_operations")
-    _text(boundary.get("next_action"), "$.recovery_boundary.next_action")
-
-
-def _validate_recette_handoff(raw: Any, requirement_ids: set[str]) -> None:
-    handoff = _object(raw, "$.recette_handoff")
-    if _text(handoff.get("manifest_version"), "$.recette_handoff.manifest_version") != "2.0":
-        raise RunValidationError("$.recette_handoff.manifest_version must be '2.0'")
-    records = _array(handoff.get("requirements"), "$.recette_handoff.requirements")
-    seen: set[str] = set()
-    for index, item_raw in enumerate(records):
-        path = f"$.recette_handoff.requirements[{index}]"
-        item = _object(item_raw, path)
-        requirement_id = _text(item.get("id"), f"{path}.id")
-        if requirement_id not in requirement_ids or requirement_id in seen:
-            raise RunValidationError(f"{path}.id is unknown or duplicated")
-        seen.add(requirement_id)
-        _unique_texts(item.get("expected_tags"), f"{path}.expected_tags")
-        _unique_texts(
-            item.get("expected_normal_triggers"),
-            f"{path}.expected_normal_triggers",
-        )
-        _unique_texts(
-            item.get("expected_blocking_triggers"),
-            f"{path}.expected_blocking_triggers",
-        )
-        _unique_texts(item.get("expected_consent_states"), f"{path}.expected_consent_states")
-        _unique_texts(
-            item.get("expected_user_data_keys"),
-            f"{path}.expected_user_data_keys",
-        )
-        _unique_texts(item.get("network_cues"), f"{path}.network_cues")
-        _unique_texts(item.get("cues"), f"{path}.cues")
-    if seen != requirement_ids:
-        raise RunValidationError("$.recette_handoff.requirements must cover every requirement")
-    if handoff.get("runtime_validation_performed") is not False:
-        raise RunValidationError("$.recette_handoff.runtime_validation_performed must be false")
-    if handoff.get("publication_performed") is not False:
-        raise RunValidationError("$.recette_handoff.publication_performed must be false")
-
-
-def validate_document(value: Any) -> dict[str, Any]:
-    """Validate a versioned configuration-run and enforce final-state invariants."""
-    document = _object(value, "$")
-    unexpected = sorted(set(document) - TOP_LEVEL_KEYS)
-    missing = sorted(TOP_LEVEL_KEYS - set(document))
-    if unexpected:
-        raise RunValidationError(f"unexpected top-level key(s): {', '.join(unexpected)}")
-    if missing:
-        raise RunValidationError(f"missing top-level key(s): {', '.join(missing)}")
-    schema_version = document.get("schema_version")
-    if schema_version != SCHEMA_VERSION and schema_version not in LEGACY_SCHEMA_VERSIONS:
-        raise RunValidationError(
-            f"$.schema_version must be {SCHEMA_VERSION!r} or a supported legacy version"
-        )
-
-    run, requirement_ids, status = _validate_run_header(document["run"])
-    requirements = _validate_requirements(document["requirements"], requirement_ids)
-    operations, _ = _validate_object_changes(
-        document["object_changes"],
-        requirement_ids=requirement_ids,
-        schema_version=schema_version,
-    )
-    payload_mappings = _validate_payload_mappings(
-        document["payload_mappings"],
-        requirement_ids,
-    )
-    baseline = _validate_container_baseline(
-        document["container_baseline"],
-        execution_mode=run["execution_mode"],
-    )
-    trigger_types = _resolved_trigger_types(operations, baseline["trigger_types"])
-    _validate_consent_routes(
-        document["consent_routes"],
-        requirement_ids,
-        trigger_types=trigger_types,
-    )
-    _validate_execution_topologies(
-        document["execution_topologies"],
-        requirement_ids=requirement_ids,
-        operations=operations,
-        baseline_trigger_types=baseline["trigger_types"],
-    )
-    external_dependencies = _validate_external_dependencies(
-        document["external_dependencies"], requirement_ids
-    )
-    _validate_page_view_decisions(
-        document["page_view_decisions"],
-        requirement_ids=requirement_ids,
-        operations=operations,
-        external_dependencies=external_dependencies,
-    )
-    readback = _validate_readback(document["saved_readback"], operations=operations)
-    _validate_official_sources(document["official_sources"])
-    _validate_first_party_data_routes(
-        document["first_party_data_routes"],
-        requirement_ids=requirement_ids,
-        operations=operations,
-        external_dependencies=external_dependencies,
-        payload_mappings=payload_mappings,
-        schema_version=schema_version,
-    )
-    _validate_inventory_dispositions(
-        document["inventory_dispositions"],
-        execution_mode=run["execution_mode"],
-        in_scope_tag_keys=baseline["in_scope_tag_keys"],
-        operations=operations,
-    )
-    _validate_recovery_boundary(document["recovery_boundary"], required=status == "Partial")
-
-    idempotency = _object(document["idempotency"], "$.idempotency")
-    if schema_version == SCHEMA_VERSION:
-        _exact_keys(
-            idempotency,
-            "$.idempotency",
-            required={"checked", "remaining_actions", "evidence"},
-        )
-    else:
-        _exact_keys(
-            idempotency,
-            "$.idempotency",
-            required={"checked", "remaining_actions"},
-            optional={"evidence"},
-        )
-    if not isinstance(idempotency.get("checked"), bool):
-        raise RunValidationError("$.idempotency.checked must be a boolean")
-    remaining_actions = _unique_texts(
-        idempotency.get("remaining_actions"),
-        "$.idempotency.remaining_actions",
-    )
-    idempotency_evidence = _unique_texts(
-        idempotency.get("evidence", []),
-        "$.idempotency.evidence",
-    )
-    _validate_recette_handoff(document["recette_handoff"], requirement_ids)
-
-    states = {operation_id: item["state"] for operation_id, item in operations.items()}
-    written_states = {"saved", "verified"}
-    failed_states = {"failed", "uncertain"}
-    if status == "Configured":
-        if run["phase"] != "complete":
-            raise RunValidationError("Configured requires $.run.phase 'complete'")
-        invalid_requirements = sorted(
-            requirement_id
-            for requirement_id, item in requirements.items()
-            if item["status"] not in {"Configured", "Deferred"}
-        )
-        if invalid_requirements:
-            raise RunValidationError(
-                "Configured has unfinished requirements: " + ", ".join(invalid_requirements)
-            )
-        unfinished = sorted(
-            operation_id
-            for operation_id, state in states.items()
-            if state not in {"verified", "skipped"}
-        )
-        if unfinished:
-            raise RunValidationError(
-                "Configured has unfinished object operations: " + ", ".join(unfinished)
-            )
-        missing_readback = sorted(
-            operation_id
-            for operation_id, item in operations.items()
-            if item["state"] == "verified" and operation_id not in readback
-        )
-        if missing_readback:
-            raise RunValidationError(
-                "Configured lacks verified readback for: " + ", ".join(missing_readback)
-            )
-        if not idempotency["checked"] or remaining_actions:
-            raise RunValidationError(
-                "Configured requires checked idempotency with no remaining actions"
-            )
-        if schema_version == SCHEMA_VERSION and not idempotency_evidence:
-            raise RunValidationError("Configured requires structured idempotency evidence")
-        configured_requirement_ids = {
-            requirement_id
-            for requirement_id, item in requirements.items()
-            if item["status"] == "Configured"
-        }
-        preflight_issues = _preflight_issues(document, configured_requirement_ids)
-        if preflight_issues:
-            raise RunValidationError(
-                "Configured has unresolved preflight decisions: " + "; ".join(preflight_issues)
-            )
-        if document["recovery_boundary"] is not None:
-            raise RunValidationError("Configured requires a null recovery boundary")
-    elif status == "Partial":
-        if not any(state in written_states for state in states.values()):
-            raise RunValidationError("Partial requires at least one saved or verified operation")
-        if not any(
-            state in failed_states | {"planned", "in_progress"} for state in states.values()
-        ):
-            raise RunValidationError("Partial requires unfinished or uncertain work")
-    elif status == "Blocked":
-        if any(state in written_states for state in states.values()):
-            raise RunValidationError("Blocked with saved current-run work must be Partial")
-        if any(state == "in_progress" for state in states.values()):
-            raise RunValidationError("Blocked cannot contain an in-progress operation")
-    elif status == "Deferred":
-        if any(item["status"] != "Deferred" for item in requirements.values()):
-            raise RunValidationError("Deferred requires every requirement to be Deferred")
-        if any(state in written_states | {"in_progress"} for state in states.values()):
-            raise RunValidationError("Deferred cannot contain a current-run mutation")
-    elif run["phase"] == "complete":
-        raise RunValidationError("In progress cannot use $.run.phase 'complete'")
-    return document
-
-
-def load_document(path: Path) -> dict[str, Any]:
-    try:
-        value = load_json(path)
-    except StrictJsonError as exc:
-        raise RunValidationError(str(exc), error_code=exc.error_code) from exc
-    return validate_document(value)
-
-
-def upgrade_document(document: dict[str, Any]) -> dict[str, Any]:
-    """Upgrade a safe v2.0 run to v2.1 without inventing missing mutation evidence."""
-    document = deepcopy(validate_document(document))
-    if document["schema_version"] == SCHEMA_VERSION:
-        return document
-    if document["run"]["status"] == "Configured":
-        raise RunValidationError(
-            "a finalized legacy run remains readable; do not rewrite its historical evidence"
-        )
-    unsafe_delta = [
-        item["operation_id"]
-        for item in document["object_changes"]
-        if item["action"] in DELTA_ACTIONS
-        and any(entry.get("state") == "in_progress" for entry in item["journal"])
-        and "pre_write_comparison" not in item
-    ]
-    if unsafe_delta:
-        raise RunValidationError(
-            "legacy delta mutation history lacks pre-write drift evidence: "
-            + ", ".join(unsafe_delta)
-        )
-    operations = {item["object_key"]: item for item in document["object_changes"]}
-    requirements = {item["id"]: item for item in document["requirements"]}
-    for route in document["first_party_data_routes"]:
-        if "consumer_bindings" in route:
-            continue
-        bindings = []
-        for object_key in route["consumer_object_keys"]:
-            target = _effective_target(operations[object_key], "legacy first-party consumer")
-            tag_type = _tag_type(target, "legacy first-party consumer")
-            if tag_type in CUSTOM_CODE_TAG_TYPES:
-                raise RunValidationError(
-                    f"legacy first-party route {route['requirement_id']!r} uses Custom HTML/Image; "
-                    "replace it with a verified native or installed-template consumer"
-                )
-            expected_product = FIRST_PARTY_PRODUCTS.get(route["feature"])
-            product = expected_product or requirements[route["requirement_id"]].get("destination")
-            if not isinstance(product, str) or not product.strip():
-                raise RunValidationError(
-                    f"legacy first-party route {route['requirement_id']!r} lacks product identity"
-                )
-            native_types = (
-                GOOGLE_CONFIGURATION_TAG_TYPES
-                | GA4_EVENT_TAG_TYPES
-                | GOOGLE_ADS_CONVERSION_TAG_TYPES
-            )
-            native = tag_type in native_types
-            bindings.append(
-                {
-                    "object_key": object_key,
-                    "product": product,
-                    "implementation": "native" if native else "installed-template",
-                    "tag_type": tag_type,
-                    "template_identity": None if native else tag_type,
-                    "evidence": ["legacy-v2.0-route", *route["evidence"]],
-                }
-            )
-        route["consumer_bindings"] = bindings
-    document["schema_version"] = SCHEMA_VERSION
-    document["idempotency"].setdefault("evidence", [])
-    return validate_document(document)
-
-
-def _utc_now() -> str:
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
-
-
-def _contract_fingerprint(contract: dict[str, Any]) -> str:
-    return canonical_sha256(contract)
-
-
 def _field_mappings(requirement: dict[str, Any]) -> list[dict[str, Any]]:
     mappings: list[dict[str, Any]] = []
     field_scopes = {
@@ -2543,1164 +2039,3 @@ def _field_mappings(requirement: dict[str, Any]) -> list[dict[str, Any]]:
                 }
             )
     return mappings
-
-
-def _durable_risk_reasons(document: dict[str, Any]) -> list[str]:
-    operations = document["object_changes"]
-    reasons: list[str] = []
-    if any(item["action"] in {"remove", "replace"} for item in operations):
-        reasons.append("destructive object action")
-    if any(len(item["requirement_ids"]) > 1 for item in operations):
-        reasons.append("shared object across requirements")
-    high_impact_types = {
-        "zone",
-        "environment",
-        "destination",
-        "google tag configuration",
-        "container setting",
-        "template",
-    }
-    if any(item["object_type"] in high_impact_types for item in operations):
-        reasons.append("high-impact GTM resource")
-    products = {
-        _normalized_token(item["product"])
-        for item in document["consent_routes"]
-        if item.get("product")
-    }
-    if len(products) > 1:
-        reasons.append("multiple product consent routes")
-    page_view_destinations = {
-        item["destination"].strip().casefold()
-        for item in document["page_view_decisions"]
-        if isinstance(item.get("destination"), str)
-    }
-    if len(page_view_destinations) > 1:
-        reasons.append("multiple Google page-view destinations")
-    return reasons
-
-
-def _preflight_issues(
-    document: dict[str, Any],
-    requirement_ids: set[str],
-) -> list[str]:
-    issues: list[str] = []
-    baseline = document["container_baseline"]
-    if not baseline["complete"]:
-        issues.append("authoritative container baseline is incomplete")
-
-    linked_operations = [
-        item
-        for item in document["object_changes"]
-        if set(item["requirement_ids"]) & requirement_ids
-    ]
-    has_executing_target_tag = any(
-        item["object_type"] == "tag" and item["action"] not in NON_EXECUTING_TAG_ACTIONS
-        for item in linked_operations
-    )
-    durable_reasons = _durable_risk_reasons(document)
-    if document["run"]["execution_mode"] == "isolated-lightweight" and durable_reasons:
-        issues.append(
-            "risk surface requires a durable configuration-run artifact: "
-            + ", ".join(durable_reasons)
-        )
-
-    for mapping in document["payload_mappings"]:
-        if not has_executing_target_tag or mapping["requirement_id"] not in requirement_ids:
-            continue
-        identity = f"{mapping['requirement_id']}::{mapping['destination_field']}"
-        if mapping["status"] == "pending":
-            issues.append(f"payload mapping {identity} is pending")
-        elif mapping["status"] == "blocked":
-            issues.append(f"payload mapping {identity} is blocked")
-
-    requirements = {
-        item["id"]: item for item in document["requirements"] if item["id"] in requirement_ids
-    }
-    consent_by_requirement = {item["requirement_id"]: item for item in document["consent_routes"]}
-    executable_tag_requirement_ids = {
-        requirement_id
-        for item in linked_operations
-        if item["object_type"] == "tag" and item["action"] not in NON_EXECUTING_TAG_ACTIONS
-        for requirement_id in item["requirement_ids"]
-    }
-    for requirement_id, requirement in requirements.items():
-        if requirement["kind"] == "consent" or requirement["status"] == "Deferred":
-            continue
-        if (
-            requirement_id in executable_tag_requirement_ids
-            and requirement_id not in consent_by_requirement
-        ):
-            issues.append(f"consent route {requirement_id} is missing")
-
-    topology_by_tag = {item["tag_object_key"]: item for item in document["execution_topologies"]}
-    tag_operations = [
-        item
-        for item in linked_operations
-        if item["object_type"] == "tag"
-        and item["action"] not in NON_EXECUTING_TAG_ACTIONS
-        and any(
-            requirements.get(requirement_id, {}).get("kind") not in {None, "consent"}
-            for requirement_id in item["requirement_ids"]
-        )
-    ]
-    for operation in tag_operations:
-        tag_key = operation["object_key"]
-        topology = topology_by_tag.get(tag_key)
-        if topology is None:
-            issues.append(f"execution topology {tag_key} is missing")
-            continue
-        for requirement_id in operation["requirement_ids"]:
-            requirement = requirements.get(requirement_id)
-            if requirement is None or requirement["kind"] == "consent":
-                continue
-            route = consent_by_requirement.get(requirement_id)
-            if route is None:
-                continue
-            if topology["consent_mode"] != route["mode"]:
-                issues.append(
-                    f"execution topology {tag_key} consent mode differs from {requirement_id}"
-                )
-            if route["normal_trigger"] not in {
-                trigger["trigger_object_key"] for trigger in topology["normal_triggers"]
-            }:
-                issues.append(
-                    f"execution topology {tag_key} normal triggers omit {requirement_id} route"
-                )
-            if set(topology["blocking_trigger_keys"]) != set(route["blocking_triggers"]):
-                issues.append(
-                    f"execution topology {tag_key} blocking triggers differ from {requirement_id}"
-                )
-            if set(topology["additional_consent_checks"]) != set(
-                route["additional_consent_checks"]
-            ):
-                issues.append(
-                    f"execution topology {tag_key} Additional Consent Checks differ from "
-                    f"{requirement_id}"
-                )
-
-        if topology["page_view_capable"]:
-            decisions = {
-                item["destination"]: item
-                for item in document["page_view_decisions"]
-                if set(item["requirement_ids"]) & set(operation["requirement_ids"])
-            }
-            expected_destinations = set(topology["page_view_destinations"])
-            if set(decisions) != expected_destinations:
-                issues.append(
-                    f"page-view ownership for {tag_key} must resolve exactly for destinations "
-                    f"{sorted(expected_destinations)}"
-                )
-            for decision in decisions.values():
-                if (
-                    decision["owner"] == "google-tag-automatic"
-                    and decision["owner_object_key"] == tag_key
-                    and topology["lifecycle_role"] != "baseline-page-load"
-                ):
-                    issues.append(
-                        f"automatic page-view owner {tag_key} requires baseline-page-load topology"
-                    )
-
-        mapped_items = [
-            item
-            for item in document["payload_mappings"]
-            if item["requirement_id"] in operation["requirement_ids"]
-            and item["destination_field"] == "items"
-            and item["status"] == "mapped"
-        ]
-        if topology["ecommerce_route"].startswith("native-") and mapped_items:
-            issues.append(f"ecommerce {tag_key} mixes a native route with a manual items mapping")
-
-    first_party_by_requirement: dict[str, set[str]] = {}
-    for route in document["first_party_data_routes"]:
-        first_party_by_requirement.setdefault(route["requirement_id"], set()).add(route["feature"])
-    for mapping in document["payload_mappings"]:
-        if (
-            not has_executing_target_tag
-            or mapping["requirement_id"] not in requirement_ids
-            or mapping["status"] != "mapped"
-        ):
-            continue
-        if mapping["destination_field"] == "user_data" and not (
-            first_party_by_requirement.get(mapping["requirement_id"], set())
-            & {
-                "ga4-user-provided-data",
-                "google-ads-enhanced-conversions",
-                "google-ads-tag-wide-user-data",
-                "google-ads-user-provided-data-event",
-                "vendor-advanced-matching",
-            }
-        ):
-            issues.append(
-                f"first-party-data route for {mapping['requirement_id']}::user_data is missing"
-            )
-        if mapping["destination_field"] == "user_id" and "ga4-user-id" not in (
-            first_party_by_requirement.get(mapping["requirement_id"], set())
-        ):
-            issues.append(f"GA4 user_id route for {mapping['requirement_id']} is missing")
-    return issues
-
-
-def create_from_contract(
-    contract: dict[str, Any],
-    *,
-    run_id: str,
-    source_locator: str,
-    timestamp: str | None = None,
-) -> dict[str, Any]:
-    """Ingest a strict configuration contract without changing requirement semantics."""
-    try:
-        contract = validate_configuration_contract(contract)
-    except ContractValidationError as exc:
-        raise RunValidationError(str(exc), error_code=exc.error_code) from exc
-    now = timestamp or _utc_now()
-    _timestamp(now, "timestamp")
-    contract_ids = [item["id"] for item in contract["requirements"]]
-    route = contract["route"]
-    requirements = []
-    payload_mappings = []
-    for requirement in contract["requirements"]:
-        kind = requirement.get("kind", route)
-        requirements.append(
-            {
-                "id": requirement["id"],
-                "kind": kind,
-                "source_locator": requirement["authority"]["locator"],
-                "source_event": requirement.get("source_event"),
-                "destination": requirement.get("destination") or requirement.get("event_name"),
-                "status": "In progress",
-                "object_keys": [],
-            }
-        )
-        payload_mappings.extend(_field_mappings(requirement))
-
-    operation_ids_by_object_key = {
-        _canonical_object_key(item["object_type"], item["name"]): f"OP-{index:03d}"
-        for index, item in enumerate(contract["implementation"]["objects"], start=1)
-    }
-    object_changes = []
-    for index, item in enumerate(contract["implementation"]["objects"], start=1):
-        linked_ids = item.get("requirement_ids")
-        if linked_ids is None:
-            if len(contract_ids) != 1:
-                raise RunValidationError(
-                    "every object action in a multi-requirement contract needs requirement_ids"
-                )
-            linked_ids = contract_ids
-        object_key = _canonical_object_key(item["object_type"], item["name"])
-        dependencies = [
-            operation_ids_by_object_key[dependency] for dependency in item.get("dependencies", [])
-        ]
-        record = {
-            "operation_id": f"OP-{index:03d}",
-            "requirement_ids": linked_ids,
-            "action": item["action"],
-            "object_type": item["object_type"],
-            "name": item["name"],
-            "object_key": object_key,
-            "dependencies": dependencies,
-            "intended": item.get("intended"),
-            "state": "planned",
-            "evidence": item["evidence"],
-            "journal": [],
-        }
-        for optional in (
-            "object_id",
-            "pre_change",
-            "destructive_authorization",
-            "replacement_reason",
-            "permission_delta",
-        ):
-            if optional in item:
-                record[optional] = item[optional]
-        if item["action"] == "remove":
-            record.pop("intended", None)
-        object_changes.append(record)
-        for requirement in requirements:
-            if requirement["id"] in linked_ids:
-                requirement["object_keys"].append(object_key)
-
-    official_sources = [
-        {
-            "url": evidence["url"],
-            "title": evidence["title"],
-            "access_date": evidence["access_date"],
-            "supports": [evidence["locator"]],
-        }
-        for evidence in contract["evidence"]
-        if evidence["grade"] == "official-current"
-    ]
-    external_dependencies = []
-    for index, dependency in enumerate(contract["external_dependencies"], start=1):
-        if isinstance(dependency, str):
-            external_dependencies.append(
-                {
-                    "id": f"EXT-{index:03d}",
-                    "requirement_ids": contract_ids,
-                    "owner": "external",
-                    "action": dependency,
-                    "status": "open",
-                }
-            )
-        else:
-            external_dependencies.append(dependency)
-
-    workspace = contract["implementation"]["workspace"]
-    high_risk = route == "combined" or any(
-        item["action"] in {"remove", "replace"}
-        or item["object_type"]
-        in {
-            "zone",
-            "environment",
-            "destination",
-            "google tag configuration",
-            "container setting",
-            "template",
-        }
-        or len(item.get("requirement_ids") or contract_ids) > 1
-        for item in contract["implementation"]["objects"]
-    )
-    document = {
-        "schema_version": SCHEMA_VERSION,
-        "run": {
-            "id": run_id,
-            "phase": "preflight",
-            "status": "In progress",
-            "started_at": now,
-            "updated_at": now,
-            "target": {
-                "account_id": workspace["account_id"],
-                "container_id": workspace["container_id"],
-                "workspace_id": workspace["id"],
-                "container_type": "web",
-            },
-            "contract": {
-                "schema_version": contract["schema_version"],
-                "requirement_ids": contract_ids,
-                "source_locator": source_locator,
-                "fingerprint": _contract_fingerprint(contract),
-            },
-            "execution_mode": "isolated-durable" if high_risk else "isolated-lightweight",
-            "publication": {"performed": False, "version_created": False},
-        },
-        "requirements": requirements,
-        "object_changes": object_changes,
-        "payload_mappings": payload_mappings,
-        "consent_routes": [],
-        "container_baseline": {
-            "strategy": "relevant-families",
-            "captured_at": None,
-            "complete": False,
-            "resource_families": [],
-            "family_counts": {},
-            "in_scope_tag_keys": [],
-            "trigger_index": [],
-            "preexisting_workspace_changes": None,
-            "fingerprint": None,
-        },
-        "execution_topologies": [],
-        "page_view_decisions": [],
-        "first_party_data_routes": [],
-        "inventory_dispositions": [],
-        "saved_readback": [],
-        "official_sources": official_sources,
-        "external_dependencies": external_dependencies,
-        "recovery_boundary": None,
-        "idempotency": {"checked": False, "remaining_actions": [], "evidence": []},
-        "recette_handoff": {
-            "manifest_version": "2.0",
-            "requirements": [
-                {
-                    "id": requirement_id,
-                    "expected_tags": [],
-                    "expected_normal_triggers": [],
-                    "expected_blocking_triggers": [],
-                    "expected_consent_states": [],
-                    "expected_user_data_keys": [],
-                    "network_cues": [],
-                    "cues": [],
-                }
-                for requirement_id in contract_ids
-            ],
-            "runtime_validation_performed": False,
-            "publication_performed": False,
-        },
-    }
-    return validate_document(document)
-
-
-def inspect_document(document: dict[str, Any]) -> dict[str, Any]:
-    document = validate_document(document)
-    states = {item["operation_id"]: item["state"] for item in document["object_changes"]}
-    ready = []
-    waiting: dict[str, list[str]] = {}
-    preflight_blockers: dict[str, list[str]] = {}
-    preflight_cache: dict[frozenset[str], list[str]] = {}
-    unsafe = []
-    failed = []
-    for item in document["object_changes"]:
-        operation_id = item["operation_id"]
-        if item["state"] in {"in_progress", "uncertain"}:
-            unsafe.append(operation_id)
-        if item["state"] == "failed":
-            failed.append(operation_id)
-        if item["state"] != "planned":
-            continue
-        pending_dependencies = [
-            dependency
-            for dependency in item["dependencies"]
-            if states[dependency] not in {"verified", "skipped"}
-        ]
-        if pending_dependencies:
-            waiting[operation_id] = pending_dependencies
-        elif item["action"] in MUTATING_ACTIONS:
-            requirement_key = frozenset(item["requirement_ids"])
-            issues = preflight_cache.get(requirement_key)
-            if issues is None:
-                issues = _preflight_issues(document, set(requirement_key))
-                preflight_cache[requirement_key] = issues
-            if issues:
-                preflight_blockers[operation_id] = issues
-            else:
-                ready.append(operation_id)
-        else:
-            ready.append(operation_id)
-    safe_to_resume = not unsafe and not failed
-    status = document["run"]["status"]
-    if failed:
-        suggested_status = (
-            "Partial"
-            if any(state in {"saved", "verified"} for state in states.values())
-            else "Blocked"
-        )
-    elif unsafe:
-        suggested_status = "Partial"
-    elif all(state in {"verified", "skipped"} for state in states.values()):
-        remaining = document["idempotency"]["remaining_actions"]
-        suggested_status = (
-            "Configured" if document["idempotency"]["checked"] and not remaining else "In progress"
-        )
-    else:
-        suggested_status = "In progress"
-    successful = status == "Configured"
-    if failed:
-        error_code = "failed_operations"
-    elif unsafe:
-        error_code = "unsafe_operations"
-    elif preflight_blockers:
-        error_code = "preflight_incomplete"
-    elif all(state in {"verified", "skipped"} for state in states.values()) and not successful:
-        error_code = "finalization_required"
-    else:
-        error_code = None
-    return {
-        "pass": successful,
-        "valid": True,
-        "successful": successful,
-        "completed": document["run"]["phase"] == "complete",
-        "resumable": safe_to_resume,
-        "safe_to_resume": safe_to_resume,
-        "error_code": error_code,
-        "suggested_status": suggested_status,
-        "ready_operations": ready,
-        "waiting_on_dependencies": waiting,
-        "preflight_blockers": preflight_blockers,
-        "unsafe_operations": unsafe,
-        "failed_operations": failed,
-    }
-
-
-def checkpoint_operation(
-    document: dict[str, Any],
-    *,
-    operation_id: str,
-    state: str,
-    note: str,
-    timestamp: str | None = None,
-    result: dict[str, Any] | None = None,
-    comparison: dict[str, Any] | None = None,
-    pre_write_comparison: dict[str, Any] | None = None,
-    pre_write_saved: Any = _UNSET,
-    saved: Any = _UNSET,
-    error: str | None = None,
-) -> dict[str, Any]:
-    """Apply one validated state transition; callers persist only the returned document."""
-    document = upgrade_document(document)
-    if state not in OPERATION_STATES:
-        raise RunValidationError(f"unsupported checkpoint state {state!r}")
-    operations = {item["operation_id"]: item for item in document["object_changes"]}
-    if operation_id not in operations:
-        raise RunValidationError(f"unknown operation_id {operation_id!r}")
-    operation = operations[operation_id]
-    current = operation["state"]
-    if state not in ALLOWED_TRANSITIONS[current]:
-        raise RunValidationError(f"invalid state transition {current!r} -> {state!r}")
-    if (
-        current == "planned"
-        and state in {"in_progress", "saved", "verified"}
-        and operation["action"] in MUTATING_ACTIONS
-    ):
-        issues = _preflight_issues(document, set(operation["requirement_ids"]))
-        if issues:
-            raise RunValidationError("preflight is incomplete: " + "; ".join(issues))
-    at = timestamp or _utc_now()
-    _timestamp(at, "timestamp")
-    note = _text(note, "note")
-    if state in {"saved", "verified"} and result is None:
-        raise RunValidationError(f"{state} requires a saved result")
-    if pre_write_comparison is not None:
-        if operation["action"] not in DELTA_ACTIONS:
-            raise RunValidationError("pre-write comparison is accepted only for delta actions")
-        pre_write_comparison = validate_pre_write_comparison(
-            pre_write_comparison,
-            operation=operation,
-            saved=pre_write_saved,
-            require_pass=state != "failed",
-        )
-    elif pre_write_saved is not _UNSET:
-        raise RunValidationError("pre-write readback requires pre-write comparison evidence")
-    if current == "planned" and state == "in_progress" and operation["action"] in DELTA_ACTIONS:
-        if pre_write_comparison is None or pre_write_saved is _UNSET:
-            raise RunValidationError(
-                "delta mutation requires a fresh passing pre-write comparison and readback"
-            )
-    if state == "verified":
-        if saved is _UNSET:
-            raise RunValidationError("verified requires authoritative saved readback")
-        comparison = validate_verification_comparison(
-            comparison,
-            operation=operation,
-            saved=saved,
-            require_pass=True,
-        )
-    else:
-        if comparison is not None:
-            raise RunValidationError("comparison is accepted only for a verified checkpoint")
-        if saved is not _UNSET:
-            raise RunValidationError("saved readback is accepted only for a verified checkpoint")
-    if state in {"failed", "uncertain"}:
-        error = _text(error, "error")
-
-    operation["state"] = state
-    operation.setdefault("journal", []).append({"state": state, "at": at, "note": note})
-    if result is not None:
-        operation["result"] = deepcopy(result)
-    if comparison is not None:
-        operation["comparison"] = deepcopy(comparison)
-    if pre_write_comparison is not None:
-        operation["pre_write_comparison"] = deepcopy(pre_write_comparison)
-    if error is not None:
-        operation["error"] = error
-    if state == "verified":
-        document["saved_readback"] = [
-            item for item in document["saved_readback"] if item["operation_id"] != operation_id
-        ]
-        document["saved_readback"].append(
-            {
-                "operation_id": operation_id,
-                "object_key": operation["object_key"],
-                "object_id": (result or {}).get("object_id"),
-                "fingerprint": (result or {}).get("fingerprint"),
-                "verified": True,
-                "differences": [],
-                "verified_at": at,
-                "comparison": deepcopy(comparison),
-            }
-        )
-    document["run"]["updated_at"] = at
-    if state in {"in_progress", "saved"}:
-        document["run"]["phase"] = "mutation"
-    elif state in {"verified", "failed", "uncertain"}:
-        document["run"]["phase"] = "readback"
-    return validate_document(document)
-
-
-def reopen_failed_operation(
-    document: dict[str, Any],
-    *,
-    operation_id: str,
-    note: str,
-    timestamp: str | None = None,
-) -> dict[str, Any]:
-    """Explicitly reopen a proved failed/no-write operation after its blocker is resolved."""
-    document = upgrade_document(document)
-    operations = {item["operation_id"]: item for item in document["object_changes"]}
-    if operation_id not in operations:
-        raise RunValidationError(f"unknown operation_id {operation_id!r}")
-    operation = operations[operation_id]
-    if operation["state"] != "failed":
-        raise RunValidationError("only a failed operation can be explicitly reopened")
-    at = timestamp or _utc_now()
-    _timestamp(at, "timestamp")
-    note = _text(note, "note")
-
-    operation["state"] = "planned"
-    operation.setdefault("journal", []).append({"state": "planned", "at": at, "note": note})
-    operation.pop("error", None)
-    operation.pop("result", None)
-    operation.pop("comparison", None)
-    operation.pop("pre_write_comparison", None)
-    document["saved_readback"] = [
-        item for item in document["saved_readback"] if item["operation_id"] != operation_id
-    ]
-    for requirement in document["requirements"]:
-        if requirement["id"] in operation["requirement_ids"]:
-            requirement["status"] = "In progress"
-    document["run"]["phase"] = "mutation"
-    document["run"]["status"] = "In progress"
-    document["run"]["updated_at"] = at
-    document["recovery_boundary"] = None
-    document["idempotency"] = {"checked": False, "remaining_actions": [], "evidence": []}
-    return validate_document(document)
-
-
-def finalize_document(
-    document: dict[str, Any],
-    *,
-    idempotency_evidence: list[str],
-    timestamp: str | None = None,
-) -> dict[str, Any]:
-    """Atomically derive Configured only from complete readback and rerun evidence."""
-    document = upgrade_document(document)
-    evidence = _unique_texts(
-        idempotency_evidence,
-        "idempotency_evidence",
-        allow_empty=False,
-    )
-    unfinished = [
-        item["operation_id"]
-        for item in document["object_changes"]
-        if item["state"] not in {"verified", "skipped"}
-    ]
-    if unfinished:
-        raise RunValidationError(
-            "finalization requires every operation verified or skipped: " + ", ".join(unfinished)
-        )
-    active_requirement_ids = {
-        item["id"] for item in document["requirements"] if item["status"] != "Deferred"
-    }
-    issues = _preflight_issues(document, active_requirement_ids)
-    if issues:
-        raise RunValidationError("finalization preflight is incomplete: " + "; ".join(issues))
-    at = timestamp or _utc_now()
-    _timestamp(at, "timestamp")
-    for requirement in document["requirements"]:
-        if requirement["status"] != "Deferred":
-            requirement["status"] = "Configured"
-    document["idempotency"] = {
-        "checked": True,
-        "remaining_actions": [],
-        "evidence": evidence,
-    }
-    document["recovery_boundary"] = None
-    document["run"]["phase"] = "complete"
-    document["run"]["status"] = "Configured"
-    document["run"]["updated_at"] = at
-    return validate_document(document)
-
-
-@contextmanager
-def run_file_lock(path: Path):
-    """Acquire a non-blocking cross-process lock for one run artifact."""
-    lock_path = path.with_name(f".{path.name}.lock")
-    lock_path.parent.mkdir(parents=True, exist_ok=True)
-    stream = lock_path.open("a+b")
-    try:
-        stream.seek(0, os.SEEK_END)
-        if stream.tell() == 0:
-            stream.write(b"\0")
-            stream.flush()
-        stream.seek(0)
-        try:
-            if os.name == "nt":
-                import msvcrt
-
-                msvcrt.locking(stream.fileno(), msvcrt.LK_NBLCK, 1)
-            else:
-                import fcntl
-
-                fcntl.flock(stream.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except OSError as exc:
-            raise RunConflictError(
-                f"run artifact is already controlled by another process: {path}"
-            ) from exc
-        try:
-            yield
-        finally:
-            stream.seek(0)
-            if os.name == "nt":
-                import msvcrt
-
-                msvcrt.locking(stream.fileno(), msvcrt.LK_UNLCK, 1)
-            else:
-                import fcntl
-
-                fcntl.flock(stream.fileno(), fcntl.LOCK_UN)
-    finally:
-        stream.close()
-
-
-def _replaceable_planned_run(path: Path) -> bool:
-    document = load_document(path)
-    return (
-        document["run"]["status"] == "In progress"
-        and not document["saved_readback"]
-        and all(item["state"] == "planned" for item in document["object_changes"])
-    )
-
-
-def atomic_write(path: Path, value: dict[str, Any]) -> None:
-    """Preserve the public helper while sharing the strict atomic writer."""
-    write_json_atomic(path, value)
-
-
-def _json_value_file(path: Path, label: str) -> Any:
-    try:
-        return load_json(path)
-    except StrictJsonError as exc:
-        raise RunValidationError(
-            f"cannot load {label} {path}: {exc}",
-            error_code=exc.error_code,
-        ) from exc
-
-
-def _json_file(path: Path, label: str) -> dict[str, Any]:
-    return _object(_json_value_file(path, label), label)
-
-
-def _markdown_cell(value: Any) -> str:
-    if value is None:
-        return ""
-    if isinstance(value, list):
-        value = "; ".join(str(item) for item in value)
-    return str(value).replace("|", "\\|").replace("\n", " ")
-
-
-def render_markdown(document: dict[str, Any], *, embed_machine: bool = False) -> str:
-    """Render one manifest into executive, analyst, and optional machine layers."""
-    document = validate_document(document)
-    run = document["run"]
-    operations = document["object_changes"]
-    counts: dict[str, int] = {}
-    for item in operations:
-        counts[item["action"]] = counts.get(item["action"], 0) + 1
-    preview = run["phase"] == "preflight" and all(item["state"] == "planned" for item in operations)
-    heading = "Pre-mutation impact preview" if preview else "GTM configuration handoff"
-    lines = [
-        f"# {heading}",
-        "",
-        "## Executive summary",
-        "",
-        f"- Verdict: **{run['status']}**",
-        (
-            "- Target: account `{account_id}` / container `{container_id}` / workspace "
-            "`{workspace_id}`"
-        ).format(**run["target"]),
-        f"- Requirements: {len(document['requirements'])}",
-        f"- Execution mode: `{run['execution_mode']}`",
-        (
-            "- Adapter baseline: {strategy}; complete={complete}; pre-existing workspace "
-            "changes={changes}"
-        ).format(
-            strategy=document["container_baseline"]["strategy"],
-            complete=str(document["container_baseline"]["complete"]).lower(),
-            changes=document["container_baseline"]["preexisting_workspace_changes"],
-        ),
-        "- Intended object actions: "
-        + (", ".join(f"{action} {count}" for action, count in sorted(counts.items())) or "none"),
-        "- Consent routes: " + str(len(document["consent_routes"])),
-        "- Publication: not performed; no GTM version created",
-    ]
-    if preview:
-        preflight_blockers = inspect_document(document)["preflight_blockers"]
-        high_impact = [
-            item
-            for item in operations
-            if item["object_type"]
-            in {
-                "zone",
-                "environment",
-                "destination",
-                "google tag configuration",
-                "container setting",
-                "template",
-            }
-            or item["action"] in {"remove", "replace"}
-        ]
-        lines.append(
-            "- Preflight decision: "
-            + (
-                f"resolve mapping/consent blockers on {len(preflight_blockers)} operation(s)"
-                if preflight_blockers
-                else (
-                    f"explicit authority required for {len(high_impact)} "
-                    "high-impact/destructive action(s)"
-                    if high_impact
-                    else "routine in-scope writes may proceed without a separate approval pause"
-                )
-            )
-        )
-
-    if document["inventory_dispositions"]:
-        lines.extend(
-            [
-                "",
-                "## Inventory-aligned tag change log",
-                "",
-                "| Order | Source row | Vendor/source | Disposition | Tag before | Tag after | "
-                "Trigger before | Trigger after | Variable changes | Parameter changes | Consent "
-                "changes | Rationale |",
-                "| ---: | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
-            ]
-        )
-        for item in sorted(
-            document["inventory_dispositions"], key=lambda value: value["source_order"]
-        ):
-            lines.append(
-                "| {order} | {row} | {source} | {disposition} | {before} | {after} | "
-                "{trigger_before} | {trigger_after} | {variables} | {parameters} | {consent} | "
-                "{rationale} |".format(
-                    order=item["source_order"],
-                    row=_markdown_cell(item["row_id"]),
-                    source=_markdown_cell(item["source_locator"]),
-                    disposition=_markdown_cell(item["disposition"]),
-                    before=_markdown_cell(item["before_tag_name"]),
-                    after=_markdown_cell(item["after_tag_name"]),
-                    trigger_before=_markdown_cell(item["trigger_before"]),
-                    trigger_after=_markdown_cell(item["trigger_after"]),
-                    variables=_markdown_cell(item["variable_changes"]),
-                    parameters=_markdown_cell(item["parameter_changes"]),
-                    consent=_markdown_cell(item["consent_changes"]),
-                    rationale=_markdown_cell(item["rationale"]),
-                )
-            )
-
-    lines.extend(["", "## Analyst and developer change log", ""])
-    if not operations:
-        lines.append("No GTM object operation is recorded.")
-    for item in operations:
-        lines.extend(
-            [
-                f"### [{item['action'].upper()} / {item['state'].upper()}] {item['object_key']}",
-                "",
-                f"- Requirements: {', '.join(item['requirement_ids'])}",
-                "- Dependencies: " + (", ".join(item["dependencies"]) or "none"),
-                f"- Evidence: {', '.join(item['evidence'])}",
-            ]
-        )
-        if item.get("replacement_reason"):
-            lines.append(f"- Replacement reason: {item['replacement_reason']}")
-        if item.get("permission_delta"):
-            delta = item["permission_delta"]
-            lines.append(
-                "- Template permission delta: added "
-                + (", ".join(delta["added"]) or "none")
-                + "; removed "
-                + (", ".join(delta["removed"]) or "none")
-            )
-        if item.get("error"):
-            lines.append(f"- Error: {item['error']}")
-        lines.append("")
-
-    lines.extend(["## Payload and consent mapping", ""])
-    for requirement in document["requirements"]:
-        requirement_id = requirement["id"]
-        mappings = [
-            item
-            for item in document["payload_mappings"]
-            if item["requirement_id"] == requirement_id
-        ]
-        consent = next(
-            (
-                item
-                for item in document["consent_routes"]
-                if item["requirement_id"] == requirement_id
-            ),
-            None,
-        )
-        lines.append(f"### {requirement_id} — {requirement['status']}")
-        lines.append("")
-        lines.append(f"- Source event: {requirement.get('source_event') or 'not applicable'}")
-        lines.append(f"- Destination: {requirement.get('destination') or 'not supplied'}")
-        if consent:
-            lines.append(
-                f"- Consent: {consent['mode']} via {consent['mechanism']} "
-                f"on `{consent['normal_trigger']}`; block scope "
-                f"`{consent.get('blocking_event_scope') or 'not applicable'}`"
-            )
-            lines.append(
-                "- Consent checks: built-in "
-                + (", ".join(consent["built_in_consent_checks"]) or "none recorded")
-                + "; Additional "
-                + (", ".join(consent["additional_consent_checks"]) or "not set")
-            )
-        else:
-            lines.append("- Consent: not yet recorded")
-        for mapping in mappings:
-            lines.append(
-                "- Field `{field}`: `{source}` [{source_shape}] → {method} "
-                "→ `{resolution}` → `{template}` [{destination_shape}] ({status})".format(
-                    field=mapping["destination_field"],
-                    source=mapping.get("source") or "unresolved",
-                    source_shape=mapping.get("source_shape") or "shape unresolved",
-                    method=mapping.get("mapping_method") or "method unresolved",
-                    resolution=mapping.get("gtm_resolution") or "unresolved",
-                    template=mapping.get("template_field") or "unresolved",
-                    destination_shape=mapping.get("destination_shape") or "shape unresolved",
-                    status=mapping["status"],
-                )
-            )
-        lines.append("")
-
-    lines.extend(["## Per-tag execution topology", ""])
-    if not document["execution_topologies"]:
-        lines.append("No tag topology is recorded.")
-    for topology in document["execution_topologies"]:
-        normal_triggers = ", ".join(
-            "{key} [{role}/{type}]".format(
-                key=trigger["trigger_object_key"],
-                role=trigger["role"],
-                type=trigger["type"],
-            )
-            for trigger in topology["normal_triggers"]
-        )
-        lines.append(
-            "- `{tag}`: {role}; triggers {triggers}; blocks {blocks}; Additional "
-            "{additional}; firing {firing}; pre-CMP {pre_cmp}; ecommerce {ecommerce}".format(
-                tag=topology["tag_object_key"],
-                role=topology["lifecycle_role"],
-                triggers=normal_triggers,
-                blocks=", ".join(topology["blocking_trigger_keys"]) or "none",
-                additional=", ".join(topology["additional_consent_checks"]) or "not set",
-                firing=topology["firing_option"],
-                pre_cmp=topology["pre_cmp_policy"],
-                ecommerce=topology["ecommerce_route"],
-            )
-        )
-    lines.append("")
-
-    lines.extend(["## Page-view and first-party-data decisions", ""])
-    for decision in document["page_view_decisions"]:
-        lines.append(
-            f"- Page view `{decision['destination']}`: {decision['owner']}; "
-            f"send_page_view={str(decision['send_page_view']).lower()}; "
-            f"Google tag={decision.get('google_tag_object_key') or 'none'}; "
-            f"{decision['reason']}"
-        )
-    for route in document["first_party_data_routes"]:
-        field_names = ", ".join(field["name"] for field in route["fields"])
-        lines.append(
-            f"- First-party data `{route['requirement_id']}`: {route['feature']}; "
-            f"destination={route['destination_field']}; timing={route['timing']}; "
-            f"hashing={route['hashing_owner']}; keys={field_names}"
-        )
-    if not document["page_view_decisions"] and not document["first_party_data_routes"]:
-        lines.append("- No page-view-capable or first-party-data decision is in scope.")
-    lines.append("")
-
-    lines.extend(["## External actions and handoff", ""])
-    for dependency in document["external_dependencies"]:
-        lines.append(f"- [{dependency['status']}] {dependency['owner']}: {dependency['action']}")
-    if not document["external_dependencies"]:
-        lines.append("- No external dependency recorded.")
-    lines.extend(
-        [
-            "- Runtime GTM Preview/recette was not performed.",
-            "- Publication and GTM version creation were not performed.",
-            "",
-            "## Machine handoff",
-            "",
-            f"- Schema: `configure-gtm/configuration-run@{SCHEMA_VERSION}`",
-            f"- Run ID: `{run['id']}`",
-            f"- Contract fingerprint: `{run['contract']['fingerprint']}`",
-        ]
-    )
-    if embed_machine:
-        lines.extend(
-            [
-                "",
-                "```json",
-                json.dumps(document, indent=2, sort_keys=True, ensure_ascii=False),
-                "```",
-            ]
-        )
-    return "\n".join(lines).rstrip() + "\n"
-
-
-def _emit_json(value: Any) -> None:
-    print(json.dumps(value, indent=2, sort_keys=True, allow_nan=False))
-
-
-def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    subparsers = parser.add_subparsers(dest="command", required=True)
-
-    validate_parser = subparsers.add_parser("validate")
-    validate_parser.add_argument("--run", type=Path, required=True)
-
-    init_parser = subparsers.add_parser("init")
-    init_parser.add_argument("--contract", type=Path, required=True)
-    init_parser.add_argument("--run-id", required=True)
-    init_parser.add_argument("--source-locator", required=True)
-    init_parser.add_argument("--timestamp")
-    init_parser.add_argument("--output", type=Path, required=True)
-    init_parser.add_argument(
-        "--replace-planned",
-        action="store_true",
-        help="Replace only an existing untouched planned run; never replace saved history.",
-    )
-
-    inspect_parser = subparsers.add_parser("inspect")
-    inspect_parser.add_argument("--run", type=Path, required=True)
-
-    upgrade_parser = subparsers.add_parser("upgrade")
-    upgrade_parser.add_argument("--run", type=Path, required=True)
-
-    checkpoint_parser = subparsers.add_parser("checkpoint")
-    checkpoint_parser.add_argument("--run", type=Path, required=True)
-    checkpoint_parser.add_argument("--operation", required=True)
-    checkpoint_parser.add_argument(
-        "--state",
-        choices=sorted(OPERATION_STATES - {"planned"}),
-        required=True,
-    )
-    checkpoint_parser.add_argument("--note", required=True)
-    checkpoint_parser.add_argument("--timestamp")
-    checkpoint_parser.add_argument("--result", type=Path)
-    checkpoint_parser.add_argument("--comparison", type=Path)
-    checkpoint_parser.add_argument("--saved-readback", type=Path)
-    checkpoint_parser.add_argument("--pre-write-comparison", type=Path)
-    checkpoint_parser.add_argument("--pre-write-readback", type=Path)
-    checkpoint_parser.add_argument("--error")
-
-    reopen_parser = subparsers.add_parser("reopen")
-    reopen_parser.add_argument("--run", type=Path, required=True)
-    reopen_parser.add_argument("--operation", required=True)
-    reopen_parser.add_argument("--note", required=True)
-    reopen_parser.add_argument("--timestamp")
-
-    finalize_parser = subparsers.add_parser("finalize")
-    finalize_parser.add_argument("--run", type=Path, required=True)
-    finalize_parser.add_argument(
-        "--evidence",
-        action="append",
-        required=True,
-        help="Repeat for each idempotent-rerun/readback evidence locator.",
-    )
-    finalize_parser.add_argument("--timestamp")
-
-    render_parser = subparsers.add_parser("render")
-    render_parser.add_argument("--run", type=Path, required=True)
-    render_parser.add_argument("--output", type=Path)
-    render_parser.add_argument("--embed-machine", action="store_true")
-
-    args = parser.parse_args()
-    try:
-        if args.command == "validate":
-            document = load_document(args.run)
-            _emit_json({"pass": True, "schema_version": document["schema_version"]})
-        elif args.command == "init":
-            contract = _json_file(args.contract, "contract")
-            document = create_from_contract(
-                contract,
-                run_id=args.run_id,
-                source_locator=args.source_locator,
-                timestamp=args.timestamp,
-            )
-            with run_file_lock(args.output):
-                if args.output.exists():
-                    if not args.replace_planned:
-                        raise RunValidationError(
-                            f"output already exists; use a new path or --replace-planned: "
-                            f"{args.output}"
-                        )
-                    if not _replaceable_planned_run(args.output):
-                        raise RunValidationError(
-                            "--replace-planned refuses an artifact with non-planned or saved state"
-                        )
-                atomic_write(args.output, document)
-            _emit_json({"pass": True, "output": str(args.output.resolve())})
-        elif args.command == "inspect":
-            _emit_json(inspect_document(load_document(args.run)))
-        elif args.command == "upgrade":
-            with run_file_lock(args.run):
-                document = upgrade_document(load_document(args.run))
-                atomic_write(args.run, document)
-            _emit_json({"pass": True, "schema_version": document["schema_version"]})
-        elif args.command == "checkpoint":
-            result = _json_file(args.result, "result") if args.result else None
-            comparison = _json_file(args.comparison, "comparison") if args.comparison else None
-            pre_write_comparison = (
-                _json_file(args.pre_write_comparison, "pre-write comparison")
-                if args.pre_write_comparison
-                else None
-            )
-            pre_write_saved = (
-                _json_value_file(args.pre_write_readback, "pre-write readback")
-                if args.pre_write_readback
-                else _UNSET
-            )
-            saved = (
-                _json_value_file(args.saved_readback, "saved readback")
-                if args.saved_readback
-                else _UNSET
-            )
-            with run_file_lock(args.run):
-                document = checkpoint_operation(
-                    load_document(args.run),
-                    operation_id=args.operation,
-                    state=args.state,
-                    note=args.note,
-                    timestamp=args.timestamp,
-                    result=result,
-                    comparison=comparison,
-                    pre_write_comparison=pre_write_comparison,
-                    pre_write_saved=pre_write_saved,
-                    saved=saved,
-                    error=args.error,
-                )
-                atomic_write(args.run, document)
-            _emit_json({"pass": True, "operation": args.operation, "state": args.state})
-        elif args.command == "reopen":
-            with run_file_lock(args.run):
-                document = reopen_failed_operation(
-                    load_document(args.run),
-                    operation_id=args.operation,
-                    note=args.note,
-                    timestamp=args.timestamp,
-                )
-                atomic_write(args.run, document)
-            _emit_json({"pass": True, "operation": args.operation, "state": "planned"})
-        elif args.command == "finalize":
-            with run_file_lock(args.run):
-                document = finalize_document(
-                    load_document(args.run),
-                    idempotency_evidence=args.evidence,
-                    timestamp=args.timestamp,
-                )
-                atomic_write(args.run, document)
-            _emit_json({"pass": True, "status": "Configured"})
-        else:
-            rendered = render_markdown(
-                load_document(args.run),
-                embed_machine=args.embed_machine,
-            )
-            if args.output:
-                write_text_atomic(args.output, rendered)
-                _emit_json({"pass": True, "output": str(args.output.resolve())})
-            else:
-                sys.stdout.reconfigure(encoding="utf-8", errors="backslashreplace")
-                print(rendered, end="")
-    except RunConflictError as exc:
-        _emit_json({"pass": False, "error_code": "run_conflict", "error": str(exc)})
-        return 2
-    except RunValidationError as exc:
-        _emit_json({"pass": False, "error_code": exc.error_code, "error": str(exc)})
-        return 2
-    except (OSError, UnicodeError) as exc:
-        _emit_json({"pass": False, "error_code": "io_error", "error": str(exc)})
-        return 2
-    return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())

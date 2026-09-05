@@ -8,10 +8,12 @@ import time
 from collections.abc import Callable
 from copy import deepcopy
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Protocol
 
-import adapter_runtime_web as legacy
+import adapter_support
+import run_state
 from configuration_run import (
     atomic_write,
     build_pre_write_comparison,
@@ -28,32 +30,81 @@ from redaction import (
     resolve_for_mutation,
     scrub_sensitive_text,
 )
-from resource_registry import capability_matrix, unsupported_operation_reason
-from run_state import build_target_baseline as build_target_baseline
+from resource_registry import (
+    capability_matrix,
+    is_configuration_settings_mutation,
+    required_baseline_families,
+    unsupported_operation_reason,
+)
+from web_domain_validation import configuration_settings_consumers
 
-AdapterExecutionError = legacy.AdapterExecutionError
-RateLimitError = legacy.RateLimitError
-AuthenticationError = legacy.AuthenticationError
-AmbiguousWriteError = legacy.AmbiguousWriteError
-ConfigurationAdapter = legacy.ConfigurationAdapter
-collect_paginated = legacy.collect_paginated
-collect_resource_baseline = legacy.collect_resource_baseline
-build_container_baseline = legacy.build_container_baseline
+AdapterExecutionError = adapter_support.AdapterExecutionError
+RateLimitError = adapter_support.RateLimitError
+AuthenticationError = adapter_support.AuthenticationError
+AmbiguousWriteError = adapter_support.AmbiguousWriteError
+ConfigurationAdapter = adapter_support.ConfigurationAdapter
+collect_paginated = adapter_support.collect_paginated
+collect_resource_baseline = adapter_support.collect_resource_baseline
+
+
+def _utc_now() -> str:
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
 class TargetAdapter(Protocol):
     """Semantic adapter bound to exactly one authorized GTM target."""
 
+    def identity(self) -> dict[str, str]: ...
+
     def read(self, operation: dict[str, Any]) -> dict[str, Any] | None: ...
 
     def mutate(self, operation: dict[str, Any]) -> dict[str, Any] | None: ...
+
+    def list_resource_page(self, resource_family: str, cursor: str | None) -> dict[str, Any]: ...
+
+    def list_workspace_changes_page(self, cursor: str | None) -> dict[str, Any]: ...
 
 
 @dataclass(frozen=True)
 class TargetBinding:
     adapter: TargetAdapter
+    identity: dict[str, str]
     capabilities: dict[str, dict[str, bool]]
     secret_provider: SecretProvider | None
+
+
+_IDENTITY_FIELDS = ("account_id", "container_id", "workspace_id", "container_type")
+
+
+def _verified_adapter_identity(target: dict[str, Any], adapter: TargetAdapter) -> dict[str, str]:
+    try:
+        observed = adapter.identity()
+    except Exception as exc:
+        raise AdapterExecutionError(
+            "target adapter identity could not be read",
+            code="target_identity_unavailable",
+        ) from exc
+    if not isinstance(observed, dict) or set(observed) != set(_IDENTITY_FIELDS):
+        raise AdapterExecutionError(
+            "target adapter identity must contain only account_id, container_id, workspace_id, and container_type",
+            code="target_identity_invalid",
+        )
+    normalized: dict[str, str] = {}
+    for field in _IDENTITY_FIELDS:
+        value = observed.get(field)
+        if not isinstance(value, str) or not value.strip():
+            raise AdapterExecutionError(
+                f"target adapter identity {field!r} is missing",
+                code="target_identity_invalid",
+            )
+        normalized[field] = value.strip()
+    expected = {field: str(target[field]).strip() for field in _IDENTITY_FIELDS}
+    if normalized != expected:
+        raise AdapterExecutionError(
+            "authenticated adapter identity differs from the authorized GTM target",
+            code="target_identity_mismatch",
+        )
+    return normalized
 
 
 class TargetAdapterRegistry:
@@ -73,19 +124,23 @@ class TargetAdapterRegistry:
         target_id = target["target_id"]
         if target_id in self._bindings:
             raise AdapterExecutionError(f"duplicate target adapter {target_id!r}")
+        identity = _verified_adapter_identity(target, adapter)
         self._bindings[target_id] = TargetBinding(
             adapter=adapter,
+            identity=identity,
             capabilities=capability_matrix(target, capabilities),
             secret_provider=secret_provider,
         )
 
     def binding(self, target_id: str) -> TargetBinding:
         try:
-            return self._bindings[target_id]
+            binding = self._bindings[target_id]
         except KeyError as exc:
             raise AdapterExecutionError(
                 f"no adapter is registered for target {target_id!r}", code="target_unavailable"
             ) from exc
+        _verified_adapter_identity(binding.identity, binding.adapter)
+        return binding
 
     def discovered_capabilities(self, target_id: str) -> dict[str, dict[str, bool]] | None:
         """Return a copy of a registered target's normalized capability matrix."""
@@ -119,7 +174,7 @@ def _call_with_rate_limit(
         except RateLimitError as exc:
             if retry_index >= max_retries:
                 raise
-            delay = legacy._retry_delay(
+            delay = adapter_support._retry_delay(
                 exc,
                 retry_index,
                 base_delay_seconds=base_delay_seconds,
@@ -150,7 +205,119 @@ def _target(document: dict[str, Any], target_id: str) -> dict[str, Any]:
     raise AdapterExecutionError(f"unknown target {target_id!r}")
 
 
-def _execute_v3_locked(
+def _capture_one_authenticated_baseline(
+    document: dict[str, Any],
+    target: dict[str, Any],
+    binding: TargetBinding,
+    *,
+    captured_at: Callable[[], str],
+    max_rate_limit_retries: int,
+    base_delay_seconds: float,
+    max_delay_seconds: float,
+    sleep: Callable[[float], None],
+    random_value: Callable[[], float],
+) -> dict[str, Any]:
+    target_id = target["target_id"]
+    target_operations = [
+        item for item in document["object_changes"] if item["target_id"] == target_id
+    ]
+    families = sorted(
+        family
+        for family, capabilities in binding.capabilities.items()
+        if capabilities.get("list") is True
+    )
+    required_families = required_baseline_families(target_operations, target["container_type"])
+    if not required_families <= set(families):
+        missing = sorted(required_families - set(families))
+        raise AdapterExecutionError(
+            f"authenticated baseline cannot list required resource families: {missing}",
+            code="baseline_capability_missing",
+        )
+    resources: dict[str, list[dict[str, Any]]] = {}
+    resource_receipts: dict[str, dict[str, Any]] = {}
+    for family in families:
+        items, receipt = adapter_support.collect_paginated_with_receipt(
+            lambda cursor, selected=family: binding.adapter.list_resource_page(selected, cursor),
+            max_rate_limit_retries=max_rate_limit_retries,
+            base_retry_delay_seconds=base_delay_seconds,
+            max_retry_delay_seconds=max_delay_seconds,
+            sleep=sleep,
+            random_value=random_value,
+        )
+        resources[family] = items
+        resource_receipts[family] = receipt
+    workspace_changes, changes_receipt = adapter_support.collect_paginated_with_receipt(
+        binding.adapter.list_workspace_changes_page,
+        max_rate_limit_retries=max_rate_limit_retries,
+        base_retry_delay_seconds=base_delay_seconds,
+        max_retry_delay_seconds=max_delay_seconds,
+        sleep=sleep,
+        random_value=random_value,
+    )
+    value = deepcopy(document)
+    for index, baseline in enumerate(value["container_baselines"]):
+        if baseline["target_id"] == target_id:
+            value["container_baselines"][index] = {
+                "target_id": target_id,
+                "captured_at": None,
+                "complete": False,
+                "resource_families": [],
+                "family_counts": {},
+                "resource_identities": {},
+                "resources": {},
+                "preexisting_workspace_changes": None,
+                "capture_evidence": None,
+                "fingerprint": None,
+            }
+            break
+    return run_state._record_target_baseline(
+        value,
+        target_id=target_id,
+        resources=resources,
+        captured_at=captured_at(),
+        preexisting_workspace_changes=workspace_changes,
+        capture_evidence={
+            "captured_by": "authenticated-adapter-runtime",
+            "source_identity": deepcopy(binding.identity),
+            "resource_pagination": resource_receipts,
+            "workspace_changes_pagination": changes_receipt,
+        },
+    )
+
+
+def _capture_authenticated_baselines(
+    document: dict[str, Any],
+    registry: TargetAdapterRegistry,
+    **options: Any,
+) -> dict[str, Any]:
+    """Capture each target independently before any mutation on that target."""
+    value = deepcopy(document)
+    for target in value["run"]["targets"]:
+        target_operations = [
+            item for item in value["object_changes"] if item["target_id"] == target["target_id"]
+        ]
+        if not target_operations or any(item["state"] != "planned" for item in target_operations):
+            continue
+        try:
+            binding = registry.binding(target["target_id"])
+            value = _capture_one_authenticated_baseline(value, target, binding, **options)
+        except Exception as exc:
+            error = "baseline_capture_failed: " + (
+                scrub_sensitive_text(str(exc), set()) or "authenticated baseline unavailable"
+            )
+            for operation in target_operations:
+                value = checkpoint_operation(
+                    value,
+                    operation_id=operation["operation_id"],
+                    state="failed",
+                    note="Authenticated baseline capture failed; no write was attempted.",
+                    timestamp=options["captured_at"](),
+                    error=error,
+                )
+    return value
+
+
+def _execute_current_locked(
     run_path: Path,
     registry: TargetAdapterRegistry,
     *,
@@ -171,6 +338,18 @@ def _execute_v3_locked(
     if capabilities_changed:
         _save(run_path, document)
 
+    document = _capture_authenticated_baselines(
+        document,
+        registry,
+        captured_at=timestamp,
+        max_rate_limit_retries=max_rate_limit_retries,
+        base_delay_seconds=base_delay_seconds,
+        max_delay_seconds=max_delay_seconds,
+        sleep=sleep,
+        random_value=random_value,
+    )
+    _save(run_path, document)
+
     while True:
         document = load_document(run_path)
         inspection = inspect_document(document)
@@ -180,6 +359,8 @@ def _execute_v3_locked(
         progress = False
         for operation_id in ready:
             document = load_document(run_path)
+            if operation_id not in inspect_document(document)["ready_operations"]:
+                continue
             operation = _operation(document, operation_id)
             _target(document, operation["target_id"])
             try:
@@ -210,7 +391,37 @@ def _execute_v3_locked(
                 progress = True
                 continue
             ephemeral_values: set[str] = set()
+            write_accepted_or_ambiguous = False
             try:
+                if operation["container_type"] == "web" and is_configuration_settings_mutation(
+                    operation
+                ):
+                    if not binding.capabilities.get("tag", {}).get("list"):
+                        raise AdapterExecutionError(
+                            "shared Configuration Settings require tag-list capability"
+                        )
+                    current_tags = collect_paginated(
+                        lambda cursor: binding.adapter.list_resource_page("tag", cursor),
+                        max_rate_limit_retries=max_rate_limit_retries,
+                        base_retry_delay_seconds=base_delay_seconds,
+                        max_retry_delay_seconds=max_delay_seconds,
+                        sleep=sleep,
+                        random_value=random_value,
+                    )
+                    in_scope_names = {
+                        item["name"]
+                        for item in document["object_changes"]
+                        if item["target_id"] == operation["target_id"]
+                        and item["resource_family"] == "tag"
+                    }
+                    missing_consumers = (
+                        configuration_settings_consumers(operation, current_tags) - in_scope_names
+                    )
+                    if missing_consumers:
+                        raise AdapterExecutionError(
+                            "shared Configuration Settings have unreviewed current consumers: "
+                            + ", ".join(sorted(missing_consumers))
+                        )
                 current = _call_with_rate_limit(
                     lambda: _read(binding.adapter, operation),
                     max_retries=max_rate_limit_retries,
@@ -332,6 +543,7 @@ def _execute_v3_locked(
                 _save(run_path, document)
                 operation = _operation(document, operation_id)
                 try:
+                    _verified_adapter_identity(binding.identity, binding.adapter)
                     _call_with_rate_limit(
                         lambda: binding.adapter.mutate(deepcopy(mutation_operation)),
                         max_retries=max_rate_limit_retries,
@@ -340,7 +552,9 @@ def _execute_v3_locked(
                         sleep=sleep,
                         random_value=random_value,
                     )
+                    write_accepted_or_ambiguous = True
                 except AmbiguousWriteError as exc:
+                    write_accepted_or_ambiguous = True
                     saved = _call_with_rate_limit(
                         lambda: _read(binding.adapter, operation),
                         max_retries=max_rate_limit_retries,
@@ -433,11 +647,15 @@ def _execute_v3_locked(
                     state=state,
                     note="Authentication failed for this target; independent targets may continue.",
                     timestamp=timestamp(),
-                    error=scrub_sensitive_text(str(exc), ephemeral_values),
+                    error="authentication_required: "
+                    + (
+                        scrub_sensitive_text(str(exc), ephemeral_values)
+                        or "target authorization unavailable"
+                    ),
                 )
                 _save(run_path, latest)
                 progress = True
-            except RateLimitError as exc:
+            except ValueError as exc:
                 latest = load_document(run_path)
                 operation = _operation(latest, operation_id)
                 state = "failed" if operation["state"] == "planned" else "uncertain"
@@ -445,7 +663,20 @@ def _execute_v3_locked(
                     latest,
                     operation_id=operation_id,
                     state=state,
-                    note="Rate limit stopped this operation without a blind retry.",
+                    note="Adapter readback could not be normalized or compared safely.",
+                    timestamp=timestamp(),
+                    error="invalid_adapter_readback: "
+                    + scrub_sensitive_text(str(exc), ephemeral_values),
+                )
+                _save(run_path, latest)
+                progress = True
+            except RateLimitError as exc:
+                latest = load_document(run_path)
+                latest = checkpoint_operation(
+                    latest,
+                    operation_id=operation_id,
+                    state="uncertain" if write_accepted_or_ambiguous else "failed",
+                    note="Rate limit stopped this operation; preserve uncertainty if a write may have succeeded.",
                     timestamp=timestamp(),
                     error=scrub_sensitive_text(str(exc), ephemeral_values),
                 )
@@ -453,15 +684,28 @@ def _execute_v3_locked(
                 progress = True
             except AdapterExecutionError as exc:
                 latest = load_document(run_path)
+                latest = checkpoint_operation(
+                    latest,
+                    operation_id=operation_id,
+                    state="uncertain" if write_accepted_or_ambiguous else "failed",
+                    note="Adapter failure stopped this operation; preserve uncertainty if a write may have succeeded.",
+                    timestamp=timestamp(),
+                    error=scrub_sensitive_text(str(exc), ephemeral_values),
+                )
+                _save(run_path, latest)
+                progress = True
+            except Exception as exc:
+                latest = load_document(run_path)
                 operation = _operation(latest, operation_id)
                 state = "failed" if operation["state"] == "planned" else "uncertain"
                 latest = checkpoint_operation(
                     latest,
                     operation_id=operation_id,
                     state=state,
-                    note="Target adapter rejected the operation; dependents remain stopped.",
+                    note="Unexpected adapter failure stopped this operation; dependents remain stopped.",
                     timestamp=timestamp(),
-                    error=scrub_sensitive_text(str(exc), ephemeral_values),
+                    error="unexpected_adapter_failure: "
+                    + scrub_sensitive_text(str(exc), ephemeral_values),
                 )
                 _save(run_path, latest)
                 progress = True
@@ -474,15 +718,10 @@ def execute_ready_operations(
     adapter: ConfigurationAdapter | TargetAdapterRegistry,
     **kwargs: Any,
 ) -> dict[str, Any]:
-    """Dispatch legacy web runs or execute independent v3 target subtrees."""
-    document = load_document(run_path)
-    if document.get("schema_version") != "3.0":
-        return legacy.execute_ready_operations(run_path, adapter, **kwargs)
+    """Execute independent target subtrees for the current run schema."""
     if not isinstance(adapter, TargetAdapterRegistry):
-        raise AdapterExecutionError("configuration-run@3.0 requires a TargetAdapterRegistry")
-    timestamp = kwargs.pop("timestamp", None) or (
-        lambda: time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-    )
+        raise AdapterExecutionError("configuration-run@4.0 requires a TargetAdapterRegistry")
+    timestamp = kwargs.pop("timestamp", None) or _utc_now
     max_rate_limit_retries = kwargs.pop("max_rate_limit_retries", 2)
     base_delay_seconds = kwargs.pop("base_delay_seconds", 0.25)
     max_delay_seconds = kwargs.pop("max_delay_seconds", 2.0)
@@ -494,11 +733,11 @@ def execute_ready_operations(
         raise AdapterExecutionError("rate-limit delays must be non-negative")
     if kwargs:
         raise AdapterExecutionError(
-            "unsupported v3 adapter option(s): " + ", ".join(sorted(kwargs))
+            "unsupported current adapter option(s): " + ", ".join(sorted(kwargs))
         )
     try:
         with run_file_lock(run_path):
-            return _execute_v3_locked(
+            return _execute_current_locked(
                 run_path,
                 adapter,
                 timestamp=timestamp,
@@ -508,5 +747,50 @@ def execute_ready_operations(
                 sleep=sleep,
                 random_value=random_value,
             )
-    except legacy.RunConflictError as exc:
+    except adapter_support.RunConflictError as exc:
+        raise AdapterExecutionError(str(exc), code="run_conflict") from exc
+
+
+def verify_idempotent_rerun(
+    run_path: Path,
+    registry: TargetAdapterRegistry,
+    *,
+    timestamp: Callable[[], str] | None = None,
+) -> dict[str, Any]:
+    """Perform a read-only second pass and persist its convergence decisions."""
+    now = timestamp or _utc_now
+    try:
+        with run_file_lock(run_path):
+            document = load_document(run_path)
+            if any(operation["state"] != "verified" for operation in document["object_changes"]):
+                raise AdapterExecutionError(
+                    "idempotency convergence requires every operation verified",
+                    code="run_not_verified",
+                )
+            observations = []
+            for operation in document["object_changes"]:
+                binding = registry.binding(operation["target_id"])
+                try:
+                    saved = _read(binding.adapter, operation)
+                except Exception as exc:
+                    raise AdapterExecutionError(
+                        "target adapter convergence read failed; no result was persisted",
+                        code="convergence_read_failed",
+                    ) from exc
+                observations.append(
+                    {
+                        "operation_id": operation["operation_id"],
+                        "target_id": operation["target_id"],
+                        "source": "target-adapter-read",
+                        "source_identity": deepcopy(binding.identity),
+                        "observed_at": now(),
+                        "saved": saved,
+                    }
+                )
+            document = run_state._record_adapter_idempotency_observations(document, observations)
+            if document["idempotency"]["checked"]:
+                document = run_state._finalize_adapter_verified_document(document, timestamp=now())
+            _save(run_path, document)
+            return deepcopy(document["idempotency"])
+    except adapter_support.RunConflictError as exc:
         raise AdapterExecutionError(str(exc), code="run_conflict") from exc

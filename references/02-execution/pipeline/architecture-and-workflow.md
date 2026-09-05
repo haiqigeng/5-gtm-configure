@@ -49,7 +49,7 @@ The dependency order is receiver-first:
 4. Authoritative server readback and graph comparison.
 5. Web endpoint/settings variables and transporter event tags.
 6. Browser destinations retained for dual delivery and their shared dedup mappings.
-7. Existing live sender endpoint cutover, last.
+7. Mandatory transport-owner cutover, last, whether the sender route is new or changes an existing endpoint.
 8. Readback of every target, static pipeline comparison, and identical-rerun no-op.
 
 Creating an isolated inactive sender earlier is harmless only when it cannot emit. Never point an

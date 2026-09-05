@@ -232,7 +232,7 @@ class ContractConformanceTest(unittest.TestCase):
             plan_path.write_text(json.dumps(plan), encoding="utf-8")
             digest = hashlib.sha256(plan_path.read_bytes()).hexdigest()
             handoff = {
-                "handoff_version": "1.0.0",
+                "handoff_version": "1.1.0",
                 "skill": {"name": "ga4-tracking-plan", "version": "2.5.0"},
                 "approval": {"state": "approved", "approved_by": "Analyst"},
                 "plan": {"canonical_sha256": digest},

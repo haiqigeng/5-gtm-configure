@@ -9,8 +9,8 @@ properties/items, access token, consent, and outgoing diagnostics.
 
 The vendor flow may configure Pixel and Events API together and automatically create an `event_id`.
 Prefer and inspect that owner. For another approved setup, one shared browser/transporter ID may be
-used; TikTok explicitly documents CJS as a manual GTM option, but the guarded event-scoped fallback
-still requires the same GTM event and runtime verification note.
+used only when approved input provides its stable occurrence source. Product support for CJS does
+not authorize deriving identity from undocumented GTM internals.
 
 Official sources:
 

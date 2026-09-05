@@ -1,4 +1,4 @@
-"""Human configuration-result rendering for configuration-run@3.0."""
+"""Human configuration-result rendering for configuration-run@4.0."""
 
 from __future__ import annotations
 
@@ -234,8 +234,9 @@ def render_markdown(document: dict[str, Any], *, embed_machine: bool = False) ->
     lines.extend(["## Page-view and first-party-data decisions", ""])
     for decision in document["page_view_decisions"]:
         lines.append(
-            f"- Page view `{decision['destination']}`: {decision['owner']}; "
-            f"send_page_view={str(decision['send_page_view']).lower()}; "
+            f"- Page view `{decision['destination']}` / `{decision['occurrence']}`: "
+            f"{decision['owner']}; send_page_view="
+            f"{str(decision['send_page_view']).lower() if decision['send_page_view'] is not None else 'not-applicable'}; "
             f"Google tag={decision.get('google_tag_object_key') or 'none'}; "
             f"{decision['reason']}"
         )
@@ -291,6 +292,13 @@ def render_markdown(document: dict[str, Any], *, embed_machine: bool = False) ->
             f"server path `{contract.get('server_event_data_path') or 'none'}`."
         )
 
+    lines.extend(["", "## Official guidance applied", ""])
+    for source in document["official_sources"]:
+        lines.append(
+            f"- [{source['title']}]({source['url']}) (accessed {source['access_date']}; "
+            f"requirements {', '.join(source['supports'])}): {source['decision']}"
+        )
+
     lines.extend(
         [
             "",
@@ -320,7 +328,7 @@ def render_markdown(document: dict[str, Any], *, embed_machine: bool = False) ->
             "",
             "## Machine-readable run record",
             "",
-            "- Schema: `configure-gtm/configuration-run@3.0`",
+            "- Schema: `configure-gtm/configuration-run@4.0`",
             f"- Run ID: `{run['id']}`",
             f"- Contract fingerprint: `{run['contract']['fingerprint']}`",
         ]

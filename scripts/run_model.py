@@ -1,9 +1,7 @@
-"""Shared enums and immutable policy constants for configuration-run@3.0."""
+"""Shared enums and immutable policy constants for configuration-run@4.0."""
 
-SCHEMA_VERSION = "3.0"
-LEGACY_SCHEMA_VERSIONS = {"2.0", "2.1"}
-CONTRACT_SCHEMA_VERSION = "6.0"
-LEGACY_CONTRACT_SCHEMA_VERSIONS = {"4.0", "5.0"}
+SCHEMA_VERSION = "4.0"
+CONTRACT_SCHEMA_VERSION = "7.0"
 VERIFICATION_SCHEMA_VERSION = "1.0"
 
 RUN_MODES = {"web", "server", "pipeline"}
@@ -72,7 +70,7 @@ ACTIONS = {
 }
 DELTA_ACTIONS = {"update", "replace", "rename", "pause", "unpause", "remove"}
 MUTATING_ACTIONS = {"create", *DELTA_ACTIONS}
-HIGH_IMPACT_ACTIONS = {"replace", "remove"}
+HIGH_IMPACT_ACTIONS = {"replace", "pause", "unpause", "remove"}
 AUTHORITY_GRADES = {"approved-input", "official-current", "container-confirmed"}
 
 CONSENT_MODES = {"strict-basic", "advanced-native", "product-specific"}
@@ -112,7 +110,6 @@ DEDUP_SOURCE_TYPES = {
     "transaction-id",
     "stable-occurrence-id",
     "approved-event-id",
-    "gtm-event-scoped-fallback",
     "template-native",
     "none",
 }

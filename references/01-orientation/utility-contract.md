@@ -10,6 +10,7 @@
 - [Intake](#intake)
 - [Operational output](#operational-output)
 - [Target authority](#target-authority)
+- [Evidence and validation limits](#evidence-and-validation-limits)
 - [Boundaries](#boundaries)
 
 ## Audience
@@ -58,7 +59,7 @@ possible reuse, never as proof of best practice.
 
 ## Run routes
 
-- `web`: one or more authorized web workspaces. Preserve the complete v8 web behavior baseline.
+- `web`: one or more authorized web workspaces. Cover the complete supported web behavior surface.
 - `server`: one or more authorized server workspaces. Server objects use Client/Event Data/server
   semantics, never DOM, dataLayer, browser lifecycle, Custom HTML, or Custom JavaScript semantics.
 - `pipeline`: at least one authorized web sender and one authorized server receiver. Model it as a
@@ -111,6 +112,26 @@ claim or priority changes, broad Transformations, template import/upgrade/permis
 Zones/environments/container settings, and a live sender endpoint cutover. Preserve unrelated and
 pre-existing workspace work. Inspect only the objects related to the requested implementation
 unless a separately authorized refonte or audit requires complete inventory reconciliation.
+
+## Evidence and validation limits
+
+The agent must establish authorization from the user's instructions and approved source material,
+and establish product behavior from the exact live documentation and inspected template. Routine
+implementation choices within existing authority do not require a second approval ceremony.
+Only a material scope expansion or an uncovered high-impact action needs new authority.
+
+JSON validation checks structure and the encoded semantic invariants. Approval records, pagination
+receipts, and hashes preserve traceability and detect inconsistent edits; they do not authenticate
+the author, prove that a URL was read, or determine whether its guidance applies. Recomputing a hash
+never creates permission. Do not treat a validator PASS as a substitute for source review. The
+authenticated adapter and the host's tool permissions remain the execution boundary; these local
+files are not a security sandbox against an agent or caller that can replace the code and evidence.
+
+Before mutation, reconcile each requirement and destination identity with the approved source and
+each technical decision with its cited guidance. Re-read current GTM state through the authenticated
+adapter. For a resumed run, establish the saved artifact's provenance from the same task and source;
+an untrusted imported run is inspection material and must be recreated from verified inputs before
+execution. Preserve uncertain write history until authoritative readback resolves it.
 
 ## Boundaries
 

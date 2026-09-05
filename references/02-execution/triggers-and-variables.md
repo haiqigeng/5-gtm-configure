@@ -196,6 +196,12 @@ baseline/page-load tag uses a verified CMP readiness/grant event plus the vendor
 Consent Checks stay unset when that block owns eligibility. Under explicitly approved advanced
 consent, do not attach a defeating block or Additional Consent Check.
 
+For an event that may occur before CMP readiness, record one explicit policy: prove the source only
+occurs after readiness, wait for a later fresh event, intentionally drop the unconsented occurrence,
+perform one proved replay, or hold the change on an external dependency. A blocking trigger does not
+queue or replay an event. `drop-unconsented-occurrence` is valid only when the approved requirement
+accepts that loss; never silently substitute it for measurement coverage.
+
 Record the selected firing option, normally once per event unless the approved lifecycle requires once per page or unlimited execution. A higher priority changes asynchronous start order but does not create a completion dependency; use sequencing when a documented dependency must finish first.
 
 ## Use tag sequencing only when required
@@ -205,6 +211,13 @@ Prefer independent tags triggered by the same business event when the vendor tem
 GTM setup and cleanup tags invoked through sequencing ignore their own firing and blocking triggers. Put the applicable vendor block on the initiating tag, verify that a denied/unknown event never starts the sequence, and do not treat an exception attached only to the sequenced tag as protection.
 
 Document failure behavior: decide whether the event tag should run if the setup tag fails. Do not use sequencing to hide a missing base-tag or consent design.
+
+Current execution-model boundary: a setup/cleanup-only tag with no ordinary firing trigger is not
+representable by this release's execution topology. Do not add a dummy trigger, ineffective child
+exception, or a manually edited checkpoint to make it pass. If the installed template supports a
+correct independent native route, use that route; otherwise mark the sequencing-dependent
+requirement `Blocked`. Do not claim setup/cleanup-only coverage or include it in this release's
+field-test acceptance. Inspect existing sequences for impact even when their mutation is blocked.
 
 ## Account for environments and hostnames
 

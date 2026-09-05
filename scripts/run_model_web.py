@@ -1,7 +1,6 @@
-"""Shared web-domain enums plus configuration-run@2.1 compatibility constants."""
+"""Shared current web-domain enums for configuration-run@4.0."""
 
-SCHEMA_VERSION = "2.1"
-LEGACY_SCHEMA_VERSIONS = {"2.0"}
+SCHEMA_VERSION = "4.0"
 VERIFICATION_SCHEMA_VERSION = "1.0"
 RUN_PHASES = {"preflight", "mutation", "readback", "complete"}
 RUN_STATUSES = {"In progress", "Configured", "Partial", "Blocked", "Deferred"}
@@ -111,6 +110,8 @@ FIRST_PARTY_PRODUCTS = {
     "google-ads-enhanced-conversions": "google-ads",
     "google-ads-tag-wide-user-data": "google-ads",
     "google-ads-user-provided-data-event": "google-ads",
+    "google-ads-server-user-data-transport": "google-ads-transport",
+    "google-ads-server-user-provided-data-event": "google-ads-transport",
 }
 TAG_TYPE_ALIASES = {
     "ga4configuration": "gaawc",
@@ -127,15 +128,18 @@ PRE_CMP_POLICIES = {
     "not-applicable",
     "source-after-readiness",
     "later-fresh-event",
+    "drop-unconsented-occurrence",
     "explicit-one-time-replay",
     "external-dependency",
 }
 PAGE_VIEW_OWNERS = {
     "google-tag-automatic",
     "dedicated-ga4-event",
+    "internal-tag",
     "external",
     "intentionally-none",
 }
+PAGE_VIEW_OCCURRENCES = {"initial-page-load", "virtual-navigation"}
 ECOMMERCE_ROUTES = {
     "not-applicable",
     "native-data-layer",
@@ -143,11 +147,14 @@ ECOMMERCE_ROUTES = {
     "manual",
 }
 FIRST_PARTY_FEATURES = {
+    "analytics-user-id",
     "ga4-user-id",
     "ga4-user-provided-data",
     "google-ads-enhanced-conversions",
     "google-ads-tag-wide-user-data",
     "google-ads-user-provided-data-event",
+    "google-ads-server-user-data-transport",
+    "google-ads-server-user-provided-data-event",
     "vendor-advanced-matching",
 }
 INVENTORY_DISPOSITIONS = {

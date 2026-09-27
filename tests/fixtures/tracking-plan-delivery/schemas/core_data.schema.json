@@ -1,0 +1,53 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "page": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "page_template": {
+          "type": "string",
+          "description": "Identifies the stable functional template of the displayed page or route.",
+          "enum": [
+            "home",
+            "product_detail",
+            "quote_form",
+            "confirmation"
+          ]
+        }
+      },
+      "required": [
+        "page_template"
+      ]
+    },
+    "user": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "login_status": {
+          "type": "string",
+          "description": "Indicates whether the current visitor is authenticated.",
+          "enum": [
+            "logged_out",
+            "logged_in"
+          ]
+        },
+        "user_id": {
+          "type": "string",
+          "description": "Identifies the stable first-party account identifier mapped to the official GA4 User-ID configuration setting."
+        }
+      },
+      "required": [
+        "login_status"
+      ]
+    }
+  },
+  "required": [
+    "page",
+    "user"
+  ],
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/ga4-tracking-plan/events/core_data.schema.json",
+  "title": "dataLayer push contract for \"core_data\""
+}

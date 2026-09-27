@@ -2,302 +2,141 @@
 
 ## Contents
 
-- [Use a capability-first execution order](#use-a-capability-first-execution-order)
-- [Establish tool capabilities before mutation](#establish-tool-capabilities-before-mutation)
-- [Discover exact actions and pagination](#discover-exact-actions-and-pagination)
-- [Build an object-family capability profile](#build-an-object-family-capability-profile)
-- [Translate the change manifest deterministically](#translate-the-change-manifest-deterministically)
-- [Apply read-before-write discipline](#apply-read-before-write-discipline)
-- [Maintain a current-operation journal](#maintain-a-current-operation-journal)
-- [Prove idempotency](#prove-idempotency)
-- [Handle authentication, quotas, and uncertain writes](#handle-authentication-quotas-and-uncertain-writes)
-- [Handle partial failure](#handle-partial-failure)
-- [Use export/import safely](#use-exportimport-safely)
-- [Use the UI as a controlled fallback](#use-the-ui-as-a-controlled-fallback)
-- [Stop when mutation is unavailable](#stop-when-mutation-is-unavailable)
-- [Official entry points](#official-entry-points)
+- One execution engine
+- Packaged MCP adapter
+- Baseline and references
+- Writes, recovery and convergence
+- Import and UI
 
-## Use a capability-first execution order
+Prefer a connected GTM MCP, then GTM API, authorized complete export/import, then signed-in UI for
+unsupported fields. Inspect current tool schemas and response shapes before building the capability
+profile. An available browser is not a reason to abandon a working semantic adapter.
 
-Prefer:
+## One execution engine
 
-1. a purpose-built GTM MCP connected to the correct Google account;
-2. the GTM API with appropriate container/workspace access;
-3. an authorized complete export/import path when it can preserve the required workspace schema;
-4. the signed-in GTM UI for unavailable operations or visual verification.
+All adapters implement `identity`, `read`, `mutate`, `list_resource_page` and
+`list_workspace_changes_page` for `adapter_runtime.TargetAdapterRegistry`. The runtime owns
+pagination receipts, drift checks, write checkpoints, recovery, comparisons and finalization.
+Adapters transport and normalize authenticated observations; they do not decide success.
 
-Do not open a browser merely because one exists when a connected semantic GTM tool can perform and verify the operation. Do not claim a mutation from an export-only or read-only source.
+Identity is read from authenticated workspace and container metadata, including container type,
+and must match the authorized target at each execution boundary. Never substitute caller-assigned
+identity. Discover get/list/create/update/remove per family independently; unsupported actions
+block only their dependency subtree. Client and Transformation support does not follow from tag
+support. Scope is governed by [utility-contract.md](../01-orientation/utility-contract.md).
 
-## Establish tool capabilities before mutation
+## Packaged MCP adapter
 
-Confirm whether the selected adapter can:
+`scripts/mcp_queue_adapter.py` supplies `McpTargetAdapter` and `QueueTransport` for the callable GTM
+MCP family tools. It supports discovered tag, trigger, variable, folder, Client, Transformation,
+template and Zone methods using `createOrUpdateConfig`. Other families and replacement operations
+need a protocol adapter that can express and recover their actual boundaries; do not claim those
+capabilities in this profile. The existing runtime remains the authority for every adapter.
 
-- list accounts, containers, workspaces, versions, and permissions;
-- create/reuse a dedicated workspace;
-- read, create, and modify tags, triggers, variables, folders, and templates;
-- list or enable required built-in variables;
-- inspect Google tag configuration/settings objects and linked destinations;
-- inspect applicable Zones, environments, container settings, and their restrictions;
-- expose built-in/additional consent settings and blocking triggers;
-- inspect references/consumers and workspace conflicts;
-- inspect or synchronize workspace state and report merge conflicts without resolving them implicitly;
-- expose stable object IDs/paths, fingerprints, firing options, advanced settings, and consent fields;
-- re-read saved objects;
-- avoid version creation and publication.
+Configure response paths and numbered pagination from the actual connected MCP response. Do not
+copy sample paths without inspection, infer a tool action, or guess a page origin. Use the smallest
+legal page size only if the MCP requires it; a full final page requires one further exhaustion read.
+The adapter rejects mismatched response structure rather than interpreting it as an empty inventory.
+Tool errors during mutations are ambiguous until readback establishes the outcome.
 
-Use the UI only for missing semantic fields, unsupported template operations, or visual confirmation. Keep the same target account/container/workspace across adapters.
+A profile file maps each run `target_id` to this shape (illustrative response paths):
 
-## Discover exact actions and pagination
+```json
+{
+  "web-main": {
+    "tool_prefix": "mcp__gtm__",
+    "workspace_path": [],
+    "container_path": [],
+    "status_path": [],
+    "families": {
+      "tag": {
+        "actions": ["list", "get", "create", "update"],
+        "first_page": 1,
+        "page_size": 20,
+        "list_path": ["tag"],
+        "object_path": []
+      }
+    }
+  }
+}
+```
 
-Inspect the connected adapter's current schema or capability description before the first operation.
-Record exact action names, required arguments, returned object shapes, pagination mechanism and page
-limits, stable IDs, fingerprints, supported template/consent fields, and any batch or quota behavior.
+Add each required family from its inspected schema. The adapter unwraps structured MCP results or
+one JSON text block, checks identity, resolves known trigger/folder references and preserves native
+GTM fields. Intentions must use the native GTM schema, not a client-specific synthetic field layout.
+No hard-coded variable or destination ID belongs in transport code.
 
-Do not guess a generic action alias such as `status`, assume that two object families accept the same
-page size, or treat the first page as a complete inventory. Exhaust every relevant page using the
-adapter's returned cursor/page token or documented offset semantics. Keep list/readback volume as low
-as practical, prefer supported batch reads, and respect throttling/retry guidance without replacing a
-complete inventory with a partial one.
+Start the worker from the project directory using absolute paths:
 
-Cache the capability profile for the current run and re-check it after an adapter error that indicates
-schema drift, unsupported fields, authentication changes, or a different endpoint/version. Never
-expose credentials while diagnosing compatibility.
+```powershell
+python "<skill-dir>/scripts/mcp_execute.py" --run configuration-run.json --profiles profiles.json --queue "<new-empty-queue-directory>"
+```
 
-Use one authoritative read baseline per run:
+Use the host's background execution facility; on Windows a separate `Start-Process` must be hidden.
+Then load `scripts/mcp_relay.js` into a `functions.exec` call with absolute `pythonPath`, `scriptPath`
+(pointing to `mcp_queue_adapter.py`) and `queuePath` bindings. It services sequential requests in one
+bounded relay, emits progress at intervals, and returns completion metadata. Keep reads that can be
+batched independent; writes and their dependencies remain ordered. Do not run multiple relays for
+one queue. Stop the worker if the relay cannot continue. A fresh queue is required for resume so
+stale requests cannot be replayed. Inspect the run and resolve uncertainty before another execution.
 
-- for an isolated change, exhaust each relevant object family once;
-- for a refonte or broad migration, exhaust one complete paginated baseline for the container and
-  current workspace changes;
-- analyze references and consumers locally from that snapshot;
-- immediately before a write, re-read only the target and affected shared consumers;
-- after a write, re-read the saved target; refresh a whole family only after a conflict, external
-  workspace change, authentication/identity change, or pagination/schema anomaly.
+The queue contains redacted responses only. Credential-bearing writes cannot use the disk queue;
+see [secret handling](configuration-run-and-resume.md#credential-findings-and-transport-limits).
+Large replies cross a non-echoing terminal stream to avoid Windows command-line limits; the relay
+waits for the receiver's readiness marker before sending any data. Raw response bytes stay in
+process memory until the Python redactor writes the response. The host transcript boundary still
+applies. A relay deadline or delivery failure requires stopping the worker and inspecting the run.
+The transport is a bridge inside the authorized local execution environment, not an authentication
+boundary against a process that can edit its files or code. The host still controls tool access.
 
-Do not turn repeated MCP listing into a substitute for local dependency analysis. Record baseline
-strategy, completion, families, timestamp, target identity, pre-existing changes, and fingerprint
-in the configuration-run artifact.
+## Baseline and references
 
-## Build an object-family capability profile
+For isolated work, exhaust each planned family and its required dependency/consumer families once.
+Shared Google Configuration Settings changes require the complete tag consumer inventory. Refonte
+requires all supported families, including empty ones. Record pre-existing workspace changes
+separately. Capture baseline evidence through the runtime rather than authoring receipts.
 
-Before registration and again before each execution boundary, require the adapter to read its
-authenticated `account_id`, `container_id`, `workspace_id`, and `container_type`; all four must
-exactly match the authorized run target. A caller-assigned logical target ID is never identity
-evidence. Record `list/read/create/update/revert/readback/pagination` capability independently for workspace,
-tag, trigger, user-defined variable, built-in variable, folder, template, Google tag configuration,
-destination, Zone, environment, and applicable container settings. Also record whether the action is
-valid for a client-side web container and whether it is routine or high-impact.
+Analyze reuse and closure locally. Immediately before a write re-read the target; refresh shared
+consumers where applicable. After writing read back the object. A conflict, external change,
+authentication change or pagination anomaly can justify refreshing a family; avoid repeated full
+inventory reads during routine work.
 
-Do not infer write support from list support. Do not treat a deprecated or absent destination-link
-action as authorization to use another endpoint. Do not route server-client or server
-Transformation resources into a web-container configuration.
+Annotate canonical records with `object_type`; preserve raw GTM `type`. Keep GTM Parameter `map`
+entries keyed and unique, and `list` entries ordered. Normalize only documented root metadata.
+Retain every material field; an unrepresented field is not equality evidence. Include referenced
+triggers, folders and setup/cleanup tags as comparison context. Only the three reserved web trigger
+IDs may remain without listed objects: `2147479553`, `2147479572`, `2147479573`. Resolve every other
+ID exactly; ambiguous or missing references block comparison.
 
-## Translate the change manifest deterministically
+## Writes, recovery and convergence
 
-Use the operational configuration map as the adapter input. For each object row, resolve:
+The runtime performs fresh pre-write comparisons, journals `in_progress`, then saves and reads back.
+A create collision cannot become an overwrite. Never retry an ambiguous write until authoritative
+readback resolves it. Bounded retries apply only to documented non-applied rate limits; respect
+Retry-After. Authentication failure stops the affected target, not unrelated authorized targets.
+Do not drop an unsupported intended field merely to make the tool accept the payload.
 
-- stable parent path and intended workspace;
-- action, object type, existing ID/path, and current fingerprint;
-- exact adapter/template type derived from an official schema or inspected existing object;
-- typed parameters, trigger IDs, blocking-trigger IDs, folder, consent settings, priority, schedule, firing option, sequencing, and notes;
-- dependencies and creation order;
-- complete pre-change representation for every update.
+Preserve pre-existing workspace changes. `workspaces.getStatus` is a view since the base version,
+not attribution to this run or proof of correctness. Use baseline status plus the operation journal
+for attribution, and saved-object comparisons plus fresh read-only convergence for acceptance.
+The runtime rechecks every required operation and derives Configured only on a complete no-op pass.
 
-Do not mutate from an informal prose summary. If the adapter cannot represent a required field or
-preserve the intended type/shape, stop that object and use another authorized adapter or mark the
-affected configuration `Blocked`.
+Restore or remove only within existing explicit authority; a partial result needs a precise recovery
+boundary. Publication is never a way to make workspace changes visible. The
+[run reference](configuration-run-and-resume.md) owns all state transitions.
 
-For analytics, use the strict configuration-contract 7.0 validation, normalized collection contract,
-and zero-difference conformance result as adapter preconditions. Keep technical infrastructure fields
-separate so the adapter does not mistake a required GTM reference for an approved outgoing
-parameter.
+## Import and UI
 
-## Apply read-before-write discipline
-
-For every adapter:
-
-1. Resolve the target by stable account/container/workspace ID, not display name alone.
-2. Read current object state and conflicts.
-3. Design the complete dependency graph.
-4. Create dependencies before consumers.
-5. Re-read every mutation and compare intended versus stored fields.
-6. Record returned IDs and fingerprints/version identifiers where available.
-7. Stop on a conflict or unexpected consumer rather than overwriting silently.
-
-When complete JSON is available, use `scripts/diff_object_graph.py` as a read-only comparison aid.
-Annotate every normalized record with its canonical GTM resource family in `object_type`; do not reuse the raw
-GTM `type` field for that annotation because tag, trigger, and variable type codes are material
-configuration and must remain comparable.
-Normalize only documented server metadata such as top-level fingerprints, paths, generated IDs, and
-timestamps. Never ignore nested tag fields, trigger references, consent, template fields, routing,
-or configuration values.
-
-Supply the complete in-scope reference closure: include every user-created firing or blocking
-trigger, parent folder, and setup/cleanup tag referenced by a compared object. The comparator
-recognizes GTM's three reserved web-container triggers (`2147479553`, `2147479572`, and
-`2147479573`) directly because trigger-list responses omit them; do not synthesize fake trigger
-records. Any other unresolved raw or semantic reference remains invalid comparison input rather
-than proof of equality.
-
-For setup and teardown sequencing, resolve the API `tagName` as an exact tag name when supplied in
-that documented form, or as a returned ID/semantic identity when that is the adapter representation.
-Reject unresolved or ambiguous matches rather than treating the raw string as comparable.
-
-Preserve the GTM API `parameter` shape. Top-level keyed parameters and nested `map` entries compare
-by their unique keys; nested `list` entries preserve order and ignore their own keys. Do not sort an
-ordered list or treat the `monitoringMetadata` Parameter object itself as a set.
-
-Never use a guessed template type code or API parameter. Derive it from the existing object, API schema, official template, or tool response.
-
-## Maintain a current-operation journal
-
-Use the versioned configuration-run artifact as the durable current-operation journal. Before
-mutation, snapshot the dedicated workspace identity, synchronization/conflict state, and all pre-
-existing workspace changes. For every write, record the requirement ID, action, object path/ID,
-pre-change fingerprint and representation when applicable, returned fingerprint, saved result, and
-verification status. Persist `in_progress` immediately before the call and atomically checkpoint its
-outcome before starting a dependent operation.
-
-Use one exclusive writer for the same run artifact. This protects checkpoint history from stale
-concurrent processes without inventing a global workspace lock. Never replace an existing artifact
-that contains saved, verified, failed, or uncertain history.
-
-Report these separately:
-
-1. pre-existing workspace changes;
-2. current-run (current-operation) created, updated, reused, untouched, failed, or explicitly authorized removed objects;
-3. final workspace totals and conflicts.
-
-Do not attribute the final workspace total to the current run. Use the journal for partial-failure
-recovery and to prove that unrelated work remained untouched.
-
-## Prove idempotency
-
-After all successful saved-object comparisons, rerun the approved-to-saved collection-contract
-comparison and recompute the change manifest against the new workspace state. Every completed row
-must resolve to `reuse` or `untouched`. A second run that proposes another create or repeats the same
-update fails acceptance until matching, equivalence, or stored-field normalization is corrected.
-
-Do not use names alone as idempotency keys. Compare stable IDs where present and the semantic dimensions defined by the naming-and-reuse reference.
-
-## Handle authentication, quotas, and uncertain writes
-
-- On a resumed run, validate and inspect the configuration-run artifact first. Resolve any
-  `in_progress` or `uncertain` operation by authoritative readback before a new write.
-- Stop immediately on wrong-account, wrong-container, expired-authentication, or permission errors;
-  never fall back to another visible container or account.
-- Honor documented retry or quota guidance for throttling and transient server errors. Use bounded
-  retries, honor a valid `Retry-After` when it is inside the configured window, stop rather than
-  retry early when it exceeds that window, otherwise apply bounded exponential backoff with jitter,
-  and keep the user informed during a long retry window.
-- Do not retry a create, update, import, or template operation blindly after a timeout or ambiguous
-  response. First list/read back the exact parent workspace and compare stable identity, semantics,
-  fingerprints, and saved fields to determine whether the write succeeded.
-- Stop dependent writes when readback cannot distinguish success from failure. Record the uncertain
-  object and recovery action instead of risking a duplicate.
-- Re-discover the adapter capability profile after an unsupported-field or schema-drift error; do
-  not remove an intended field merely to make the adapter accept the request.
-
-For a programmatic adapter, `scripts/adapter_runtime.py` provides the tested pagination, bounded
-retry, authenticated baseline, read-before-write, ambiguous-response, dependency-stop, and
-checkpoint state machine. The target adapter must implement `list_resource_page` and
-`list_workspace_changes_page`. Immediately before the first write, the runtime exhausts every
-list-capable resource family, creates pagination receipts itself, retains the redacted canonical
-object graph and pre-existing workspace changes, and fingerprints that evidence. There is no
-caller-supplied baseline command or public baseline-recording API. A web Google Configuration Settings variable mutation also
-requires exhaustive tag enumeration, because tags are its consumers. Missing tag-list capability
-fails that target before any write. The validator recomputes resource identities, counts, and the
-baseline fingerprint from retained evidence on every load.
-Before each shared-settings write, including on resume, refresh the tag inventory and reject an
-unreviewed consumer. Retained receipts and hashes check consistency; authenticated reads establish
-origin. The comparison method must return structured evidence covering every top-level intended field and bound
-to the intended and authoritative saved payloads; a boolean match claim is invalid. MCP and UI runs
-must obtain equivalent authenticated exhaustive reads before mutation; a hand-authored receipt is
-not evidence.
-
-A documented non-applied rejection or exhausted write rate limit is `failed`. If the write returned
-successfully or ambiguously and the following readback fails, keep it `uncertain`; never reopen that
-operation as a fresh write without resolving the saved outcome.
-
-Normalize adapter-local tag `firingTriggerId`/`blockingTriggerId` values to the matching
-`trigger::<name>` object keys in the run artifact after exact ID resolution. Keep only the three
-reserved built-in trigger IDs as recognized built-in references. Never compare a human trigger name
-to an opaque adapter ID or invent a semantic reference when resolution is ambiguous.
-
-## Handle partial failure
-
-If a mutation fails:
-
-- stop dependent writes;
-- inventory which objects were created or changed;
-- do not delete or roll back unrelated user work;
-- repair only the objects created or changed by the current authorized operation when safe;
-- restore a modified pre-existing object only when its exact pre-change state was captured and restoration remains within the authorized operation; otherwise preserve the partial state and report it;
-- remove an object only when the current authorization explicitly includes rollback or deletion and its ownership is confirmed;
-- report the partial state and exact blocker.
-
-Do not publish to make an API/MCP change visible.
-
-## Use export/import safely
-
-Treat an export as complete evidence only when it includes all relevant tags, triggers, variables, templates, folders, consent settings, and references from the intended workspace/version.
-
-For an authorized export/import operation, preserve container/object schema and clearly distinguish
-create, merge, overwrite, and delete behavior. Do not import when the adapter cannot target the
-dedicated workspace or cannot avoid an unapproved overwrite, delete, version, or publication.
-
-## Use the UI as a controlled fallback
-
-When UI work is required:
-
-- verify the signed-in Google account and container ID before each mutation batch;
-- select the dedicated workspace explicitly;
-- inspect visible template and consent fields;
-- save one logical object at a time and re-open it;
-- never click Submit, Publish, or Create Version;
-- record any UI-only field that the semantic adapter could not verify.
-
-## Stop when mutation is unavailable
-
-If authentication, permissions, tool availability, or workspace limits prevent mutation:
-
-- mark the affected requirement `Blocked`;
-- state the exact account, access, capability, workspace, or adapter condition required;
-- preserve any safe research and concise intended-object information needed to resume;
-- state explicitly that no affected GTM object changed, or report the exact partial saved state.
-
-Do not turn the run into a successful specification or planning workflow. Configuration remains the
-required outcome.
+An import must target the dedicated workspace, preserve the complete intended schema and avoid
+unapproved overwrite/deletion. In the UI verify account/container/workspace, save one logical object,
+reopen it, and report any unverified fields. Neither path may Submit, Publish or Create Version.
+Unavailable write or verification capability is a specific Blocked requirement, not a successful
+specification.
 
 ## Official entry points
 
 - https://developers.google.com/tag-platform/tag-manager/api/v2
-- https://developers.google.com/tag-platform/tag-manager/api/reference/rest/v2/accounts.containers.workspaces/sync
+- https://developers.google.com/tag-platform/tag-manager/api/reference/rest/v2/accounts.containers.workspaces/getStatus
 - https://developers.google.com/tag-platform/tag-manager/api/reference/rest/v2/accounts.containers.workspaces.tags
-- https://developers.google.com/tag-platform/tag-manager/api/reference/rest
-- https://support.google.com/tagmanager/answer/6106997
-
-## Route adapters by target and family
-
-Bind one authenticated adapter/session to each stable `target_id`. Discover list/get/create/update/
-remove support per resource family and exhaust pagination per target. Server capability discovery
-must include Clients and Transformations when those objects are in scope; support for server tags
-does not imply support for Client claim changes.
-
-Block only the unsupported family and its dependency subtree. An existing compatible Client may
-allow independent tag work after authoritative readback; an unconfigurable required Client blocks
-its consumers and cutover. Redact secret and PII-bearing fields before a response, error, baseline,
-or diff is persisted.
-
-Prefer GTM MCP, then API, then authorized complete export/import, then signed-in UI for an operation
-the semantic adapters cannot express. Do not silently switch to browser automation or synthesize
-unknown API/template fields. Keep bounded non-applied rate-limit retries and read-before-retry for
-ambiguous responses.
-
-After all operations are verified, run the adapter's read-only convergence pass. It must freshly
-read every operation, recompute the target comparison, persist `no-op` or `mutation-required`, and
-perform zero mutations. Only a complete set of `no-op` observations may unlock finalization.
-
-Official server families:
-
 - https://developers.google.com/tag-platform/tag-manager/api/reference/rest/v2/accounts.containers.workspaces.clients
 - https://developers.google.com/tag-platform/tag-manager/api/reference/rest/v2/accounts.containers.workspaces.transformations

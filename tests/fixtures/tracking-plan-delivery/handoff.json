@@ -1,0 +1,175 @@
+{
+  "handoff_version": "1.1.0",
+  "run_id": "run_11111111111111111111111111111111",
+  "generated_at": "2026-09-27T17:30:11.649390+00:00",
+  "skill": {
+    "name": "ga4-tracking-plan",
+    "version": "2.9.1"
+  },
+  "plan": {
+    "title": "Example GA4 tracking plan",
+    "version": "1.0",
+    "schema_version": "5.0.0",
+    "target_state": "to_be",
+    "language": "en",
+    "scope": "Product discovery and quote request",
+    "canonical_sha256": "bee585a6d9aaa98a517ad5163b1b89f852d4e2ba7b6feb8eaf33f4c103e2cb74",
+    "target_sites": [
+      "https://example.com/"
+    ]
+  },
+  "approval": {
+    "state": "approved",
+    "approved_by": "Round-trip check"
+  },
+  "discovery_reports": [
+    {
+      "report_id": "discovery_example_com_fixture",
+      "run_id": "run_11111111111111111111111111111111",
+      "source_id": "live_site",
+      "sha256": "e6991df5e7286c34470e9595089645bc7959cc86cd33908e10eaa35f530b225d",
+      "outcome": "completed",
+      "hint_ids": [
+        "item_consideration",
+        "quote_intentional_start"
+      ],
+      "journey_ids": [
+        "product_discovery",
+        "quote_request"
+      ]
+    }
+  ],
+  "upstream_evidence": [
+    {
+      "source_id": "live_site",
+      "source_type": "live_website",
+      "reference": "https://example.com/",
+      "evidence_role": "live_behavior",
+      "state": "as_is",
+      "sha256": "e6991df5e7286c34470e9595089645bc7959cc86cd33908e10eaa35f530b225d"
+    },
+    {
+      "source_id": "business_brief",
+      "source_type": "user_input",
+      "reference": "Example project brief",
+      "evidence_role": "business_requirement",
+      "state": "to_be"
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "plan.json",
+      "role": "canonical_tracking_plan",
+      "bytes": 19574,
+      "sha256": "bee585a6d9aaa98a517ad5163b1b89f852d4e2ba7b6feb8eaf33f4c103e2cb74"
+    },
+    {
+      "path": "internal/analysis-context.json",
+      "role": "analysis_evidence_and_coverage",
+      "bytes": 12154,
+      "sha256": "ab164aca4b437ba7f5824c50eb53ffdf355fa710af7c76b4a6ae117a99f0d69b"
+    },
+    {
+      "path": "internal/official-check.json",
+      "role": "official_source_verification",
+      "bytes": 4488,
+      "sha256": "862fe41329aee38fdf54a58c125a476ef6fcc3728d59d4ec33b70b5ba6cafd08"
+    },
+    {
+      "path": "internal/discovery/example-discovery-report.json",
+      "role": "rendered_discovery_report",
+      "bytes": 4424,
+      "sha256": "e6991df5e7286c34470e9595089645bc7959cc86cd33908e10eaa35f530b225d"
+    },
+    {
+      "path": "contracts/tracking-plan.schema.json",
+      "role": "shared_machine_contract",
+      "bytes": 14938,
+      "sha256": "4088014900ead3fa5be6c5beef1eb201ec47860e39b99fcbe83252df424a23b9"
+    },
+    {
+      "path": "contracts/analysis-context.schema.json",
+      "role": "shared_machine_contract",
+      "bytes": 21228,
+      "sha256": "892b9766cf0659d32b0a85a8f31541ebc073a428092d1a6bb0f488f2db82b802"
+    },
+    {
+      "path": "contracts/discovery-report.schema.json",
+      "role": "shared_machine_contract",
+      "bytes": 18983,
+      "sha256": "70ac9e10079eb786b677a5db21c8a4112a4e4c91d3467e3933f253eeb2e818d1"
+    },
+    {
+      "path": "contracts/expected-events.schema.json",
+      "role": "shared_machine_contract",
+      "bytes": 2516,
+      "sha256": "866dcf766327c92d01a8b37d69978ba34d63bd44fd528cca22e030cc5b4076eb"
+    },
+    {
+      "path": "contracts/delivery-handoff.schema.json",
+      "role": "shared_machine_contract",
+      "bytes": 4529,
+      "sha256": "3759333f5aad5cf275211f2a9f9c03d4f5e379c77553b2475db7f699d99d1145"
+    },
+    {
+      "path": "contracts/change-request.schema.json",
+      "role": "shared_machine_contract",
+      "bytes": 1690,
+      "sha256": "dbb2de9f717087cbdd531c8860ac8887c2f77d4ffb620e232fe5358036a0fdcf"
+    },
+    {
+      "path": "contracts/drift-report.schema.json",
+      "role": "shared_machine_contract",
+      "bytes": 926,
+      "sha256": "d8cf6be48a1bc16519eabe6fcc4a4fcd178fe08e0ea0270ae06fe56477db6d7a"
+    },
+    {
+      "path": "contracts/impact-report.schema.json",
+      "role": "shared_machine_contract",
+      "bytes": 1604,
+      "sha256": "728d460258ff57c670619ec18f752c6791d2e401b3a514e1e8fcf9a8c0a9c68b"
+    },
+    {
+      "path": "contracts/access-profiles.schema.json",
+      "role": "shared_machine_contract",
+      "bytes": 5382,
+      "sha256": "cc030839b3ba35189ffb7d87c08f427ae16f3fbcfad06cd25a80ddf5a2b1db4f"
+    },
+    {
+      "path": "contracts/template-map.schema.json",
+      "role": "shared_machine_contract",
+      "bytes": 8315,
+      "sha256": "49f9c24d00389e9e5cf8047ccf99279fedd17e4249ebd075fffee134f5a90656"
+    },
+    {
+      "path": "schemas/core_data.schema.json",
+      "role": "event_push_schema",
+      "bytes": 1434,
+      "sha256": "86dc13d7e1f702d29fd1ef2ba33a32450ecb0e3d58660b93affab3628fa03d95"
+    },
+    {
+      "path": "schemas/view_item.schema.json",
+      "role": "event_push_schema",
+      "bytes": 2591,
+      "sha256": "595543b43ed435063ef8dc333e42bf3488ebdf6b342f9935e1ba6f8c6dc43cd3"
+    },
+    {
+      "path": "schemas/begin_quote.schema.json",
+      "role": "event_push_schema",
+      "bytes": 1068,
+      "sha256": "cb09adac1f5ee9d8f30eb9450f035c79ffab6d592297956b0f00022a388ff5b3"
+    },
+    {
+      "path": "expected-events.json",
+      "role": "runtime_expected_events_contract",
+      "bytes": 6104,
+      "sha256": "0d6fb932c24015bdada6dd6ec74f4bc9e0a0af12f906eb02c5f09cbcc2eeaf10"
+    },
+    {
+      "path": "tracking-plan.xlsx",
+      "role": "human_tracking_plan_workbook",
+      "bytes": 23667,
+      "sha256": "a59275e0fd4ca2b5642326264bd47c7f2bcca1e90a495ab8a170a76a5ed9c658"
+    }
+  ]
+}

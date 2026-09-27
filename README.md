@@ -7,9 +7,12 @@ object graphs. It never publishes and never substitutes configuration for runtim
 
 ## Current Release
 
-**v10.0.0** makes the routed web, server, and pipeline configurator current-only and closes the
-utility and correctness gaps found in independent evaluation. Authority, baselines, adapter
-capabilities, mutations, readback, recovery, and status remain isolated per target.
+**v10.1.0** repairs credential redaction and tracking-plan intake, adds a packaged MCP transport
+and compact request compiler, and makes results delta-first. Product-specific reading is routed
+conditionally. The existing authority, drift, recovery and convergence checks remain in one engine.
+
+The paired ga4-tracking-plan 2.9.2 update emits current handoffs only; obsolete input must be
+regenerated. See CHANGELOG.md for tested scope and transport limitations.
 
 Existing coverage includes GTM server Clients, Event Data variables, server triggers/tags/templates,
 Transformations, GA4 and media destinations, transport ownership, consent propagation, field-shape
@@ -196,10 +199,10 @@ the packaged runtime scripts, and `LICENSE` into the target skill directory.
 python -m pip install -e ".[dev]"
 python -m ruff format --no-cache --check scripts tests
 python -m ruff check --no-cache scripts tests
-python scripts/check_release.py --tag v10.0.0 --release-notes CHANGELOG.md
+python scripts/check_release.py --tag v10.1.0 --release-notes CHANGELOG.md
 python -m unittest discover -s tests -v
 python -m compileall -q scripts
-python scripts/build_skill_package.py --output dist/configure-gtm-v10.0.0.zip
+python scripts/build_skill_package.py --output dist/configure-gtm-v10.1.0.zip
 git diff --check
 ~~~
 

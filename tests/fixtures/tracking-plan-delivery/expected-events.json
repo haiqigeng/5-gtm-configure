@@ -1,0 +1,187 @@
+{
+  "contract_version": "1.0.0",
+  "plan_version": "1.0",
+  "data_layer_convention": {
+    "name": "Default web dataLayer",
+    "origin": "default",
+    "event_key": "event",
+    "wrappers": {
+      "page": "page",
+      "event": "event_data",
+      "ecommerce": "ecommerce",
+      "user": "user"
+    },
+    "notes": "Clear event_data or ecommerce before replacing a previously populated object."
+  },
+  "events": [
+    {
+      "event_name": "core_data",
+      "classification": "context",
+      "journey_ids": [
+        "product_discovery",
+        "quote_request"
+      ],
+      "measurement_opportunity_ids": [],
+      "trigger": "Push on every full page load and SPA route change after page and user state are available, and refresh the same context after an authentication-state change.",
+      "locations": [
+        {
+          "page_type": "all_pages",
+          "url_pattern": "https://example.com/*"
+        }
+      ],
+      "clear_before_push": [],
+      "push_schema": "schemas/core_data.schema.json",
+      "parameters": [
+        {
+          "name": "page_template",
+          "scope": "implementation",
+          "type": "string",
+          "requirement": "required",
+          "data_layer_path": "page.page_template",
+          "destination": "implementation_only"
+        },
+        {
+          "name": "login_status",
+          "scope": "user",
+          "type": "string",
+          "requirement": "required",
+          "data_layer_path": "user.login_status",
+          "destination": "ga4_user_property"
+        },
+        {
+          "name": "user_id",
+          "scope": "user",
+          "type": "string",
+          "requirement": "conditional",
+          "condition": "Send after authentication when a stable first-party User-ID is available; do not send before first sign-in and clear the GA4 setting with null after sign-out.",
+          "data_layer_path": "user.user_id",
+          "destination": "ga4_user_id"
+        }
+      ]
+    },
+    {
+      "event_name": "view_item",
+      "classification": "official_ecommerce",
+      "journey_ids": [
+        "product_discovery"
+      ],
+      "measurement_opportunity_ids": [
+        "product_item_consideration"
+      ],
+      "business_question": "Which products and selected variants attract consideration before later commerce actions?",
+      "trigger": "Push once after the primary product detail and selected default variant are rendered.",
+      "locations": [
+        {
+          "page_type": "product_detail",
+          "url_pattern": "https://example.com/products/{product}",
+          "component": "Product detail"
+        }
+      ],
+      "clear_before_push": [
+        "ecommerce"
+      ],
+      "push_schema": "schemas/view_item.schema.json",
+      "parameters": [
+        {
+          "name": "currency",
+          "scope": "event",
+          "type": "string",
+          "requirement": "conditional",
+          "condition": "Required when value is sent.",
+          "data_layer_path": "ecommerce.currency",
+          "destination": "ga4_event_parameter"
+        },
+        {
+          "name": "value",
+          "scope": "event",
+          "type": "number",
+          "requirement": "optional",
+          "data_layer_path": "ecommerce.value",
+          "destination": "ga4_event_parameter"
+        },
+        {
+          "name": "items",
+          "scope": "event",
+          "type": "array",
+          "requirement": "required",
+          "data_layer_path": "ecommerce.items",
+          "destination": "ga4_event_parameter"
+        },
+        {
+          "name": "item_id",
+          "scope": "item",
+          "type": "string",
+          "requirement": "required",
+          "data_layer_path": "ecommerce.items[].item_id",
+          "destination": "ga4_item_parameter"
+        },
+        {
+          "name": "item_name",
+          "scope": "item",
+          "type": "string",
+          "requirement": "required",
+          "data_layer_path": "ecommerce.items[].item_name",
+          "destination": "ga4_item_parameter"
+        },
+        {
+          "name": "item_variant",
+          "scope": "item",
+          "type": "string",
+          "requirement": "optional",
+          "data_layer_path": "ecommerce.items[].item_variant",
+          "destination": "ga4_item_parameter"
+        },
+        {
+          "name": "item_color",
+          "scope": "item",
+          "type": "string",
+          "requirement": "optional",
+          "data_layer_path": "ecommerce.items[].item_color",
+          "destination": "ga4_item_parameter"
+        }
+      ]
+    },
+    {
+      "event_name": "begin_quote",
+      "classification": "custom",
+      "journey_ids": [
+        "quote_request"
+      ],
+      "measurement_opportunity_ids": [
+        "quote_intentional_start"
+      ],
+      "business_question": "How many visitors intentionally enter the quote journey, and for which project types?",
+      "trigger": "Push once when the visitor enters the first interactive quote step after selecting a quote call to action.",
+      "locations": [
+        {
+          "page_type": "quote_form",
+          "url_pattern": "https://example.com/request-a-quote",
+          "component": "Quote form"
+        }
+      ],
+      "clear_before_push": [
+        "event_data"
+      ],
+      "push_schema": "schemas/begin_quote.schema.json",
+      "parameters": [
+        {
+          "name": "form_name",
+          "scope": "event",
+          "type": "string",
+          "requirement": "required",
+          "data_layer_path": "event_data.form_name",
+          "destination": "ga4_event_parameter"
+        },
+        {
+          "name": "project_type",
+          "scope": "event",
+          "type": "string",
+          "requirement": "conditional",
+          "condition": "Send when the project type is known at journey start.",
+          "data_layer_path": "event_data.project_type",
+          "destination": "ga4_event_parameter"
+        }
+      ]
+    }
+  ]
+}

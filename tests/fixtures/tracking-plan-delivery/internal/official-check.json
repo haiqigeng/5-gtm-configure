@@ -1,0 +1,107 @@
+{
+  "status": "passed",
+  "mode": "live",
+  "checked_at": "2026-09-27T17:30:11.381215+00:00",
+  "selected_source_count": 8,
+  "pages": [
+    {
+      "status": 200,
+      "final_url": "https://developers.google.com/analytics/devguides/collection/ga4/user-id",
+      "content_sha256": "106c4d9934be470ba1b5c39eae2f0d68eecafdc1b9be46f1623d65b19978fb43",
+      "fetched_at": "2026-09-27T17:30:07.113931+00:00",
+      "response_source": "live",
+      "url": "https://developers.google.com/analytics/devguides/collection/ga4/user-id"
+    },
+    {
+      "status": 200,
+      "final_url": "https://developers.google.com/analytics/devguides/collection/ga4/reference/events",
+      "content_sha256": "7729a184cc06be0aa3d41209e866f2772cebfc9b90595d0025e1a78f003f23b1",
+      "fetched_at": "2026-09-27T17:30:11.321497+00:00",
+      "response_source": "live",
+      "url": "https://developers.google.com/analytics/devguides/collection/ga4/reference/events"
+    }
+  ],
+  "checks": [
+    {
+      "owner": "parameter:core_data:user_id:user",
+      "url": "https://developers.google.com/analytics/devguides/collection/ga4/user-id",
+      "section": "Send user IDs",
+      "wording_origin": "faithful_translation",
+      "base_url": "https://developers.google.com/analytics/devguides/collection/ga4/user-id",
+      "fragment": "",
+      "reachable": true,
+      "anchor_found": true
+    },
+    {
+      "owner": "event:view_item",
+      "url": "https://developers.google.com/analytics/devguides/collection/ga4/reference/events#view_item",
+      "section": "view_item",
+      "wording_origin": "exact",
+      "base_url": "https://developers.google.com/analytics/devguides/collection/ga4/reference/events",
+      "fragment": "view_item",
+      "reachable": true,
+      "anchor_found": true
+    },
+    {
+      "owner": "parameter:view_item:currency:event",
+      "url": "https://developers.google.com/analytics/devguides/collection/ga4/reference/events#view_item",
+      "section": "view_item parameters",
+      "wording_origin": "exact",
+      "base_url": "https://developers.google.com/analytics/devguides/collection/ga4/reference/events",
+      "fragment": "view_item",
+      "reachable": true,
+      "anchor_found": true
+    },
+    {
+      "owner": "parameter:view_item:value:event",
+      "url": "https://developers.google.com/analytics/devguides/collection/ga4/reference/events#view_item",
+      "section": "view_item parameters",
+      "wording_origin": "exact",
+      "base_url": "https://developers.google.com/analytics/devguides/collection/ga4/reference/events",
+      "fragment": "view_item",
+      "reachable": true,
+      "anchor_found": true
+    },
+    {
+      "owner": "parameter:view_item:items:event",
+      "url": "https://developers.google.com/analytics/devguides/collection/ga4/reference/events#view_item",
+      "section": "view_item parameters",
+      "wording_origin": "exact",
+      "base_url": "https://developers.google.com/analytics/devguides/collection/ga4/reference/events",
+      "fragment": "view_item",
+      "reachable": true,
+      "anchor_found": true
+    },
+    {
+      "owner": "parameter:view_item:item_id:item",
+      "url": "https://developers.google.com/analytics/devguides/collection/ga4/reference/events#view_item",
+      "section": "items parameter",
+      "wording_origin": "exact",
+      "base_url": "https://developers.google.com/analytics/devguides/collection/ga4/reference/events",
+      "fragment": "view_item",
+      "reachable": true,
+      "anchor_found": true
+    },
+    {
+      "owner": "parameter:view_item:item_name:item",
+      "url": "https://developers.google.com/analytics/devguides/collection/ga4/reference/events#view_item",
+      "section": "items parameter",
+      "wording_origin": "exact",
+      "base_url": "https://developers.google.com/analytics/devguides/collection/ga4/reference/events",
+      "fragment": "view_item",
+      "reachable": true,
+      "anchor_found": true
+    },
+    {
+      "owner": "parameter:view_item:item_variant:item",
+      "url": "https://developers.google.com/analytics/devguides/collection/ga4/reference/events#view_item",
+      "section": "items parameter",
+      "wording_origin": "exact",
+      "base_url": "https://developers.google.com/analytics/devguides/collection/ga4/reference/events",
+      "fragment": "view_item",
+      "reachable": true,
+      "anchor_found": true
+    }
+  ],
+  "errors": []
+}

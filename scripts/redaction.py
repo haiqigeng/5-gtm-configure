@@ -10,7 +10,7 @@ from urllib.parse import parse_qsl, urlsplit
 REDACTED_STATE = "present-not-compared"
 _SECRET_KEY = re.compile(
     r"(?:^|_)(?:token|access_?token|refresh_?token|auth_?token|api_?key|authorization_?header|bearer_?token|client_?secret|credential|"
-    r"password|private_?key|secret)(?:$|_)",
+    r"password|private_?key|consumer_?key|consumer_?secret|oauth|ck|cs|cookie|secret)(?:$|_)",
     re.IGNORECASE,
 )
 _PII_KEY = re.compile(
@@ -29,7 +29,9 @@ _AUTHORIZATION_VALUE = re.compile(
 )
 _CREDENTIAL_ASSIGNMENT = re.compile(
     r"\b(?:x[-_]?api[-_]?key|api[-_]?key|access[-_]?token|refresh[-_]?token|auth[-_]?token|"
-    r"bearer[-_]?token|client[-_]?secret|password|credential|secret)\b\s*[:=]\s*[^\s;,]+",
+    r"bearer[-_]?token|client[-_]?secret|consumer[-_]?(?:key|secret)|token[-_]?secret|"
+    r"oauth[-_]\w+|ck|cs|password|credential|secret)\b[\"']?\s*[:=]\s*"
+    r"(?:\"(?:\\.|[^\"\\])*\"|'(?:\\.|[^'\\])*'|[^\s;,]+)",
     re.IGNORECASE,
 )
 _URL_VALUE = re.compile(r"https?://[^\s<>]+", re.IGNORECASE)
@@ -63,29 +65,30 @@ def _is_protected_key(key: str) -> bool:
     normalized = normalized.replace("-", "_").casefold()
     if normalized in _SAFE_METADATA_KEYS:
         return False
-    if normalized == "authorization":
+    if normalized in {"authorization", "proxy_authorization", "set_cookie"}:
         return True
     return key not in _SAFE_METADATA_KEYS and bool(
         _SECRET_KEY.search(normalized) or _PII_KEY.match(normalized)
     )
 
 
-def _authorization_value_indexes(value: list[Any]) -> set[int]:
-    """Locate GTM's flattened name/value row for an Authorization header."""
-    has_authorization_name = any(
+def _protected_value_indexes(value: list[Any]) -> set[int]:
+    """Join the name and value siblings of a GTM Parameter map row."""
+    name_keys = {"parameter", "name", "key", "fieldname", "field_name", "headername"}
+    value_keys = {"parametervalue", "value", "defaultvalue", "headervalue"}
+    has_protected_name = any(
         isinstance(item, dict)
-        and str(item.get("key", item.get("name", ""))).casefold() == "name"
-        and str(item.get("value", item.get("defaultValue", ""))).strip().casefold()
-        == "authorization"
+        and str(item.get("key", "")).casefold() in name_keys
+        and _is_protected_key(str(item.get("value", item.get("defaultValue", ""))).strip())
         for item in value
     )
-    if not has_authorization_name:
+    if not has_protected_name:
         return set()
     return {
         index
         for index, item in enumerate(value)
         if isinstance(item, dict)
-        and str(item.get("key", item.get("name", ""))).strip().casefold() == "value"
+        and str(item.get("key", "")).strip().casefold() in value_keys
         and ("value" in item or "defaultValue" in item)
     }
 
@@ -227,7 +230,12 @@ def redact_for_persistence(
             child_path = f"{path}.{key}"
             protected_key = _is_protected_key(key)
             descriptor = bool(_PII_KEY.match(key)) and _is_configuration_descriptor(child)
-            protected_row_value = protected_row and key in {"value", "defaultValue"}
+            protected_row_value = protected_row and key in {
+                "value",
+                "defaultValue",
+                "parameterValue",
+                "headerValue",
+            }
             protected_descriptor_value = (
                 protected_descriptor and key not in _DESCRIPTOR_METADATA_KEYS
             )
@@ -251,12 +259,12 @@ def redact_for_persistence(
                 )
         return output
     if isinstance(value, list):
-        authorization_indexes = _authorization_value_indexes(value)
+        authorization_indexes = _protected_value_indexes(value)
         for index in authorization_indexes:
             item = value[index]
             if isinstance(item, dict):
                 for field in ("value", "defaultValue"):
-                    if field in item:
+                    if field in item and not _is_safe_reference(item[field]):
                         exact_secret_paths.add(f"{path}[{index}].{field}")
         return [
             redact_for_persistence(
@@ -367,7 +375,10 @@ def sensitive_paths(
             if (
                 (
                     _is_protected_key(key)
-                    or (protected_row and key in {"value", "defaultValue"})
+                    or (
+                        protected_row
+                        and key in {"value", "defaultValue", "parameterValue", "headerValue"}
+                    )
                     or protected_descriptor_value
                 )
                 and child not in (None, "")
@@ -386,7 +397,7 @@ def sensitive_paths(
                 )
             )
     elif isinstance(value, list):
-        authorization_indexes = _authorization_value_indexes(value)
+        authorization_indexes = _protected_value_indexes(value)
         for index in authorization_indexes:
             item = value[index]
             if isinstance(item, dict):

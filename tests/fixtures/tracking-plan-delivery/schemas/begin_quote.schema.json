@@ -1,0 +1,42 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "event": {
+      "type": "string",
+      "const": "begin_quote"
+    },
+    "event_data": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "form_name": {
+          "type": "string",
+          "description": "Identifies the form whose journey was started.",
+          "enum": [
+            "quote_request"
+          ]
+        },
+        "project_type": {
+          "type": "string",
+          "description": "Identifies the normalized project selected for the quote request.",
+          "enum": [
+            "window",
+            "door",
+            "shutter"
+          ]
+        }
+      },
+      "required": [
+        "form_name"
+      ]
+    }
+  },
+  "required": [
+    "event",
+    "event_data"
+  ],
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/ga4-tracking-plan/events/begin_quote.schema.json",
+  "title": "dataLayer push contract for \"begin_quote\""
+}

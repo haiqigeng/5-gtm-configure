@@ -286,6 +286,19 @@ def _subset_differences(expected: Any, actual: Any, *, path: str = "$") -> list[
 
 
 def build_pre_write_comparison(operation: dict[str, Any], saved: Any) -> tuple[dict[str, Any], Any]:
+    if isinstance(saved, dict) and "objects" in saved:
+        objects = saved["objects"]
+        if not isinstance(objects, list) or len(objects) != 1:
+            raise ValueError("pre-write readback requires exactly one primary object")
+        primary = objects[0]
+        if not isinstance(primary, dict) or (
+            primary.get("target_id") != operation["target_id"]
+            or primary.get("object_type") != operation["resource_family"]
+        ):
+            raise ValueError("pre-write graph identity differs from the operation")
+        saved = {
+            key: value for key, value in primary.items() if key not in {"target_id", "object_type"}
+        }
     safe_saved = redact_for_persistence(saved)
     expected = redact_for_persistence(operation.get("pre_change"))
     if isinstance(expected, dict) and "name" not in expected:

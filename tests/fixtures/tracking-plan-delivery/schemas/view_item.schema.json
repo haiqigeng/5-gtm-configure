@@ -1,0 +1,72 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "event": {
+      "type": "string",
+      "const": "view_item"
+    },
+    "ecommerce": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "currency": {
+          "type": "string",
+          "description": "Currency of the items associated with the event, in 3-letter ISO 4217 format. * Value metrics on the view_item event to not contribute to revenue * If you set value then currency is required for revenue metrics to be computed accurately.",
+          "enum": [
+            "EUR"
+          ]
+        },
+        "value": {
+          "type": "number",
+          "description": "The monetary value of the event. * Set value to the sum of (price * quantity) for all items in items. Don't include shipping or tax. * value is typically required for meaningful reporting. If you mark the event as a key event then it's recommended you set value. * currency is required if you set value."
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "item_id": {
+                "type": "string",
+                "description": "The ID of the item. *One of item_id or item_name is required."
+              },
+              "item_name": {
+                "type": "string",
+                "description": "The name of the item. *One of item_id or item_name is required."
+              },
+              "item_variant": {
+                "type": "string",
+                "description": "The item variant or unique code or description for additional item details/options."
+              },
+              "item_color": {
+                "type": "string",
+                "description": "Identifies the normalized color selected for the item.",
+                "enum": [
+                  "white",
+                  "black",
+                  "oak"
+                ]
+              }
+            },
+            "required": [
+              "item_id",
+              "item_name"
+            ]
+          },
+          "description": "The items for the event."
+        }
+      },
+      "required": [
+        "items"
+      ]
+    }
+  },
+  "required": [
+    "ecommerce",
+    "event"
+  ],
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/ga4-tracking-plan/events/view_item.schema.json",
+  "title": "dataLayer push contract for \"view_item\""
+}

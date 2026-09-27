@@ -5,7 +5,41 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from redaction import redact_for_persistence
+from redaction import contains_redacted, redact_for_persistence
+
+
+def field_changes(before: Any, after: Any, path: str = "$") -> list[str]:
+    """Describe only changed fields; ordered lists remain order-sensitive."""
+    if before == after:
+        return []
+    if isinstance(before, dict) and isinstance(after, dict):
+        changes = []
+        for key in sorted(before.keys() | after.keys()):
+            location = f"{path}.{key}"
+            if key not in before:
+                changes.append(f"{location}: absent → {json.dumps(after[key], ensure_ascii=False)}")
+            elif key not in after:
+                changes.append(
+                    f"{location}: {json.dumps(before[key], ensure_ascii=False)} → absent"
+                )
+            else:
+                changes.extend(field_changes(before[key], after[key], location))
+        return changes
+    # Keyed Parameter arrays are maps; ordinary lists preserve their sequence.
+    if isinstance(before, list) and isinstance(after, list):
+
+        def keyed(items):
+            return (
+                bool(items)
+                and all(isinstance(x, dict) and "key" in x for x in items)
+                and len({x["key"] for x in items}) == len(items)
+            )
+
+        if keyed(before) and keyed(after) and not path.endswith(".list"):
+            return field_changes({x["key"]: x for x in before}, {x["key"]: x for x in after}, path)
+    return [
+        f"{path}: {json.dumps(before, ensure_ascii=False)} → {json.dumps(after, ensure_ascii=False)}"
+    ]
 
 
 def _cell(value: Any) -> str:
@@ -13,6 +47,7 @@ def _cell(value: Any) -> str:
 
 
 def render_markdown(document: dict[str, Any], *, embed_machine: bool = False) -> str:
+    document = redact_for_persistence(document)
     run = document["run"]
     operations = document["object_changes"]
     counts: dict[str, int] = {}
@@ -44,6 +79,27 @@ def render_markdown(document: dict[str, Any], *, embed_machine: bool = False) ->
         "| --- | --- | --- | --- | --- | --- | ---: |",
     ]
     types = {target["target_id"]: target["container_type"] for target in document["run"]["targets"]}
+    alerts = []
+    for baseline in document["container_baselines"]:
+        if types[baseline["target_id"]] == "web" and contains_redacted(
+            baseline.get("resources", {})
+        ):
+            alerts.append(
+                f"- **Sensitive literals found in web target `{baseline['target_id']}`.** Review credential exposure: web code can be public. Rotate exposed secrets and move custody to a server-side secret store. Values are omitted; publication exposure has not been verified."
+            )
+    for operation in operations:
+        if operation.get("error"):
+            alerts.append(
+                f"- **{_cell(operation['state'])}: {_cell(operation['name'])}** — {_cell(operation['error'])}"
+            )
+    alerts.extend(
+        f"- External [{item['status']}] {item['owner']}: {item['action']}"
+        for item in document["external_dependencies"]
+        if item["status"] == "open"
+    )
+    if alerts:
+        position = lines.index("## Targets and baseline")
+        lines[position:position] = ["## Findings and required actions", "", *alerts, ""]
     baselines = {item["target_id"]: item for item in document["container_baselines"]}
     for target in run["targets"]:
         baseline = baselines[target["target_id"]]
@@ -111,7 +167,17 @@ def render_markdown(document: dict[str, Any], *, embed_machine: bool = False) ->
             "",
         ]
     )
-    if not operations:
+    visible = [
+        item
+        for item in operations
+        if item["action"] not in {"reuse", "untouched"}
+        or item["state"] not in {"planned", "verified"}
+    ]
+    lines.append(
+        f"Unchanged objects: {len(operations) - len(visible)}. Full evidence remains in the machine record."
+    )
+    lines.append("")
+    if not visible:
         lines.append("No GTM object operation is recorded.")
     else:
         lines.extend(
@@ -120,7 +186,7 @@ def render_markdown(document: dict[str, Any], *, embed_machine: bool = False) ->
                 "| --- | --- | --- | --- | --- | --- | --- |",
             ]
         )
-        for operation in operations:
+        for operation in visible:
             lines.append(
                 f"| {_cell(operation['operation_id'])} | {_cell(operation['target_id'])} | "
                 f"{_cell(operation['resource_family'])} | {_cell(operation['action'])} | "
@@ -128,23 +194,22 @@ def render_markdown(document: dict[str, Any], *, embed_machine: bool = False) ->
                 f"{_cell(', '.join(operation['requirement_ids']))} |"
             )
         lines.append("")
-    for operation in operations:
+    for operation in visible:
         intended = operation.get("intended", {})
         lines.extend(
             [
                 f"### [{operation['action'].upper()} / {operation['state'].upper()}] "
                 f"{operation['name']}",
                 "",
-                f"- Target/resource: `{operation['target_id']}` / `{operation['resource_family']}`",
-                f"- Object key: `{operation['object_key']}`",
-                "- Requirements: " + (", ".join(operation["requirement_ids"]) or "none"),
-                "- Dependencies: " + (", ".join(operation["dependencies"]) or "none"),
                 f"- Rationale: {operation['justification']}",
-                "- Evidence: " + (", ".join(operation["evidence"]) or "none"),
-                f"- Type: `{intended.get('type', 'not applicable')}`",
-                "- Firing triggers: " + (", ".join(intended.get("firingTriggerId", [])) or "none"),
-                "- Blocking triggers: "
-                + (", ".join(intended.get("blockingTriggerId", [])) or "none"),
+                "- Changed fields (before → intended): "
+                + "; ".join(
+                    _cell(change)
+                    for change in field_changes(
+                        operation.get("pre_change", {}),
+                        intended if operation["action"] != "remove" else {},
+                    )
+                ),
             ]
         )
         if operation.get("replacement_reason"):

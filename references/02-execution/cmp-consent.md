@@ -2,17 +2,20 @@
 
 ## Contents
 
-- [Default to strict/basic gating](#default-to-strictbasic-gating)
-- [Distinguish observation from gating](#distinguish-observation-from-gating)
-- [Research the installed CMP](#research-the-installed-cmp)
-- [Route identified CMP platforms](#route-identified-cmp-platforms)
-- [Route TCF conditionally](#route-tcf-conditionally)
-- [Build a safe vendor block](#build-a-safe-vendor-block)
-- [Select advanced/native consent only explicitly](#select-advancednative-consent-only-explicitly)
-- [Handle page-view timing](#handle-page-view-timing)
-- [Handle business events that precede CMP readiness](#handle-business-events-that-precede-cmp-readiness)
-- [Handle revocation without overclaiming](#handle-revocation-without-overclaiming)
-- [Validate the final decision](#validate-the-final-decision)
+- Basic gate and observation
+- CMP evidence and complete blocking predicate
+- Static expectations
+
+For a named CMP load [cmp-platform-patterns.md](cmp-platform-patterns.md); for actual TCF deployments
+load [tcf-consent.md](tcf-consent.md). Advanced/native consent requires explicit approval and the
+exact product capability in [vendor-consent-modes.md](vendor-consent-modes.md); Google routes also
+use [google-consent-mode.md](google-consent-mode.md). Existing configuration alone is not approval.
+If the current execution unit conflicts with the requested/default policy, resolve that before
+adding a consumer. Reuse applicable explicit approval without asking again.
+
+Read [cmp-lifecycle.md](cmp-lifecycle.md) when initial or late-grant timing, pre-CMP business events,
+withdrawal, SPA initialization or pipeline transport is affected. A gate never replays an earlier
+event. Pre-CMP policy must be explicit; do not assume accepted loss or use a Trigger Group as a queue.
 
 ## Default to strict/basic gating
 
@@ -80,20 +83,6 @@ Before creating a condition:
 
 Do not infer that similarly named CMP events and variables have the same role. For Didomi, for example, establish readiness/change events independently from enabled-vendor state. Use the exact category/purpose and vendor identities documented and supplied for the site. Do not append a delimiter by convention; when the CMP serializes a delimited list, match the exact token format established by official documentation and the approved representative value.
 
-## Route identified CMP platforms
-
-When the CMP is OneTrust, Didomi, Axeptio, or another identifiable platform, load
-`cmp-platform-patterns.md` after this general contract. Use its discovery route but keep the exact
-installed template, site deployment, vendor/category/purpose IDs, and current official lifecycle as
-the authority. Never copy one client's category IDs or another CMP's event names.
-
-## Route TCF conditionally
-
-Load `tcf-consent.md` only when the approved site/CMP architecture actually uses IAB Europe TCF.
-Verify the applicable current TCF version and the CMP's documented TC/Additional Consent plumbing. Do not select
-purposes, legal bases, vendors, publisher restrictions, or CMP certification on the client's
-behalf, and do not add TCF machinery to a non-TCF consent implementation.
-
 ## Build a safe vendor block
 
 Define the exception's event scope before its consent-state condition. A shared block must be able to activate on every GTM event used by each consumer tag; a condition that reads the right CMP value is ineffective on an event the trigger does not match. In a Custom Event-first design, default a vendor-wide block to a verified `.*` Custom Event regex rather than repeating the current event-name inventory or using a CMP-only event name. Use a narrower matcher only when the block intentionally serves a documented consumer subset, and record that reason. If a consumer uses an event type the shared block cannot cover, stop and redesign the exception scope before claiming strict gating.
@@ -112,66 +101,6 @@ If the official CMP contract cannot be represented safely with a native GTM cond
 
 Test the block against similar vendor IDs and another-vendor-only consent. Do not combine different platforms in one block. If one platform is represented by multiple verified CMP identities, document their exact Boolean logic inside that platform's block.
 
-## Select advanced/native consent only explicitly
-
-Treat advanced consent as an architecture change because tags may execute and transmit limited data under denied consent.
-
-Do not treat this as a Google-only decision. Load the vendor consent-mode capability reference and classify the exact browser product. Google tag/GA4, Google Ads, Floodlight, Conversion Linker, Microsoft Advertising UET, Microsoft Clarity, and vendor-native adaptive analytics can have materially different supported behavior. A shared parent company or CMP category does not make the products equivalent.
-
-Before using it:
-
-1. Obtain an explicit request and approved client policy.
-2. Verify current official product, installed-template, and CMP support.
-3. Document denied-state tag loading, request fields, storage, transmission, data use, and modeling or reporting behavior.
-4. Configure consent defaults before affected tags and updates immediately after the user's choice.
-5. Avoid additional consent checks or exception triggers that defeat the intended advanced behavior.
-6. Validate denied, granted, update, and revocation states.
-
-If a non-Google vendor offers consent mode, native cookie control, anonymous collection, or another limited-data feature, follow that vendor's current documentation; do not assume Google Consent Mode semantics apply. Cookie suppression alone does not prove advanced denied-state measurement.
-
-## Handle page-view timing
-
-Page-view source events often occur before CMP state is initialized. Under strict/basic gating:
-
-1. Choose the effective page-view owner using `google-field-ownership.md`: Google-tag automatic or
-   explicit event, not both for the same occurrence and destination. Keep a correct existing owner
-   during a narrow delta; prefer the analyst's explicit-event choice when it meets the requirements.
-2. Identify the official CMP lifecycle opportunity and verify that its state is readable.
-3. Give the chosen owner a verified CMP lifecycle firing opportunity and the required vendor block.
-   Readiness alone may still mean unknown consent. If later grant must produce the initial view,
-   prove a later firing opportunity too; a blocked one-time ready event does not retry itself.
-4. Revalidate from the approved source contract that every page-view value is current and available on that CMP event; do not assume an earlier event-scoped payload persists.
-5. Define whether a later grant sends a page view.
-6. Prevent duplicate initial and consent-change page views.
-
-Apply this lifecycle choice to page-load, page-view, and once-per-page work, not to purchase, lead,
-cart, or other business events. For an SPA, once-per-page initialization must not suppress legitimate
-virtual page views. Inspect Enhanced Measurement history collection and other automatic collectors
-separately; `send_page_view: false` alone does not disable every automatic page-view source.
-
-Do not attach a page-view tag to a generic repeatable consent-change event without an explicit state and duplicate policy.
-
-## Handle business events that precede CMP readiness
-
-A blocking trigger or Additional Consent Check evaluates only on the current GTM event; it does not
-queue or replay a business event after consent becomes ready. Before configuring any business event
-that can occur first, select the first authorized feasible route:
-
-1. the site emits the business event only after CMP readiness, with its complete fresh payload;
-2. the application emits a later semantically equivalent event with a fresh complete payload;
-3. an explicitly approved one-time replay retains the exact payload, proves consent at replay,
-   prevents duplicates, and preserves the original business occurrence semantics;
-4. otherwise, record a site/dataLayer external dependency and do not claim the event will be
-   recovered.
-
-Do not use a Trigger Group as a replay queue. It records that member triggers have fired during its
-lifecycle; it does not retain the original event payload, restore its event model, or establish a
-safe exactly-once conversion.
-
-## Handle revocation without overclaiming
-
-A GTM exception can stop later tag invocations, but it does not unload a vendor script that already loaded after an earlier grant or erase data already sent. Inspect current vendor documentation and template behavior for native disable/revoke controls, automatic events, storage, and whether a page reload or site-level action is required. If the approved policy requires immediate unload behavior that the browser implementation cannot establish, mark the affected requirement `Blocked` and report the limitation. Record this as a configured limitation; never describe a loaded script as unloaded merely because subsequent GTM tags are blocked.
-
 ## Validate the final decision
 
 For each vendor tag, derive the expected static result:
@@ -188,15 +117,3 @@ For each vendor tag, derive the expected static result:
 For a base/configuration tag, also prove statically that an initial grant and a later grant each have a valid configured initialization opportunity without repeated initialization.
 
 For explicitly approved advanced behavior, replace the strict non-fire expectation with the exact officially documented limited-data configuration expectation and label it clearly. Do not present it as an observed request.
-
-## Carry consent through a pipeline
-
-Keep the web CMP lifecycle and vendor blocks unchanged for direct browser tags. For a transporter,
-record whether it is blocked, always transports, or conditionally transports; do not attach the
-downstream vendor block mechanically. Forward only an approved documented CMP state or native
-Google consent signal.
-
-For a non-Google server gate, prove denied, granted, and unknown state on every transported event
-that can trigger the destination. State available only on page view does not protect a later
-conversion. CMP readiness is not grant, and a consent-update event must not replay a business
-conversion. Use one effective server mechanism and reject accidental equivalent double gates.

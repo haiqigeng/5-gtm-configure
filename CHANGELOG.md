@@ -1,5 +1,49 @@
 # Changelog
 
+## 10.1.0
+
+### Why This Release Matters
+
+The September audit reproduced credential leakage and a broken tracking-plan intake. Routine changes
+also required bespoke MCP bridges and verbose manual contracts. This update fixes those boundaries
+while keeping contract 7.0/run 4.0, consent policy and the existing execution engine.
+
+### What Changed
+
+- Redact GTM sibling Parameter rows, credential headers and code assignments; surface potential web
+  exposure without reproducing values or assuming publication.
+- Import repeated inventory roles while preserving singleton, path, byte-count and hash checks.
+  The paired tracking-plan producer emits only current handoffs and rejects obsolete input.
+- Add compact request compilation, reference-based reuse closure, an MCP adapter, bounded queue relay
+  and execution telemetry. Keep live readback and no-op convergence; status is not an equality gate.
+- List required families for isolated work; retain full refonte and shared-settings consumer checks.
+- Render changed fields first and summarize unchanged objects. Route specialist GA4/CMP/trigger
+  material conditionally, shorten invocation metadata and validate reference reachability.
+- Replace exact-prose assertions with routing checks and executable regression cases.
+
+### What Users Should Do
+
+Use absolute skill script paths. Inspect the connected MCP schema before supplying its response
+paths and pagination profile. Use a fresh queue per execution. Regenerate obsolete handoff input;
+no compatibility format or migration is provided.
+
+### Validation
+
+Local validation passed: 216 configure tests, 148 paired producer tests, all eight audit redaction
+canaries, a fresh 19-artifact delivery import, deterministic packaging, and independent stateful
+MCP forward tests. The packaged relay was exercised on Windows, including Unicode, tool errors
+and large responses. Synthetic tests do not certify a live client workspace.
+
+### Known Limits
+
+The disk queue blocks credential-bearing writes; those require a secure in-memory adapter. Secret
+heuristics do not recognize arbitrary obfuscated code. Host tool transcripts are outside artifact
+redaction. Additional object families and replacement require an adapter that represents their
+actual execution/recovery boundaries. No live GTM mutation or model-quality benchmark was performed.
+Estimated single-event instruction load fell from 48,462 to 34,825 tokens; the audit's proposed
+25,000-token threshold remains unmet.
+
+
 ## 10.0.0
 
 ### Why This Release Matters

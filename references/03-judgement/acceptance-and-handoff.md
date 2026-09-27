@@ -64,7 +64,7 @@ Derive every view from the same validated run:
 
 1. **Executive summary:** overall and per-target status, scope, object counts, major consent/delivery
    decisions, blocker/recovery frontier, and explicit no-publication/no-runtime statement.
-2. **Analyst/developer change log:** one row per object/action with target, before/after name,
+2. **Analyst/developer change log:** changed objects first, with before/after fields and counts of unchanged objects. Keep the complete object list in the machine record. For each changed object include with target, before/after name,
    normal/blocking triggers, variables/parameters, Client/Event Data mapping, consent, dedup,
    rationale, saved ID/readback, and external owner. For a refonte, preserve client inventory row
    identity/order and append only genuinely new tags.

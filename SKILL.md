@@ -1,6 +1,6 @@
 ---
 name: configure-gtm
-description: "Operationally configure authorized Google Tag Manager web containers, server containers, or a connected web-to-server tagging pipeline for expert web analysts. Convert approved analytics requirements and explicit media briefs into clean, technically correct, consent-controlled saved GTM object graphs; preserve approved semantics, use live official documentation and inspected template capabilities, apply basic CMP/vendor control by default and advanced/native consent only when explicitly requested, verify every saved target, and never publish. Use for actual GTM mutation through MCP, API, export/import, or signed-in UI. Do not use for tracking-plan design, general audit/cleanup, site/dataLayer or cloud tagging-server development, legal decisions, runtime recette/certification, external vendor API coding, publication, or version creation."
+description: "Configure approved analytics and media changes in authorized GTM web/server workspaces or connected pipelines. Save and verify GTM objects through MCP, API, import, or UI. Use for implementation and scoped corrections; excludes tracking-plan design, general audit/cleanup, runtime QA, publication, and version creation."
 ---
 
 # Configure Google Tag Manager
@@ -12,12 +12,12 @@ relationships—as the unit of success. A plan, prose specification, or one-side
 configuration. Never publish, create a version, or claim runtime certification.
 
 When the input is a `ga4-tracking-plan` delivery directory, run
-`python scripts/import_ga4_tracking_plan_handoff.py DELIVERY -o approved-semantics.json` first.
+`python "<skill-dir>/scripts/import_ga4_tracking_plan_handoff.py" DELIVERY -o approved-semantics.json` first.
 The importer verifies approval and hashes while preserving stable requirement identity.
 
 ## 01 - Orientation
 
-Read [utility-contract.md](references/01-orientation/utility-contract.md) at the start. Read
+Use [utility-contract.md](references/01-orientation/utility-contract.md) when scope or authority needs resolution. Read
 [official-source-policy.md](references/01-orientation/official-source-policy.md) when beginning live
 product, template, CMP, Client, Transformation, or destination research.
 
@@ -31,6 +31,7 @@ Classify the run before loading conditional detail:
 ## 02 - Execution
 
 Read [implementation-workflow.md](references/02-execution/implementation-workflow.md) for every run.
+Read referenced feature sections only when the requested change affects them; schemas are structural aids, not mandatory prose reading.
 Before mutation, use [configuration-contract.md](references/02-execution/configuration-contract.md).
 For durable state and deterministic materialization, use
 [configuration-run-and-resume.md](references/02-execution/configuration-run-and-resume.md), the
@@ -123,93 +124,43 @@ Before assigning status, read
 after authoritative readback of every required target, static cross-target proof, and an identical
 rerun no-op. Otherwise use the narrowest accurate `Partial`, `Blocked`, or `Deferred` result.
 
-## Web invariants
+## Core decisions
 
-Operationally implement an approved analytics tracking plan and an explicit media implementation
-brief as a saved, verified GTM object graph, whether the request is greenfield or a delta. Preserve
-the complete supported client-side surface: tags, normal and blocking triggers, variables, folders,
-templates, Google tag configuration/destinations, workspaces, Zones, environments, and settings.
+- The named-target request authorizes routine in-scope changes in its dedicated workspace.
+  Preserve pre-existing edits; deletion, replacement, shared settings, template permissions and
+  pipeline cutover need applicable explicit authority. Existing authorization persists.
+- Preserve approved analytics semantics. Media briefs establish business intent; current official
+  vendor documentation establishes the vendor schema. Existing container patterns are evidence,
+  not technical or consent authority.
+- Basic CMP/vendor blocking is the web default. Advanced/native behavior requires explicit
+  approval. Detect an existing-route conflict before adding a consumer; use an applicable approved
+  topology or resolve the missing policy once. Never silently mix routes or re-ask answered questions.
+- Use supported templates, direct mappings and genuine reuse. Add shape conversion only when
+  needed; do not create payload-eligibility helpers or a Custom HTML substitute for a supported tag.
+- Keep one effective page-view owner, explicit first-party-data routes, and ordered dispositions
+  for an authorized refonte. Preserve non-scalar values and all approved ecommerce items.
+- For pipelines, verify the receiver graph before sender cutover. Transport collection policy and
+  destination eligibility are separate decisions. Deduplicate overlapping delivery using the
+  product-supported stable occurrence ID; never generate one from GTM internals.
+- Redact before persistence, including helper files and transport queues. Treat redacted values as
+  incomparable. Report credential exposure discovered in web objects without copying the value;
+  distinguish an unpublished finding from confirmed live exposure. Follow the secret-handling
+  procedure in [run and recovery](references/02-execution/configuration-run-and-resume.md).
+- Use the same contract, adapter runtime and comparison engine for every scope. The
+  [compact-input compiler](references/02-execution/configuration-contract.md#compact-input)
+  derives mechanical fields; it does not decide business meaning or grant authorization.
+- Capture relevant families once; refonte requires a complete inventory. Freshly check targets
+  before writes, read back saved fields, and perform read-only no-op convergence. Workspace status
+  records changes since the base version; it is not sufficient proof of correctness.
+- Preserve uncertain-write history and resolve it by readback before retry. Continue independent
+  safe work. Only the runtime derives final status from its evidence.
+- Report findings, blockers and changed fields first; summarize unchanged objects. Give short
+  progress updates during preparation, execution and verification, explaining the next step.
+- Never publish, create a version, or claim runtime certification. Website/dataLayer development,
+  cloud provisioning, external account administration and runtime recette remain external.
 
-Default every product to strict/basic CMP blocking on its web route unless an explicit current
-advanced/native contract applies. Inspect the installed template, and use a native or supported
-template whenever one exists. Inspect only the objects related to the requested implementation
-unless an authorized refonte requires the complete inventory. Container prevalence is integration
-evidence, never as proof of best practice.
+## Running the tools
 
-Use direct mappings first, constants/settings for real reuse, LUT/RLT for deterministic routing,
-and CJS only for a required shape conversion. Keep a shallow folder structure. Do not create
-payload-eligibility variables, validity triggers, speculative helpers, or browser Custom HTML when
-the supported template owns the behavior. Measurement Protocol, mobile, CRM, offline, and
-arbitrary backend ingress remain future extensions.
-
-Setup/cleanup-only tags without ordinary firing triggers are outside the current executable
-topology. Inspect existing sequences for impact, but hold a requirement needing that unsupported
-path; never add dummy triggers or claim setup-only field-test coverage. See the triggers reference.
-
-## Operational rules
-
-- A named-target configuration request authorizes routine create/update/reuse only inside that
-  target's dedicated workspace. Web authority does not grant server authority or vice versa.
-- Use current official documentation and inspected installed-template fields, permissions, network
-  hosts, defaults, and automatic behavior. A media brief controls business intent; a tracking plan
-  never becomes another vendor's schema by analogy.
-- Preserve valid approved analytics event names, fields, sources, literals, filters, and timing.
-  Select best-practice architecture before reuse; container prevalence is integration evidence.
-- For web tags, preserve the strict/basic CMP default: baseline tags use a verified CMP lifecycle
-  event plus the vendor block; business tags use their business trigger plus the block. Do not stack
-  an equivalent Additional Consent Check. Advanced/native behavior remains explicit-only.
-- In every new contract 7.0 / run 4.0 web or pipeline run, bind each executing web tag to one contract-owned
-  execution topology, bind every page-view-capable destination to one effective owner and
-  `send_page_view` decision, bind `user_data`/`user_id` to an explicit first-party route, and keep
-  ordered inventory dispositions for a refonte. These controls may not disappear during
-  client/server materialization.
-- For a pipeline, configure and read back the receiver graph before changing a live sender endpoint.
-  Every pipeline names its transport owner as the mandatory high-impact cutover operation, including
-  a new sender route. That operation depends on every required Client, Event Data, Transformation,
-  trigger, and destination operation. One failed dependency stops its transitive dependents, not
-  independent safe subtrees.
-- Record one consent topology per destination. Google Consent Mode is set in the web container and
-  carried to consent-aware server Google tags. For non-Google server gating, prove the approved
-  signal on every triggering event and fail unknown state closed unless policy says otherwise.
-  Distinguish incoming Google-native consent, template-native consent, a supported Additional
-  Consent Check, a server blocking trigger, and no server gate. A direct browser destination keeps
-  its vendor block. Resolve browser-to-server collection policy separately from downstream vendor
-  eligibility. A shared transporter does not mechanically inherit each destination's block; an
-  approved unblocked carrier transports documented consent on every applicable event. Google-native
-  denied-state behavior is not a strict no-request gate, and advanced behavior requires explicit
-  approval. Use the approved blocked-transport design when browser collection itself must wait.
-- Resolve each transported field across source, web variable, wire, claiming Client, Event Data,
-  server owner, template field, destination type, missing behavior, and runtime verification note. `items` is an array and `user_data` is an object; never encode a universal "two arrays" rule. Prove every
-  non-scalar shape and never silently flatten, stringify, truncate, or drop items.
-- Use native automatic mapping, direct Event Data, a template mapping table, or a narrow supported
-  variable before a scoped Transformation. Broad shared Transformations, Client claim changes,
-  template permission expansion, deletion/replacement, settings changes, and live endpoint cutover
-  require their explicit high-impact authority.
-- Record a dedup contract only when the same destination occurrence can arrive twice. A
-  dual-delivery purchase requires a stable product-supported transaction/order/occurrence identity;
-  other dual-delivery events require an approved stable occurrence ID. If none exists, choose one
-  delivery channel or keep the overlap blocked. Never synthesize an identity from GTM internals,
-  regenerate the ID server-side, or impose `event_id` on another product.
-- Keep first-party data event- and consumer-scoped. Record normalization/hash ownership and consent.
-  Never persist raw PII or credentials. Resolve secrets only through secure ephemeral input, redact
-  before any artifact write, and never treat two redacted markers as equality proof.
-- Let the validated contract materialize active run sections. The authenticated adapter runtime
-  captures, retains, and fingerprints the redacted canonical target graph and workspace changes
-  before mutation; never accept caller-authored baseline evidence. Adapters populate readbacks,
-  journals, and results; finalization derives status and the human/machine result. Never edit
-  active run state by hand or retry an ambiguous write before authoritative readback.
-- Bind every mutation to at least one approved requirement and a traceable approval record from
-  its approved-input locator. Hashes detect inconsistent edits; establish actual authority from the
-  user's instructions and source material, and recheck scope after a changed payload. Official documentation
-  establishes current product mechanics, never mutation authority. Reject any tag
-  or native User-Provided Data variable that configures `user_data` or `user_id` without a complete
-  first-party-data route. Before changing a shared Google Configuration Settings variable, close
-  over every authenticated baseline tag that references it.
-- Require action-specific authority and state: all deltas carry object ID plus pre-change state;
-  rename, replace, template mutation, and remove carry their extra governed fields. Verify removal
-  by authoritative absence. A reopened failure discards stale comparison/readback evidence.
-- Publication sequence is external: server publish → server recette → web cutover publish → web and
-  end-to-end recette. Open publication dependencies do not make a saved, verified setup `Blocked`.
-- Keep cloud tagging-server provisioning, DNS/CDN, website/dataLayer work, external API coding,
-  platform administration, runtime Preview, legal decisions, publication, and version creation
-  external.
+Resolve `<skill-dir>` to this installed skill's absolute directory. Commands use that directory,
+not the project working directory. For a connected MCP, use the packaged adapter and relay described
+in [tool-adapters.md](references/02-execution/tool-adapters.md); do not rebuild a client-specific bridge.

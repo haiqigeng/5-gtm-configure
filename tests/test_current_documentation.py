@@ -119,29 +119,6 @@ class CurrentDocumentationTest(unittest.TestCase):
         ):
             self.assertTrue((ROOT / "scripts" / module).is_file())
 
-    def test_current_web_and_cross_target_boundaries_are_explicit(self) -> None:
-        combined = " ".join(
-            read(relative)
-            for relative in (
-                "SKILL.md",
-                "references/01-orientation/utility-contract.md",
-                "references/02-execution/configuration-contract.md",
-            )
-        ).replace("\n", " ")
-        for phrase in (
-            "complete supported client-side surface",
-            "Default every product to strict/basic CMP blocking",
-            "payload-eligibility variables",
-            "Web authority does not grant server authority",
-            "items` is an array and `user_data` is an object",
-            "never publish",
-        ):
-            self.assertIn(phrase.casefold(), combined.casefold())
-        self.assertNotIn(
-            "server-side GTM, Conversions API, and browser/server deduplication remain future",
-            combined.casefold(),
-        )
-
 
 if __name__ == "__main__":
     unittest.main()

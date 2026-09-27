@@ -291,3 +291,22 @@ Transformation only when an unauthorized destination must be prevented from rece
 Credentials are not first-party matching data. Resolve tokens through ephemeral secure input,
 store them only in supported secret/template fields, redact before persistence, and report
 `present-not-compared`; never treat redacted markers as equality.
+
+## Govern user properties and identifiers
+
+Add a user property only when it is explicitly approved, stable, has a valid analysis use, and current GA4 documentation permits it. Never add one merely because the source dataLayer exposes it. Keep it in an Event Settings variable only when it genuinely applies across the intended events.
+
+Treat `user_id` as a separately approved Google tag configuration contract, not a routine event
+parameter, user property, or custom dimension. Omit it while the user is not signed in, set the
+stable approved non-PII identifier when authentication state is established, and send `null` when
+the approved logout/reset event must clear a previously set value. Establish source, lifecycle,
+consent, persistence, and every consuming Google tag before configuration. Configure `user_id`
+directly on one consuming Google tag; use a Configuration Settings variable only when the same
+contract is genuinely reused by multiple compatible Google tags. Keep `user_id`, GA4
+user-provided data, and user properties as separate features with separate owners and scopes.
+
+Configure approved user properties separately from `user_id`. Record their stable analysis purpose,
+source, scope, limits, and reset behavior. Treat content groups as explicit approved configuration
+fields with their own source and timing; do not infer them from URL structure or exposed data.
+
+Do not send personally identifiable information to GA4. Do not repurpose media advanced-matching fields as GA4 parameters or user properties.

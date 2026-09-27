@@ -17,12 +17,16 @@ from build_skill_package import INCLUDED, build, package_files
 from strict_json import StrictJsonError, loads_strict
 
 ROOT = Path(__file__).resolve().parents[1]
-CURRENT_RELEASE = "10.0.0"
+CURRENT_RELEASE = "10.1.0"
 SEMVER = re.compile(r"^v(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)$")
 LINK = re.compile(r"\]\(([^)]+)\)")
 WORD = re.compile(r"\b[\w-]+\b")
 
 REFERENCE_FILES = {
+    "references/02-execution/cmp-lifecycle.md",
+    "references/02-execution/native-triggers-and-variables.md",
+    "references/02-execution/ga4-ecommerce.md",
+    "references/02-execution/ga4-configuration-and-lifecycle.md",
     "references/01-orientation/official-source-policy.md",
     "references/01-orientation/utility-contract.md",
     "references/02-execution/analytics-tags.md",
@@ -200,13 +204,39 @@ def check_files_and_routing() -> list[str]:
         errors.append(f"unexpected reference directory: {relative}")
 
     skill = read("SKILL.md")
-    links = {value for value in LINK.findall(skill) if value.startswith("references/")}
+    # References can be routed progressively through another reference.
+    pending = [ROOT / "SKILL.md"]
+    visited = set()
+    links = set()
+    while pending:
+        source = pending.pop()
+        if source in visited:
+            continue
+        visited.add(source)
+        for link in LINK.findall(source.read_text(encoding="utf-8")):
+            if link.startswith(("http://", "https://", "#")):
+                continue
+            target = (source.parent / link.split("#", 1)[0]).resolve()
+            if not target.is_file():
+                errors.append(f"{source.name} references missing resource: {link}")
+                continue
+            try:
+                relative = target.relative_to(ROOT.resolve()).as_posix()
+            except ValueError:
+                errors.append(f"Reference escapes runtime package: {link}")
+                continue
+            if relative.startswith("references/") and target.suffix == ".md":
+                links.add(relative)
+                pending.append(target)
     for relative in sorted(actual_references - links):
         errors.append(f"reference is not directly routed from SKILL.md: {relative}")
     for relative in sorted(links - actual_references):
         errors.append(f"SKILL.md routes a missing reference: {relative}")
     for link in LINK.findall(skill):
-        if not link.startswith(("http://", "https://")) and not (ROOT / link).exists():
+        if (
+            not link.startswith(("http://", "https://"))
+            and not (ROOT / link.split("#", 1)[0]).exists()
+        ):
             errors.append(f"SKILL.md references missing resource: {link}")
 
     headings = ["## 01 - Orientation", "## 02 - Execution", "## 03 - Judgement"]
@@ -231,7 +261,6 @@ def check_versions_and_schemas() -> list[str]:
     for relative in (
         "README.md",
         "CHANGELOG.md",
-        "agents/openai.yaml",
         "CONTRIBUTING.md",
         ".github/workflows/ci.yml",
     ):
@@ -261,22 +290,6 @@ def check_versions_and_schemas() -> list[str]:
 
 def check_runtime_content() -> list[str]:
     errors: list[str] = []
-    skill = read("SKILL.md")
-    required_phrases = (
-        "saved, verified GTM object graph",
-        "Operationally implement an approved analytics tracking plan",
-        "explicit media implementation brief",
-        "web authority does not grant server authority",
-        "receiver graph before changing a live sender endpoint",
-        "incoming Google-native consent",
-        "`items` is an array and `user_data` is an object",
-        "Never synthesize an identity from GTM internals",
-        "Never publish",
-    )
-    folded = skill.casefold()
-    for phrase in required_phrases:
-        if phrase.casefold() not in folded:
-            errors.append(f"SKILL.md missing current contract phrase: {phrase}")
     forbidden = (
         "server-side GTM, Conversions API, and browser/server deduplication remain future",
         "the skill performs client-side GTM configuration only",

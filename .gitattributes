@@ -1,3 +1,5 @@
 * text=auto eol=lf
 *.bat text eol=crlf
 *.ps1 text eol=crlf
+# Delivery manifests bind exact bytes; preserve fixture hashes across platforms.
+tests/fixtures/tracking-plan-delivery/** -text whitespace=cr-at-eol

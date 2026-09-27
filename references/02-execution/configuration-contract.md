@@ -200,3 +200,33 @@ template field, and explicit omission behavior. Unbound fields stay `pending`, n
 Use only the canonical statuses in `acceptance-and-handoff.md`. External site/dataLayer, CMP,
 analytics/media account, credentials, catalog/feed, cloud/DNS, publication, and recette work remains
 separate. Open publication dependencies do not make a saved verified setup `Blocked`.
+
+## Compact input
+
+`compile_configuration_request.py` expands mechanical fields into this same current contract.
+Use it before `configuration_run.py init`; there is no alternate execution or weaker validation.
+
+Supply `mode`, `route`, `targets`, approved `requirements`, `evidence`, and `objects`. Supply applicable
+consent/execution topologies, page-view decisions, first-party-data routes, pipelines and dedup as
+usual; empty unused sections are generated. `field_bindings` and `execution_mode` are top-level in
+compact input. The default execution mode is `isolated-durable`.
+
+Each object still supplies its action, native intended fields, rationale (`justification`), evidence,
+and risk. Deltas supply exact `object_id` and `pre_change`. The compiler derives `object_key`, binds
+mutation approval hashes to existing requirement authority, and fills target/requirement IDs only
+when there is exactly one possible choice. Multi-target or multi-requirement ambiguity stays explicit.
+It never infers approval, event meaning, consent or a product field.
+
+Optional `reuse_candidates` holds inspected, redacted, compatible object records in the same shape,
+with action `reuse`. Only candidates reachable through explicit dependencies, semantic references or
+named variable references are included. Retained candidates use the same runtime verification as
+other objects. Candidate input is discovery material, not an authenticated runtime baseline. Raw
+opaque references still need exact resolution; missing semantics fail normal contract validation.
+
+```powershell
+python "<skill-dir>/scripts/compile_configuration_request.py" request.json -o contract.json
+python "<skill-dir>/scripts/configuration_run.py" init --contract contract.json --run-id RUN-001 --source-locator "Approved input" --output configuration-run.json
+```
+
+Review the compiled delta against the user's approved scope, then execute with the same adapter
+runtime. Existing authorization covers routine mechanical materialization; a hash is not new consent.

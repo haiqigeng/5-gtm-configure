@@ -221,18 +221,23 @@ def _capture_one_authenticated_baseline(
     target_operations = [
         item for item in document["object_changes"] if item["target_id"] == target_id
     ]
-    families = sorted(
+    available_families = {
         family
         for family, capabilities in binding.capabilities.items()
         if capabilities.get("list") is True
-    )
+    }
     required_families = required_baseline_families(target_operations, target["container_type"])
-    if not required_families <= set(families):
-        missing = sorted(required_families - set(families))
+    if not required_families <= available_families:
+        missing = sorted(required_families - available_families)
         raise AdapterExecutionError(
             f"authenticated baseline cannot list required resource families: {missing}",
             code="baseline_capability_missing",
         )
+    families = sorted(
+        available_families
+        if document["run"]["execution_mode"] == "refonte-durable"
+        else required_families
+    )
     resources: dict[str, list[dict[str, Any]]] = {}
     resource_receipts: dict[str, dict[str, Any]] = {}
     for family in families:

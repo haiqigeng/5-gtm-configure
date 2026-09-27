@@ -71,7 +71,7 @@ A discovered endpoint is evidence, not authority to access or mutate its server 
 ## Intake
 
 Discover before asking. Resolve every named account/container/workspace by stable ID, confirm its
-container type, inspect adapter capabilities, capture one complete paginated baseline per target,
+container type, inspect adapter capabilities, capture one paginated baseline of the required families per target (complete inventory for a refonte),
 and inspect relevant consumers, installed templates, CMP signals, and official sources. Then batch
 only unresolved facts that change the architecture or authorization:
 

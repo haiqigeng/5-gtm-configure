@@ -152,8 +152,8 @@ is ignored deliberately.
 Run before and after mutation:
 
 ~~~powershell
-python scripts/validate_contract_conformance.py --approved approved.json --candidate intended.json
-python scripts/validate_contract_conformance.py --approved approved.json --candidate saved.json
+python "<skill-dir>/scripts/validate_contract_conformance.py" --approved approved.json --candidate intended.json
+python "<skill-dir>/scripts/validate_contract_conformance.py" --approved approved.json --candidate saved.json
 ~~~
 
 Exit code `0` means exact conformance, `1` means a deterministic difference, and `2` means invalid

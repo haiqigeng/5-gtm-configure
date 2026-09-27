@@ -63,7 +63,10 @@ def verify_delivery(delivery: Path) -> tuple[dict[str, Any], dict[str, Any]]:
         role = str(artifact.get("role", ""))
         if not role:
             raise HandoffError("A handoff artifact has no non-empty role.")
-        if role in by_role and role != "event_push_schema":
+        if role in by_role and role in {
+            "canonical_tracking_plan",
+            "runtime_expected_events_contract",
+        }:
             raise HandoffError(f"Duplicate handoff artifact role: {role}")
         if path in seen_paths:
             raise HandoffError(f"Duplicate handoff artifact path: {path}")
@@ -251,7 +254,7 @@ def normalized_approved_semantics(handoff: dict[str, Any], plan: dict[str, Any])
             }
         )
     return {
-        "source_contract": "ga4-tracking-plan-delivery@1.0.0",
+        "source_contract": "ga4-tracking-plan-delivery@1.1.0",
         "source_skill_version": handoff.get("skill", {}).get("version"),
         "source_plan_sha256": handoff.get("plan", {}).get("canonical_sha256"),
         "source_approval": handoff.get("approval"),

@@ -141,14 +141,14 @@ and live GTM/Preview evidence.
 ## Commands
 
 ~~~powershell
-python scripts/validate_configuration_contract.py --contract contract.json
-python scripts/configuration_run.py init --contract contract.json --run-id RUN-001 --source-locator "Approved input" --output configuration-run.json
-python scripts/configuration_run.py validate --run configuration-run.json
-python scripts/configuration_run.py inspect --run configuration-run.json
-python scripts/configuration_run.py checkpoint --run configuration-run.json --operation OP-001 --state in_progress --note "Fresh pre-change readback matched" --pre-write-readback before.json
-python scripts/configuration_run.py checkpoint --run configuration-run.json --operation OP-001 --state verified --note "Saved readback matched" --result saved-result.json --saved-readback saved-object.json
-python scripts/configuration_run.py reopen --run configuration-run.json --operation OP-003 --note "Blocker resolved and target revalidated."
-python scripts/configuration_run.py render --run configuration-run.json --output configuration-result.md
+python "<skill-dir>/scripts/validate_configuration_contract.py" --contract contract.json
+python "<skill-dir>/scripts/configuration_run.py" init --contract contract.json --run-id RUN-001 --source-locator "Approved input" --output configuration-run.json
+python "<skill-dir>/scripts/configuration_run.py" validate --run configuration-run.json
+python "<skill-dir>/scripts/configuration_run.py" inspect --run configuration-run.json
+python "<skill-dir>/scripts/configuration_run.py" checkpoint --run configuration-run.json --operation OP-001 --state in_progress --note "Fresh pre-change readback matched" --pre-write-readback before.json
+python "<skill-dir>/scripts/configuration_run.py" checkpoint --run configuration-run.json --operation OP-001 --state verified --note "Saved readback matched" --result saved-result.json --saved-readback saved-object.json
+python "<skill-dir>/scripts/configuration_run.py" reopen --run configuration-run.json --operation OP-003 --note "Blocker resolved and target revalidated."
+python "<skill-dir>/scripts/configuration_run.py" render --run configuration-run.json --output configuration-result.md
 ~~~
 
 Convergence is intentionally unavailable as a caller-supplied CLI checkpoint. After every
@@ -164,8 +164,7 @@ Baseline capture is not a CLI transition. `adapter_runtime.execute_ready_operati
 authenticated target identity, calls the adapter's paginated resource and workspace-change listing
 methods, creates exhaustion receipts internally, retains the redacted canonical resource graph,
 and fingerprints it before the first write. Any caller-authored baseline is replaced while all
-target operations are still planned. An isolated run covers every list-capable family and every
-planned family; a `refonte-durable` run must cover the complete supported target surface, including
+target operations are still planned. An isolated run covers the planned families and their required dependency/consumer closure; a `refonte-durable` run must cover the complete supported target surface, including
 empty arrays. Only delta actions need `before.json`: it is the raw authoritative target object and
 must include its current `name`; server-generated IDs and fingerprints are tolerated but the name
 remains drift-sensitive.
@@ -191,3 +190,22 @@ remove represents readback as JSON `null`. The controller acquires the
 run lock before loading a checkpoint source and returns coded JSON errors for invalid graph shape,
 duplicate JSON keys, non-finite values, excessive nesting, unsafe transitions, materialization
 drift, and unsafe overwrite.
+
+## Credential findings and transport limits
+
+If a web object contains a literal credential, report the affected object and field without its
+value. A saved unpublished object is a potential exposure; only inspected published/browser
+content proves live exposure. Recommend rotation for exposed secrets and server-side custody.
+Public measurement IDs and identifiers are not automatically credentials.
+
+Use template-declared secret paths plus structural Parameter-row and text detection. Heuristics
+cannot recognize every arbitrary secret in executable code; inspect secret-bearing custom code
+before persistence. Redact the whole sensitive field rather than claiming complete code parsing.
+Keep secret discovery separate from literal-value output.
+
+The packaged disk queue redacts responses before writing them and rejects credential-bearing
+mutation arguments. Updating such an object requires a secure in-memory adapter and existing
+applicable authority; otherwise mark only that operation Blocked with the reason and continue
+independent work. Never substitute a marker for the live value or infer value equality. Host/MCP
+transcripts are outside the queue's persistence boundary; do not describe disk canary tests as
+proof about those external logs.

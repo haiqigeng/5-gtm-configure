@@ -2,20 +2,14 @@
 
 ## Contents
 
-- [Prefer dataLayer Custom Events](#prefer-datalayer-custom-events)
-- [Configure Custom Event triggers precisely](#configure-custom-event-triggers-precisely)
-- [Model trigger Boolean logic](#model-trigger-boolean-logic)
-- [Handle initial page views and SPA navigation separately](#handle-initial-page-views-and-spa-navigation-separately)
-- [Handle business events before CMP readiness](#handle-business-events-before-cmp-readiness)
-- [Use blocking triggers as vendor policy objects](#use-blocking-triggers-as-vendor-policy-objects)
-- [Cover every applicable web trigger](#cover-every-applicable-web-trigger)
-- [Select variables by purpose](#select-variables-by-purpose)
-- [Cover built-in and user-defined variables](#cover-built-in-and-user-defined-variables)
-- [Use lookup tables selectively](#use-lookup-tables-selectively)
-- [Inspect advanced tag execution settings](#inspect-advanced-tag-execution-settings)
-- [Use tag sequencing only when required](#use-tag-sequencing-only-when-required)
-- [Account for environments and hostnames](#account-for-environments-and-hostnames)
-- [Official entry points](#official-entry-points)
+- Approved event and Boolean logic
+- Variable semantics and execution settings
+- Sequencing boundaries
+
+For non-Custom-Event triggers, built-in variable selection, LUT/RLT mapping or environment routing,
+read [native-triggers-and-variables.md](native-triggers-and-variables.md). The
+[CMP reference](cmp-consent.md) owns blocking predicates, initial/late page-view timing, SPA consent
+opportunities and events before CMP readiness. Do not repeat those rules inside each trigger.
 
 ## Prefer dataLayer Custom Events
 
@@ -57,66 +51,6 @@ Record the complete Boolean expression before creating triggers:
 
 Use the smallest trigger graph that expresses the approved logic. Do not compress independent OR-denial conditions into one trigger whose AND filters can never match together.
 
-## Handle initial page views and SPA navigation separately
-
-For an initial page view under strict/basic gating, use the CMP's verified one-time readiness event when the page-view dataLayer push precedes usable consent state.
-
-Revalidate every page parameter on the CMP event that actually fires the tag. Use browser built-ins or retained dataLayer state only when the approved source contract establishes that the value remains current; do not assume a value scoped to an earlier `page_view` push remains available. If the required source is unavailable or stale under the contract, record a blocker and require a CMP-safe application event or source contract.
-
-For an SPA:
-
-1. Prefer an application-owned virtual-page-view Custom Event with the final URL/title/referrer values.
-2. Inspect Enhanced Measurement and every vendor's automatic SPA behavior.
-3. Use History Change only as an approved fallback when no reliable application event exists.
-4. Update configuration fields before the separate page-view event when the destination requires it.
-5. Prevent initial-load, browser-history, router, and manual duplicate page views.
-
-## Handle business events before CMP readiness
-
-For a business event, use the approved Custom Event as the normal trigger and a separate vendor
-block. If the event can happen before the CMP has a usable state, do not assume the block will
-replay it later. Require a site event after readiness, a later fresh equivalent event, or an
-explicitly approved one-time replay with retained payload and duplicate prevention. Otherwise keep
-the tag configuration honest and record the lost-opportunity risk as a site/dataLayer dependency.
-
-A Trigger Group is not a consent replay queue: it does not preserve event-scoped variables or
-provide an exactly-once guarantee.
-
-## Use blocking triggers as vendor policy objects
-
-Create the smallest reusable set of blocks that expresses the approved CMP predicate. One vendor/platform block is preferred when one native condition represents the complete grant. When category/purpose, vendor, product consent type, or initialization are independent required grants, use semantically named reusable blocks so any missing grant blocks; do not force mutually exclusive denial conditions into one AND trigger. Name vendor blocks `Block - <CMP> - <Vendor> denied` and qualify shared category/purpose blocks clearly.
-
-Make the blocking trigger's event matcher cover every normal event used by its consumer tags. For a
-vendor-wide Custom Event block, default to a tested `.*` regex matcher so new consumer events remain
-covered. Use an enumerated or narrower regex only for an intentionally restricted consumer family
-and record why. Do not use a CMP readiness/change event as the exception's event name for unrelated
-business-event tags: the exception must activate on the same GTM event that could fire the tag.
-
-Do not label a normal Custom Event trigger as a blocking trigger. Do not append `CE` to a block name. Inspect all consumers before changing a shared block.
-
-## Cover every applicable web trigger
-
-Use the current GTM UI/API to identify the complete web trigger surface. Apply these stable decision
-families:
-
-| Trigger family | Required judgement |
-| --- | --- |
-| Consent Initialization / Initialization | Use only for documented consent/default or earliest initialization work; do not send business events here. |
-| Page View / DOM Ready / Window Loaded | Choose the earliest event that has every required value and DOM dependency; prevent automatic/manual overlap. |
-| Custom Event | Preferred for approved application success events and vendor-neutral dataLayer timing. |
-| Just Links | Use only for a real anchor-navigation interaction. Configure `Wait for Tags` and `Check Validation` only after proving their page-enable condition, timeout, browser behavior, and navigation impact; those options are mechanics, not conversion-success proof. |
-| All Elements | Use when the approved interaction is not reliably represented by an anchor. Filter on the clicked element/ancestor contract deliberately and do not substitute it for Just Links only to gain waiting behavior. |
-| Form Submission | Use only when the browser submit event honestly represents the approved outcome. Configure waiting/check validation and the enable condition from current proof; a valid browser submit is not proof of backend success. |
-| Element Visibility | Define selector/element source, minimum percent, minimum on-screen duration, DOM-change observation, once-per-page/element behavior, and page scope. Dynamic observation cost and repeated elements must be intentional. |
-| Scroll Depth | Define vertical/horizontal direction, percentage/pixel thresholds, page scope, and whether each threshold firing is a distinct approved interaction. Reconcile GA4 Enhanced Measurement scroll. |
-| YouTube Video | Enable the exact built-ins and capture options required for start/progress/complete; define percentage thresholds and JavaScript API support. Reconcile embedded-player availability and any automatic video measurement. |
-| History Change | Use for an approved SPA fallback; define which history sources/states qualify, retain old/new URL values correctly, and reconcile application and Enhanced Measurement routes. |
-| Timer / JavaScript Error / other web trigger | Use only when the tracking plan explicitly measures that interaction and current built-ins expose the required source. Define limit, interval, error fields, and page scope as applicable. |
-| Trigger Group | Treat it as an AND lifecycle: it fires after every member has fired since the group became active, with member repetition and page lifecycle verified. Do not use it to simulate consent revocation or a mutually exclusive predicate. |
-
-For every trigger, record event type, all-versus-some selection, row-level AND filters, regex intent,
-repeatability, required built-ins, and positive/negative static examples.
-
 ## Select variables by purpose
 
 | Need | Preferred variable |
@@ -139,36 +73,6 @@ dataLayer object state. Choose
 from the approved source contract, not preference. A change between versions can change nested
 resolution, persistence, object merging, and every consumer, so never update a reused DLV version
 without tracing all tags, triggers, tables, and transformations that reference it.
-
-## Cover built-in and user-defined variables
-
-Enable only the built-in variables required by an approved mapping or trigger and record each
-consumer. Inspect page, click, form, history, video, scroll, visibility, error, and utility built-ins
-from the current web-container surface; do not enable an entire family speculatively.
-
-For user-defined variables, choose from the current native surface by semantics:
-
-- Data Layer, constant, URL, referrer, first-party cookie, JavaScript variable, DOM element, auto-
-  event, lookup table, regex table, random/undefined utility, and Google settings variables where
-  applicable;
-- narrow Custom JavaScript only when native variables cannot express the required pure output;
-- installed variable templates only after the same publisher/version/permission gate as tag
-  templates.
-
-Record return type, event/state lifetime, missing behavior, dependencies, and every consumer. Avoid
-DOM, cookie, global-JavaScript, random, or auto-event sources when an approved dataLayer value exists.
-
-## Use lookup tables selectively
-
-Create a lookup or regex table only when:
-
-- at least two real input scenarios need a mapping;
-- the mapping is deterministic and easier to understand than repeated conditions or code;
-- every input/output and default/no-match behavior is defined;
-- the table reduces real duplication;
-- representative inputs can be tested.
-
-Apply this judgement to analytics and media alike. Do not force a table into a direct one-to-one mapping.
 
 ## Inspect advanced tag execution settings
 
@@ -218,12 +122,6 @@ exception, or a manually edited checkpoint to make it pass. If the installed tem
 correct independent native route, use that route; otherwise mark the sequencing-dependent
 requirement `Blocked`. Do not claim setup/cleanup-only coverage or include it in this release's
 field-test acceptance. Inspect existing sequences for impact even when their mutation is blocked.
-
-## Account for environments and hostnames
-
-Reuse or create environment/hostname mappings only when the implementation genuinely differs by environment or region. Prefer one tested LUT/RLT over duplicated tags when the destinations and consent policy remain semantically aligned.
-
-Never send staging/test traffic to a production destination unless explicitly intended. Do not infer an environment mapping from hostname alone without confirming the target architecture.
 
 ## Official entry points
 

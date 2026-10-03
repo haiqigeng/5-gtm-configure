@@ -9,13 +9,19 @@ from pathlib import Path
 from typing import Any
 
 import run_validation_web as web_support
+from public_identifiers import public_identifier_paths
 from redaction import redact_for_persistence
 from resource_registry import (
     ResourceRegistryError,
     required_baseline_families,
     validate_target_family,
 )
-from run_model import SCHEMA_VERSION, SERVER_RESOURCE_FAMILIES, WEB_RESOURCE_FAMILIES
+from run_model import (
+    PUBLICATION_ORDER,
+    SCHEMA_VERSION,
+    SERVER_RESOURCE_FAMILIES,
+    WEB_RESOURCE_FAMILIES,
+)
 from run_validation_core import transition_allowed, validate_document
 from strict_json import StrictJsonError, load_json
 from validate_configuration_contract import ContractValidationError
@@ -62,41 +68,18 @@ def _external_dependencies(contract: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def _publication_dependencies(mode: str) -> list[dict[str, Any]]:
-    if mode == "web":
-        return []
-    dependencies = [
+    order = PUBLICATION_ORDER[mode]
+    return [
         {
-            "kind": "server-publication",
-            "owner": "external",
+            "kind": kind,
+            "owner": "external acceptance owner"
+            if "recette" in kind or "smoke" in kind
+            else "external deployment owner",
             "status": "open",
-            "depends_on_kind": None,
+            "depends_on_kind": order[index - 1] if index else None,
             "blocks_saved_configuration": False,
-        },
-        {
-            "kind": "server-recette",
-            "owner": "external runtime acceptance owner",
-            "status": "open",
-            "depends_on_kind": "server-publication",
-            "blocks_saved_configuration": False,
-        },
-    ]
-    if mode == "server":
-        return dependencies
-    return dependencies + [
-        {
-            "kind": "web-cutover-publication",
-            "owner": "external",
-            "status": "open",
-            "depends_on_kind": "server-recette",
-            "blocks_saved_configuration": False,
-        },
-        {
-            "kind": "web-pipeline-recette",
-            "owner": "external web/server acceptance owner",
-            "status": "open",
-            "depends_on_kind": "web-cutover-publication",
-            "blocks_saved_configuration": False,
-        },
+        }
+        for index, kind in enumerate(order)
     ]
 
 
@@ -150,7 +133,10 @@ def create_from_contract(
             "journal": [],
         }
         if "intended" in item:
-            record["intended"] = redact_for_persistence(item["intended"])
+            record["intended"] = redact_for_persistence(
+                item["intended"],
+                public_identifier_paths=public_identifier_paths(item["intended"], records=[item]),
+            )
         for optional in (
             "pre_change",
             "object_id",
@@ -158,10 +144,14 @@ def create_from_contract(
             "approval",
             "replacement_reason",
             "permission_delta",
+            "public_identifiers",
             "scope",
         ):
             if optional in item:
-                record[optional] = redact_for_persistence(item[optional])
+                record[optional] = redact_for_persistence(
+                    item[optional],
+                    public_identifier_paths=public_identifier_paths(item[optional], records=[item]),
+                )
         object_changes.append(record)
         for requirement_id in record["requirement_ids"]:
             requirement_objects[requirement_id].append(record["object_key"])
@@ -304,6 +294,7 @@ def _build_target_baseline(
     captured_at: str,
     preexisting_workspace_changes: list[dict[str, Any]],
     capture_evidence: dict[str, Any],
+    operations: list[dict] | None = None,
 ) -> dict[str, Any]:
     """Build one redacted, deterministic baseline from exhausted target-family reads."""
     if not isinstance(captured_at, str) or not captured_at.strip():
@@ -352,6 +343,13 @@ def _build_target_baseline(
                 f"baseline pagination receipt for {family!r} must prove positive pages and exhaustion"
             )
     container_type = target["container_type"]
+    # References to credentials may cross families or pages. Classify the collected
+    # graph together, before any baseline resource or workspace-change persistence.
+    raw_graph = {"resources": resources, "changes": preexisting_workspace_changes}
+    safe_graph = redact_for_persistence(
+        raw_graph,
+        public_identifier_paths=public_identifier_paths(raw_graph, records=operations or []),
+    )
     normalized: dict[str, list[dict[str, Any]]] = {}
     for family in sorted(resources):
         try:
@@ -363,8 +361,8 @@ def _build_target_baseline(
             raise RunValidationError(
                 f"baseline resources.{validated_family} must be an array of objects"
             )
-        normalized[validated_family] = redact_for_persistence(items)
-    safe_changes = redact_for_persistence(preexisting_workspace_changes)
+        normalized[validated_family] = safe_graph["resources"][family]
+    safe_changes = safe_graph["changes"]
     resource_identities = {
         family: sorted(
             f"{target['target_id']}::{family}::{item['name'].strip()}"
@@ -425,7 +423,14 @@ def _record_target_baseline(
     started = [
         item["operation_id"]
         for item in value["object_changes"]
-        if item["target_id"] == target_id and (item["state"] != "planned" or item["journal"])
+        if item["target_id"] == target_id
+        and (
+            item["state"] in {"in_progress", "saved", "verified", "uncertain"}
+            or any(
+                entry["state"] in {"in_progress", "saved", "verified", "uncertain"}
+                for entry in item["journal"]
+            )
+        )
     ]
     if started:
         raise RunConflictError(
@@ -437,6 +442,7 @@ def _record_target_baseline(
         captured_at=captured_at,
         preexisting_workspace_changes=preexisting_workspace_changes,
         capture_evidence=capture_evidence,
+        operations=[item for item in value["object_changes"] if item["target_id"] == target_id],
     )
     index = next(
         index
@@ -532,7 +538,13 @@ def checkpoint_operation(
         and "pre_write_comparison" not in operation
     ):
         raise RunValidationError("verified delta operation lacks pre-write drift evidence")
-    safe_saved = redact_for_persistence(saved) if saved is not None else None
+    safe_saved = (
+        redact_for_persistence(
+            saved, public_identifier_paths=public_identifier_paths(saved, records=[operation])
+        )
+        if saved is not None
+        else None
+    )
     if state == "verified":
         try:
             if comparison is None:
@@ -556,12 +568,17 @@ def checkpoint_operation(
     elif state == "saved":
         operation["saved_readback"] = safe_saved
     operation["state"] = state
+    # Convergence observations prove an earlier verification generation. Journals
+    # retain history; changed operations need a new complete convergence pass.
+    value["idempotency"] = {"checked": False, "remaining_actions": [], "observations": []}
     operation["journal"].append(
         {
             "at": timestamp or _utc_now(),
             "state": state,
             "note": note,
-            "result": redact_for_persistence(result),
+            "result": redact_for_persistence(
+                result, public_identifier_paths=public_identifier_paths(result, records=[operation])
+            ),
             "error": redact_for_persistence(error),
         }
     )
@@ -593,6 +610,7 @@ def reopen_failed_operation(
         item for item in value["saved_readback"] if item.get("operation_id") != operation_id
     ]
     operation["state"] = "planned"
+    value["idempotency"] = {"checked": False, "remaining_actions": [], "observations": []}
     operation["journal"].append(
         {"at": timestamp or _utc_now(), "state": "planned", "note": note, "reopened": True}
     )
@@ -608,7 +626,15 @@ def _derive_live_status(document: dict[str, Any]) -> None:
         ]
         states = {item["state"] for item in operations}
         verified = [item for item in operations if item["state"] == "verified"]
-        result["last_verified_operation_id"] = verified[-1]["operation_id"] if verified else None
+        # Readbacks are appended by successful checkpoints, unlike contract object order.
+        result["last_verified_operation_id"] = next(
+            (
+                item["operation_id"]
+                for item in reversed(document["saved_readback"])
+                if item["target_id"] == result["target_id"]
+            ),
+            None,
+        )
         if states & {"uncertain"}:
             result["status"] = "Partial"
         elif states & {"failed"}:

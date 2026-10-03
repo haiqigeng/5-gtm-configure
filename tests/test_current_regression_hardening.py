@@ -455,11 +455,65 @@ class CurrentRegressionHardeningTest(unittest.TestCase):
             self.assertIn(heading, markdown)
         self.assertIn("Rationale:", markdown)
 
+    def test_last_verified_follows_checkpoint_order_per_target(self) -> None:
+        run = materialize(valid_pipeline_contract())
+        pending = {item["operation_id"]: item for item in run["object_changes"]}
+        last_verified = {target["target_id"]: None for target in run["run"]["targets"]}
+        while pending:
+            operation = next(
+                item
+                for item in reversed(list(pending.values()))
+                if not any(dependency in pending for dependency in item["dependencies"])
+            )
+            operation_id = operation["operation_id"]
+            run = checkpoint_operation(
+                run,
+                operation_id=operation_id,
+                state="verified",
+                note="Authoritative readback matched.",
+                saved=expected_graph(operation),
+                timestamp="2026-09-28T14:00:00Z",
+            )
+            pending.pop(operation_id)
+            last_verified[operation["target_id"]] = operation_id
+            self.assertEqual(
+                {
+                    item["target_id"]: item["last_verified_operation_id"]
+                    for item in run["target_results"]
+                },
+                last_verified,
+            )
+
+    def test_report_exposes_native_id_from_saved_object_not_context(self) -> None:
+        run = materialize(valid_web_contract())
+        operation = next(item for item in run["object_changes"] if not item["dependencies"])
+        saved = expected_graph(operation)
+        saved["objects"][0]["triggerId"] = "saved-trigger-501"
+        saved["context_objects"] = [
+            {
+                "target_id": operation["target_id"],
+                "object_type": "trigger",
+                "name": "Unrelated trigger",
+                "triggerId": "unrelated-trigger-999",
+            }
+        ]
+        run = checkpoint_operation(
+            run,
+            operation_id=operation["operation_id"],
+            state="verified",
+            note="Authoritative readback matched.",
+            saved=saved,
+        )
+        markdown = render_markdown(run)
+        self.assertIn("Saved object ID: saved-trigger-501", markdown)
+        self.assertNotIn("unrelated-trigger-999", markdown)
+        self.assertIn("Readback comparison: passed", markdown)
+
     def test_server_only_run_has_ordered_publication_dependencies(self) -> None:
         run = materialize(valid_server_contract())
         self.assertEqual(
             [item["kind"] for item in run["publication_dependencies"]],
-            ["server-publication", "server-recette"],
+            ["server-recette", "server-publication", "post-publication-smoke"],
         )
 
     def test_reopen_clears_stale_saved_evidence(self) -> None:

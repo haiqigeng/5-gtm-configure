@@ -12,7 +12,7 @@ from run_model import (
     DEDUP_SOURCE_TYPES,
     DEDUP_STRATEGIES,
     FIELD_FLOW_STATUSES,
-    PUBLICATION_DEPENDENCY_KINDS,
+    PUBLICATION_ORDER,
     SERVER_CONSENT_MECHANISMS,
     SHAPES,
     TRANSPORT_BEHAVIORS,
@@ -28,9 +28,43 @@ from run_validation_web import (
     _send_page_view_value,
     _tag_type,
 )
+from shared_event_id import (
+    validate_generated_event_ids,
+    validate_pipeline_dedup,
+    validate_sender_dedup,
+)
 
 
 def validate_transport_consent(topology: dict[str, Any], fail: Callable[[str], None]) -> None:
+    if topology.get("consent_mode") == "client-policy-ungated":
+        enforcement = topology.get("web_enforcement", {})
+        policy = enforcement.get("client_policy", {})
+        if (
+            enforcement.get("mechanism") != "none"
+            or topology.get("signal_authority") != "none"
+            or topology.get("unknown_state_behavior") != "explicit-policy"
+            or topology.get("transport_behavior") != "always-transported"
+            or topology.get("server_enforcement", {}).get("mechanism") != "none"
+            or topology.get("server_tag_keys")
+            or topology.get("transporter_tag_keys")
+            or topology.get("transporter_destination_vendor_block")
+            or topology.get("intentional_double_gate")
+        ):
+            fail(
+                "client-policy-ungated requires an ungated web destination, without server transport"
+            )
+        if (
+            not isinstance(policy, dict)
+            or set(policy) != {"grade", "locator", "scope"}
+            or policy.get("grade") != "approved-input"
+            or any(
+                not isinstance(policy.get(key), str) or not policy[key].strip()
+                for key in ("locator", "scope")
+            )
+        ):
+            fail(
+                "client-policy-ungated requires explicit approved-input client_policy locator and scope"
+            )
     if (
         topology.get("consent_mode") == "strict-basic"
         and topology.get("transport_behavior") == "always-transported"
@@ -169,8 +203,8 @@ def validate_pipeline_run(
             fail(f"$.consent_topologies[{index}].server_tag_keys must not be empty")
         if mode == "pipeline" and transporter_tag_keys and not server_tag_keys:
             fail(f"$.consent_topologies[{index}] transporter lacks server destination tags")
-        if mode == "web" and (server_tag_keys or transporter_tag_keys):
-            fail(f"$.consent_topologies[{index}] web-only topology binds server transport")
+        if mode == "web" and server_tag_keys:
+            fail(f"$.consent_topologies[{index}] web-only topology binds server tags")
         if mode == "server" and transporter_tag_keys:
             fail(f"$.consent_topologies[{index}] server-only topology binds web transporters")
         vendor_block = item.get("transporter_destination_vendor_block")
@@ -693,10 +727,7 @@ def validate_pipeline_run(
                         continue
                     if dedup.get("requirement_id") not in consumer.get("requirement_ids", []):
                         fail(f"{path} {role} dedup consumer lacks the dedup requirement")
-                    if dedup.get("source_reference") not in _reference_values(
-                        consumer.get("intended", {})
-                    ):
-                        fail(f"{path} {role} dedup consumer does not use the shared ID")
+
                     if role == "transporter" and transport_operation is not None:
                         if transport_operation["operation_id"] not in consumer.get(
                             "dependencies", []
@@ -756,12 +787,33 @@ def validate_pipeline_run(
                 f"server target {target_id!r} request class {request_class!r} has "
                 f"{len(clients)} intended claiming Clients"
             )
-    if set(dedup_by_id) != linked_dedup_ids:
+    if mode == "pipeline" and set(dedup_by_id) != linked_dedup_ids:
         fail(
             "dedup contracts must be linked to one pipeline; unlinked="
             + ", ".join(sorted(set(dedup_by_id) - linked_dedup_ids))
         )
     _validate_dedup(document["dedup_contracts"], requirement_ids, fail)
+    if mode == "web":
+        validate_sender_dedup(
+            document["dedup_contracts"],
+            list(by_object_key.values()),
+            document["external_dependencies"],
+            fail,
+        )
+    elif mode == "server" and document["dedup_contracts"]:
+        fail("server-only runs cannot configure sender dedup contracts")
+    if mode == "pipeline":
+        validate_pipeline_dedup(
+            document["dedup_contracts"], list(by_object_key.values()), document["pipelines"], fail
+        )
+    validate_generated_event_ids(
+        document["dedup_contracts"],
+        list(by_object_key.values()),
+        document["execution_topologies"],
+        target_types,
+        fail,
+        document.get("container_baselines", []),
+    )
     _validate_publication_dependencies(document["publication_dependencies"], mode, fail)
 
 
@@ -829,34 +881,16 @@ def _validate_dedup(
 def _validate_publication_dependencies(
     dependencies: list[dict[str, Any]], mode: str, fail: Callable[[str], None]
 ) -> None:
-    if mode == "web":
-        if dependencies:
-            fail("$.publication_dependencies must be empty in web-only mode")
-        return
+    order = PUBLICATION_ORDER[mode]
     by_kind = {item.get("kind"): item for item in dependencies}
-    if len(by_kind) != len(dependencies):
-        fail("$.publication_dependencies contains duplicate kinds")
-    expected = (
-        {"server-publication", "server-recette"}
-        if mode == "server"
-        else PUBLICATION_DEPENDENCY_KINDS
-    )
-    missing = sorted(expected - set(by_kind))
-    if missing:
-        fail("$.publication_dependencies misses: " + ", ".join(missing))
+    if len(by_kind) != len(dependencies) or set(by_kind) != set(order):
+        fail(
+            "$.publication_dependencies must contain exactly the required acceptance/deployment steps"
+        )
         return
-    extra = sorted(set(by_kind) - expected)
-    if extra:
-        fail("$.publication_dependencies has unexpected kinds: " + ", ".join(extra))
-    if by_kind["server-recette"].get("depends_on_kind") != "server-publication":
-        fail("server recette must depend on server publication")
-    if mode == "server":
-        if any(item.get("blocks_saved_configuration") is True for item in dependencies):
-            fail("publication dependencies cannot block saved configuration status")
-        return
-    if by_kind["web-cutover-publication"].get("depends_on_kind") != "server-recette":
-        fail("web cutover publication must depend on server recette")
-    if by_kind["web-pipeline-recette"].get("depends_on_kind") != "web-cutover-publication":
-        fail("web/end-to-end recette must depend on web cutover publication")
+    for index, kind in enumerate(order):
+        expected = order[index - 1] if index else None
+        if by_kind[kind].get("depends_on_kind") != expected:
+            fail(f"{kind} must depend on {expected!r}; runtime acceptance precedes publication")
     if any(item.get("blocks_saved_configuration") is True for item in dependencies):
         fail("publication dependencies cannot block saved configuration status")

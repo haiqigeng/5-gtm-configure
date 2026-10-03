@@ -10,11 +10,21 @@ from copy import deepcopy
 from typing import Any, Callable
 
 import run_validation_web as web
+from consent_conventions import ALTERNATIVE_GATES, validate_convention
 from event_semantics import approved_event_name, trigger_accepts_event
-from resource_registry import is_configuration_settings_mutation
+from native_configuration import (
+    USER_DATA_VARIABLE_TYPES,
+    FieldResolutionError,
+    effective_event_parameters,
+    field_key,
+    referenced_variable_closure,
+    sensitive_fields,
+    supports_native_mapping,
+    variable_consumers,
+    variable_name,
+)
+from resource_registry import requires_variable_consumer_check
 from run_model import EXECUTION_MODES
-
-_USER_PROVIDED_DATA_VARIABLE_TYPES = {"userprovideddata", "userprovideddatavariable"}
 
 
 def _contains_configuration_key(value: Any, keys: set[str]) -> bool:
@@ -29,36 +39,6 @@ def _contains_configuration_key(value: Any, keys: set[str]) -> bool:
     if isinstance(value, list):
         return any(_contains_configuration_key(child, keys) for child in value)
     return False
-
-
-def _contains_reference(value: Any, references: set[str]) -> bool:
-    if isinstance(value, dict):
-        return any(_contains_reference(child, references) for child in value.values())
-    if isinstance(value, list):
-        return any(_contains_reference(child, references) for child in value)
-    if not isinstance(value, str):
-        return False
-    normalized = value.strip()
-    return normalized in references or any(f"{{{{{name}}}}}" in normalized for name in references)
-
-
-def configuration_settings_consumers(
-    operation: dict[str, Any], tags: list[dict[str, Any]]
-) -> set[str]:
-    """Read actual variable references; return consumer names in this target."""
-    references = {operation["name"], operation["object_key"]}
-    local_key = f"variable::{operation['name']}"
-    references.add(local_key)
-    if operation.get("target_id"):
-        references.add(f"{operation['target_id']}::{local_key}")
-    return {
-        tag["name"].strip()
-        for tag in tags
-        if isinstance(tag, dict)
-        and isinstance(tag.get("name"), str)
-        and tag["name"].strip()
-        and _contains_reference(tag, references)
-    }
 
 
 def materialize_payload_mappings(contract: dict[str, Any]) -> list[dict[str, Any]]:
@@ -86,7 +66,11 @@ def materialize_payload_mappings(contract: dict[str, Any]) -> list[dict[str, Any
         "status",
     }
     for binding in bindings:
-        if not isinstance(binding, dict) or set(binding) != required:
+        if (
+            not isinstance(binding, dict)
+            or not required <= set(binding)
+            or set(binding) - required - {"native_binding"}
+        ):
             raise web.RunValidationError("field binding has missing or unexpected fields")
         key = (
             binding["requirement_id"],
@@ -100,6 +84,82 @@ def materialize_payload_mappings(contract: dict[str, Any]) -> list[dict[str, Any
     return web._validate_payload_mappings(
         mappings, {item["id"] for item in contract["requirements"]}
     )
+
+
+def validate_native_mappings(mappings, operations, fail):
+    """Prove supported event mappings; leave other native structures agent-reviewed."""
+    by_key = {item.get("object_key"): item for item in operations}
+    for mapping in mappings:
+        if mapping["status"] != "mapped":
+            continue
+        binding = mapping.get("native_binding")
+        if binding is None and not any(
+            mapping["requirement_id"] in item.get("requirement_ids", [])
+            and supports_native_mapping(
+                mapping, item.get("intended") or item.get("pre_change") or {}
+            )
+            for item in operations
+        ):
+            continue
+        if (
+            not isinstance(binding, dict)
+            or set(binding) != {"object_key", "field"}
+            or not all(isinstance(binding[key], str) and binding[key].strip() for key in binding)
+        ):
+            fail("mapped scalar GA4 event parameter requires native_binding object_key and field")
+            continue
+        owner = by_key.get(binding["object_key"], {})
+        if (
+            (owner.get("resource_family") or owner.get("object_type")) != "tag"
+            or owner.get("action") in web.NON_EXECUTING_TAG_ACTIONS
+            or mapping["requirement_id"] not in owner.get("requirement_ids", [])
+        ):
+            fail("native mapping owner must be an active tag for the approved requirement")
+            continue
+        variables = {
+            item["name"]: item.get("intended") or item.get("pre_change") or {}
+            for item in operations
+            if item.get("target_id") == owner.get("target_id")
+            and (item.get("resource_family") or item.get("object_type")) == "variable"
+            and item.get("action") not in web.NON_EXECUTING_TAG_ACTIONS
+        }
+        try:
+            field = binding["field"]
+            if field != mapping["destination_field"]:
+                raise ValueError(
+                    "native mapping field must identify the approved destination field"
+                )
+            target = owner.get("intended") or owner.get("pre_change") or {}
+            if target.get("paused") is True:
+                raise ValueError("native mapping owner is paused")
+            if not supports_native_mapping(mapping, target):
+                continue
+            value = effective_event_parameters(target, variables)[field]
+            if value != mapping["gtm_resolution"]:
+                raise ValueError("native mapping value differs from gtm_resolution")
+            if mapping.get("mapping_method") == "direct-dlv":
+                if (
+                    not isinstance(value, str)
+                    or not value.startswith("{{")
+                    or not value.endswith("}}")
+                ):
+                    raise ValueError("direct-dlv requires a native variable reference")
+                variable = variables[variable_name(value)]
+                if variable.get("type") != "v":
+                    raise ValueError("direct-dlv must reference a Data Layer Variable")
+                # Native DLV source is parameter[name], not the resource display name.
+                source = next(
+                    (
+                        row.get("value")
+                        for row in variable.get("parameter", [])
+                        if row.get("key") == "name"
+                    ),
+                    None,
+                )
+                if source != mapping["source"]:
+                    raise ValueError("direct-dlv source differs from the approved source")
+        except (ValueError, KeyError, TypeError) as exc:
+            fail(f"native mapping {mapping['destination_field']!r} is unresolved: {exc}")
 
 
 def _text(value: Any, path: str, fail: Callable[[str], None]) -> str:
@@ -296,16 +356,19 @@ def _validate_topology_consent_binding(
                 else {
                     "cmp-lifecycle-plus-vendor-block",
                     "business-trigger-plus-vendor-block",
+                    *ALTERNATIVE_GATES,
                 }
             )
             if mechanism not in allowed:
                 fail(f"{path}.strict-basic consent mechanism differs from the tag's route role")
+            if mechanism in ALTERNATIVE_GATES and topology.get("unknown_state_behavior") != "deny":
+                fail("Alternative strict-basic conventions must fail closed on unknown consent")
         native_google_carrier = (
             is_transporter
             and mechanism == "transport-trigger-only"
             and topology.get("signal_authority") == "google-consent-mode"
             and topology.get("server_enforcement", {}).get("mechanism")
-            == "incoming-google-consent-native"
+            in {"incoming-google-consent-native", "none"}
         )
         if (
             source.get("consent_mode") == "advanced-native"
@@ -394,6 +457,7 @@ def validate_web_domain(
     except web.RunValidationError as exc:
         fail(str(exc))
         return
+    validate_native_mappings(mappings, operations, fail)
     dependencies = _external_dependency_index(external_dependencies, set(requirement_ids), fail)
     consent_by_id: dict[str, dict[str, Any]] = {}
     transporter_keys: set[str] = set()
@@ -460,6 +524,24 @@ def validate_web_domain(
             "google-ads-server-user-provided-data-event",
         }:
             receiver_keys = route.get("server_consumer_object_keys")
+            if set(target_types.values()) == {"web"}:
+                dependency_id = route.get("external_receiver_dependency_id")
+                dependency = dependencies.get(dependency_id, {})
+                if (
+                    server_feature != "google-ads-server-user-data-transport"
+                    or route.get("timing") != "same-event"
+                    or receiver_keys != []
+                    or dependency_id not in route.get("external_dependency_ids", [])
+                    or route.get("requirement_id") not in dependency.get("requirement_ids", [])
+                ):
+                    fail(
+                        f"$.first_party_data_routes[{index}] sender-only user_data needs same-event scope and its explicit external receiver dependency"
+                    )
+                continue
+            if route.get("external_receiver_dependency_id") is not None:
+                fail(
+                    f"$.first_party_data_routes[{index}] full pipeline requires in-scope receiver proof"
+                )
             if (
                 not isinstance(receiver_keys, list)
                 or not receiver_keys
@@ -529,18 +611,32 @@ def validate_web_domain(
             for requirement_id in operation.get("requirement_ids", [])
         }
         local_topologies = []
+        consent_enforcements = {}
         for index, topology in enumerate(topologies_by_target[target_id]):
             path = f"$.execution_topologies[{index}]"
             _validate_topology_consent_binding(
                 topology, consent_by_id=consent_by_id, path=path, fail=fail
             )
             local_topologies.append(_local_topology(topology, target_id, path, fail))
+            enforcements = [
+                consent_by_id[key]["web_enforcement"] for key in topology["consent_topology_ids"]
+            ]
+            if any(item.get("mechanism") in ALTERNATIVE_GATES for item in enforcements) and any(
+                item != enforcements[0] for item in enforcements
+            ):
+                fail("One web tag must have one consistent consent enforcement declaration")
+            enforcement = enforcements[0]
+            validate_convention(
+                topology, enforcement, {item["object_key"]: item for item in operations}, fail
+            )
+            consent_enforcements[local_topologies[-1]["tag_object_key"]] = enforcement["mechanism"]
         try:
             validated_topologies = web._validate_execution_topologies(
                 local_topologies,
                 requirement_ids=set(requirement_ids),
                 operations=local_operations,
                 baseline_trigger_types={},
+                consent_enforcements=consent_enforcements,
                 transporter_tag_keys={
                     _local_key(
                         value,
@@ -788,7 +884,6 @@ def validate_web_domain(
                 operations=local_operations,
                 external_dependencies=dependencies,
                 payload_mappings=mappings,
-                schema_version=web.SCHEMA_VERSION,
             )
         except web.RunValidationError as exc:
             fail(str(exc))
@@ -821,30 +916,37 @@ def validate_web_domain(
                             "must resolve on its approved source event, not only at initialization; "
                             "use the documented event-scoped sender when data becomes available later"
                         )
-            if route["feature"] != "google-ads-user-provided-data-event":
+            if route["feature"] not in {
+                "google-ads-user-provided-data-event",
+                "google-ads-enhanced-conversions",
+            }:
                 continue
-            requirement = requirement_by_id.get(route["requirement_id"], {})
-            if requirement.get("source_event") != "gtm.formSubmit":
-                fail(
-                    f"first-party route {route['requirement_id']!r} must use the approved "
-                    "gtm.formSubmit source event for prior-page browser capture"
-                )
-            for consumer_key in route["consumer_object_keys"]:
-                topology = validated_topologies.get(consumer_key)
-                if topology is None or {
-                    trigger["type"] for trigger in topology["normal_triggers"]
-                } != {"form-submission"}:
+            if route["feature"] == "google-ads-user-provided-data-event":
+                requirement = requirement_by_id.get(route["requirement_id"], {})
+                if requirement.get("source_event") != "gtm.formSubmit":
                     fail(
                         f"first-party route {route['requirement_id']!r} must bind the "
-                        "native Form Submission trigger for prior-page browser capture"
+                        "gtm.formSubmit source event for prior-page browser capture"
                     )
+                for consumer_key in route["consumer_object_keys"]:
+                    topology = validated_topologies.get(consumer_key)
+                    if topology is None or {
+                        trigger["type"] for trigger in topology["normal_triggers"]
+                    } != {"form-submission"}:
+                        fail(
+                            f"first-party route {route['requirement_id']!r} must bind the "
+                            "native Form Submission trigger for prior-page browser capture"
+                        )
             for consumer_key in route["consumer_object_keys"]:
                 consumer = next(
                     item for item in local_operations.values() if item["object_key"] == consumer_key
                 )
-                _, binding_value = web._configuration_value(
+                _, binding_value = web._first_party_binding_value(
+                    route,
                     web._effective_target(consumer, "$.first_party_data_routes[].consumer"),
-                    {"user_data"},
+                    consumer_key,
+                    "$.first_party_data_routes[]",
+                    local_operations,
                 )
                 if not (
                     isinstance(binding_value, str)
@@ -876,46 +978,82 @@ def validate_web_domain(
                     if variable is not None
                     else ""
                 )
-                if variable_type not in {"userprovideddata", "userprovideddatavariable"}:
+                if variable_type not in USER_DATA_VARIABLE_TYPES:
                     fail(
                         f"first-party route {route['requirement_id']!r} must bind a native "
                         "User-Provided Data variable"
                     )
 
-        authorized_consumers = {
-            key for route in validated_routes for key in route["consumer_object_keys"]
+        variable_targets = {
+            operation["name"]: web._effective_target(operation, "$.variable")
+            for operation in local_operations.values()
+            if operation["object_type"] == "variable"
+            and operation["action"] not in web.NON_EXECUTING_TAG_ACTIONS
         }
         authorized_variable_names: set[str] = set()
-        for consumer_key in authorized_consumers:
-            consumer = local_operations.get(consumer_key)
-            if consumer is None:
-                continue
-            target = web._effective_target(consumer, "$.first_party_data_routes[].consumer")
-            for field_name in {"user_data", "userData", "user_id", "userId"}:
-                present, binding = web._configuration_value(target, {field_name})
+        authorized_consumer_variables: dict[str, set[str]] = {}
+        operations_by_key = {item["object_key"]: item for item in local_operations.values()}
+        for route in validated_routes:
+            for consumer_key in route["consumer_object_keys"]:
+                consumer = operations_by_key.get(consumer_key)
+                if consumer is None:
+                    continue
+                target = web._effective_target(consumer, "$.first_party_data_routes[].consumer")
+                present, binding = web._first_party_binding_value(
+                    route, target, consumer_key, "$.first_party_data_routes[]", local_operations
+                )
                 if (
                     present
                     and isinstance(binding, str)
                     and binding.startswith("{{")
                     and binding.endswith("}}")
                 ):
-                    authorized_variable_names.add(binding[2:-2].strip())
+                    try:
+                        bound_variables = referenced_variable_closure(binding, variable_targets)
+                        authorized_variable_names.update(bound_variables)
+                        authorized_consumer_variables.setdefault(consumer_key, set()).update(
+                            bound_variables
+                        )
+                    except FieldResolutionError as exc:
+                        fail(str(exc))
+        user_data_variables = {
+            operation["name"]
+            for operation in local_operations.values()
+            if operation["object_type"] == "variable"
+            and operation["action"] not in web.NON_EXECUTING_TAG_ACTIONS
+            and web._normalized_token(
+                str(web._effective_target(operation, "$.variable").get("type", ""))
+            )
+            in USER_DATA_VARIABLE_TYPES
+        }
         for operation in local_operations.values():
             if operation["action"] in web.NON_EXECUTING_TAG_ACTIONS:
                 continue
             target = web._effective_target(operation, "$.implementation.objects[].intended")
-            if operation["object_type"] == "tag" and _contains_configuration_key(
-                target, {"userdata", "userid", "userprovideddata"}
-            ):
-                if operation["object_key"] not in authorized_consumers:
+            if operation["object_type"] == "tag":
+                try:
+                    fields = web._resolved_fields(target, local_operations, "$.first_party_scope")
+                    references = referenced_variable_closure(fields, variable_targets)
+                except (FieldResolutionError, web.RunValidationError) as exc:
+                    fail(str(exc))
+                    return
+                configured_sensitive_fields = sensitive_fields(fields)
+                approved_fields = {
+                    field_key(route["destination_field"])
+                    for route in validated_routes
+                    if operation["object_key"] in route["consumer_object_keys"]
+                }
+                if configured_sensitive_fields - approved_fields or (
+                    (references & user_data_variables)
+                    - authorized_consumer_variables.get(operation["object_key"], set())
+                ):
                     fail(
                         f"web tag {operation['object_key']!r} configures first-party user data "
                         "without an authorized first-party-data route"
                     )
             if (
                 operation["object_type"] == "variable"
-                and web._normalized_token(str(target.get("type", "")))
-                in _USER_PROVIDED_DATA_VARIABLE_TYPES
+                and web._normalized_token(str(target.get("type", ""))) in USER_DATA_VARIABLE_TYPES
             ):
                 if operation["name"] not in authorized_variable_names:
                     fail(
@@ -927,16 +1065,18 @@ def validate_web_domain(
             target_baseline = baseline_resources.get(target_id, {})
             baseline_tags = target_baseline.get("tag", [])
             for operation in local_operations.values():
-                if not is_configuration_settings_mutation(operation):
+                if not requires_variable_consumer_check(operation):
                     continue
                 consumers = {
                     f"tag::{name}"
-                    for name in configuration_settings_consumers(operation, baseline_tags)
+                    for name in variable_consumers(
+                        operation, baseline_tags, target_baseline.get("variable", [])
+                    )
                 }
-                missing_consumers = sorted(consumers - set(local_operations))
+                missing_consumers = sorted(consumers - set(operations_by_key))
                 if missing_consumers:
                     fail(
-                        f"shared Configuration Settings mutation {operation['object_key']!r} "
+                        f"shared variable mutation {operation['object_key']!r} "
                         "does not include every authenticated baseline consumer: "
                         + ", ".join(missing_consumers)
                     )

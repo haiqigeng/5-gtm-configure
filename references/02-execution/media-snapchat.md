@@ -69,10 +69,14 @@ outside the GTM completion claim.
 ## Official entry points
 
 - https://developers.snap.com/marketing-api/Ads-API/snap-pixel
-- https://businesshelp.snapchat.com/articles/en_US/Knowledge/formatting-pixel
+- https://developers.snap.com/marketing-api/Conversions-API/Deduplication
 - https://forbusiness.snapchat.com/advertising/snap-pixel
 
 ## Server route
+
+Entry points checked 2026-09-29. The former `formatting-pixel` help link no longer identifies the
+required pixel-format article; use the developer documentation and the exact current browser setup
+page for the chosen installation method.
 
 For Snap CAPI, load `server/media-snapchat.md`. Use the current API version and map the exact
 browser/server identifier pairs; do not collapse `client_dedup_id`, `event_id`, `transaction_id`,

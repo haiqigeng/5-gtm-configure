@@ -8,11 +8,14 @@ from copy import deepcopy
 from typing import Any
 
 from diff_object_graph import (
+    ID_FIELDS,
     ROOT_METADATA_KEYS,
+    canonical_native_fields,
     differences,
     normalize_graph,
     semantic_references,
 )
+from public_identifiers import canonical_template_source, public_identifier_paths
 from redaction import REDACTED_STATE, is_redacted, redact_for_persistence
 from run_model import VERIFICATION_SCHEMA_VERSION
 
@@ -67,7 +70,9 @@ def build_verification_comparison(
     operation: dict[str, Any], saved: Any
 ) -> tuple[dict[str, Any], Any]:
     """Redact first, then compare one intended operation with authoritative readback."""
-    safe_saved = redact_for_persistence(saved)
+    safe_saved = redact_for_persistence(
+        saved, public_identifier_paths=public_identifier_paths(saved, records=[operation])
+    )
     if operation.get("action") == "remove":
         expected_absence = {
             "target_id": operation["target_id"],
@@ -100,7 +105,12 @@ def build_verification_comparison(
             },
             safe_saved,
         )
-    safe_expected = redact_for_persistence(expected_graph(operation))
+    safe_expected = redact_for_persistence(
+        expected_graph(operation),
+        public_identifier_paths=public_identifier_paths(
+            expected_graph(operation), records=[operation]
+        ),
+    )
     target_types = {operation["target_id"]: operation.get("container_type", "web")}
     allowed_references = semantic_references(safe_expected)
     normalized_expected = normalize_graph(
@@ -121,6 +131,10 @@ def build_verification_comparison(
     saved_keys = set(comparable_saved)
     object_differences = []
     for key in sorted(expected_keys & saved_keys):
+        if operation["resource_family"] == "template":
+            for body in (comparable_expected[key], comparable_saved[key]):
+                if isinstance(body.get("templateData"), str):
+                    body["templateData"] = canonical_template_source(body["templateData"])
         found = differences(comparable_expected[key], comparable_saved[key], f"$.objects[{key!r}]")
         if found:
             object_differences.append({"identity": key, "differences": found})
@@ -153,6 +167,20 @@ def build_verification_comparison(
         "pass": report["pass"],
         "report": report,
     }
+    # Context bodies participate in redaction above, including cross-object taint.
+    # The comparator uses them only as an ID/name index, never as equality evidence.
+    # Retain that complete index and every primary field, without copying unrelated
+    # HTML/parameters into every persisted observation. Baseline bodies remain intact.
+    if isinstance(safe_saved, dict) and "context_objects" in safe_saved:
+        safe_saved["context_objects"] = [
+            {
+                key: value
+                for key, value in item.items()
+                if key
+                in set(ID_FIELDS) | {"target_id", "object_type", "name", "type", "fingerprint"}
+            }
+            for item in safe_saved["context_objects"]
+        ]
     return comparison, safe_saved
 
 
@@ -286,30 +314,52 @@ def _subset_differences(expected: Any, actual: Any, *, path: str = "$") -> list[
 
 
 def build_pre_write_comparison(operation: dict[str, Any], saved: Any) -> tuple[dict[str, Any], Any]:
+    # Runtime operations and direct graph comparisons expose their family differently.
+    # Unspecified families retain strict comparison without tag-only native defaults.
+    family = operation.get("resource_family", operation.get("object_type"))
     if isinstance(saved, dict) and "objects" in saved:
         objects = saved["objects"]
         if not isinstance(objects, list) or len(objects) != 1:
             raise ValueError("pre-write readback requires exactly one primary object")
         primary = objects[0]
         if not isinstance(primary, dict) or (
-            primary.get("target_id") != operation["target_id"]
-            or primary.get("object_type") != operation["resource_family"]
+            family is None
+            or primary.get("target_id") != operation["target_id"]
+            or primary.get("object_type") != family
         ):
             raise ValueError("pre-write graph identity differs from the operation")
         saved = {
             key: value for key, value in primary.items() if key not in {"target_id", "object_type"}
         }
-    safe_saved = redact_for_persistence(saved)
-    expected = redact_for_persistence(operation.get("pre_change"))
+    safe_saved = redact_for_persistence(
+        saved, public_identifier_paths=public_identifier_paths(saved, records=[operation])
+    )
+    expected = redact_for_persistence(
+        operation.get("pre_change"),
+        public_identifier_paths=public_identifier_paths(
+            operation.get("pre_change"), records=[operation]
+        ),
+    )
     if isinstance(expected, dict) and "name" not in expected:
         # A GTM object's name is semantic identity, not server-generated metadata. Bind the
         # pre-write proof to the named object while still ignoring generated IDs/fingerprints.
         expected = {"name": operation["name"], **expected}
+    native_object = family in {"tag", "trigger", "variable", "client", "transformation"}
+    expected = canonical_native_fields(
+        expected, tag_object=family == "tag", native_object=native_object
+    )
+    canonical_saved = canonical_native_fields(
+        safe_saved, tag_object=family == "tag", native_object=native_object
+    )
+    if family == "template":
+        for body in (expected, canonical_saved):
+            if isinstance(body, dict) and isinstance(body.get("templateData"), str):
+                body["templateData"] = canonical_template_source(body["templateData"])
     comparable_expected, expected_paths = _redacted_presence_projection(expected)
-    comparable_saved, saved_paths = _redacted_presence_projection(safe_saved)
+    comparable_saved, saved_paths = _redacted_presence_projection(canonical_saved)
     differences = _subset_differences(comparable_expected, comparable_saved)
     references = _redacted_references(expected)
-    saved_references = _redacted_references(safe_saved)
+    saved_references = _redacted_references(canonical_saved)
     reference_proved = references == saved_references and all(
         reference is not None for reference in references.values()
     )

@@ -1,5 +1,11 @@
 # GA4 configuration and collection ownership
 
+Author native GA4 Event (`gaawe`) parameters with `eventSettingsTable` LIST rows containing
+`parameter`/`parameterValue` MAP cells. Do not write legacy `eventParameters` name/value rows.
+Native ecommerce uses `sendEcommerceData` BOOLEAN and the inspected `getEcommerceDataFrom`
+source (for example `dataLayer`); `sendEcommerce` is not the native enable field. Semantic analysis
+of existing saved objects does not authorize obsolete forms for a new write.
+
 ## Contents
 
 - Configure the Google tag deliberately
@@ -78,6 +84,8 @@ Event tag at a `GT-...` value merely because the Google tag UI displays it; use 
 GA4 measurement-ID contract. Do not create a second Google tag when connecting or reusing a
 destination is the documented compatible architecture, and do not connect or remove a destination
 without explicit authority because that changes routing outside one event tag.
+An absent or deprecated destination-link action does not grant authority to combine tags, move IDs,
+or select a different destination; use a supported authorized surface or record the dependency.
 
 ## Assign exactly one page-view owner
 
@@ -116,6 +124,15 @@ trigger. Do not use a repeatable consent-change event without an explicit duplic
 policy. Revalidate every page parameter at the later CMP event; an earlier event-scoped payload is
 not assumed to persist.
 
+For a separate SPA `page_view`, update the applicable Google configuration fields before sending
+the event. Google's [GTM SPA procedure](https://developers.google.com/analytics/devguides/collection/ga4/measure-spa-gtm)
+uses a setup-only Google tag with `update: true`, followed by a History Change GA4 event, with
+automatic history page views disabled. A shared trigger or higher tag priority does not prove
+that ordering. Apply the [sequencing capability boundary](triggers-and-variables.md#use-tag-sequencing-only-when-required):
+until that topology is supported by the contract and runtime, report this recipe as unsupported
+and block the affected new implementation. Preserve an already verified external owner when it
+satisfies the approved contract; do not silently replace it or represent it as the same recipe.
+
 ## Reconcile Enhanced Measurement and manual events
 
 Inspect the target stream's confirmed Enhanced Measurement settings and the current Google tag
@@ -132,9 +149,11 @@ overlaps them.
 
 ## Configure lifecycle and diagnostic fields explicitly
 
-- Use `traffic_type` only as the collection-side value that supports an approved internal/developer
-  traffic design. The GA4 Admin data filter that acts on it remains an external dependency and is
-  never implied by the GTM field alone.
+- Use `traffic_type` for an approved internal-traffic filter design. Developer-traffic filters
+  act on debug-mode traffic instead. Both GA4 Admin filters remain external dependencies; setting
+  either collection field does not create or activate a filter. See Google's
+  [internal](https://support.google.com/analytics/answer/10104470) and
+  [developer](https://support.google.com/analytics/answer/13296662) traffic guides.
 - Set `debug_mode` only for an approved diagnostic route. To disable it, omit the parameter from
   production collection; do not assume a literal `false` disables DebugView classification.
 - Keep environment lookup behavior explicit and never route an unknown/no-match environment to a

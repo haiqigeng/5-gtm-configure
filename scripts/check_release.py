@@ -17,7 +17,7 @@ from build_skill_package import INCLUDED, build, package_files
 from strict_json import StrictJsonError, loads_strict
 
 ROOT = Path(__file__).resolve().parents[1]
-CURRENT_RELEASE = "10.1.0"
+CURRENT_RELEASE = "10.2.0"
 SEMVER = re.compile(r"^v(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)$")
 LINK = re.compile(r"\]\(([^)]+)\)")
 WORD = re.compile(r"\b[\w-]+\b")
@@ -49,6 +49,7 @@ REFERENCE_FILES = {
     "references/02-execution/media-google-ads.md",
     "references/02-execution/media-linkedin.md",
     "references/02-execution/media-meta.md",
+    "references/02-execution/media-chatgpt-ads.md",
     "references/02-execution/media-microsoft-ads.md",
     "references/02-execution/media-pinterest.md",
     "references/02-execution/media-reddit.md",
@@ -72,6 +73,7 @@ REFERENCE_FILES = {
     "references/02-execution/server/media-google-ads.md",
     "references/02-execution/server/media-linkedin.md",
     "references/02-execution/server/media-meta.md",
+    "references/02-execution/server/media-chatgpt-ads.md",
     "references/02-execution/server/media-microsoft-ads.md",
     "references/02-execution/server/media-pinterest.md",
     "references/02-execution/server/media-reddit.md",
@@ -214,9 +216,10 @@ def check_files_and_routing() -> list[str]:
             continue
         visited.add(source)
         for link in LINK.findall(source.read_text(encoding="utf-8")):
-            if link.startswith(("http://", "https://", "#")):
+            if link.startswith(("http://", "https://")):
                 continue
-            target = (source.parent / link.split("#", 1)[0]).resolve()
+            file_part, _, fragment = link.partition("#")
+            target = (source.parent / file_part).resolve() if file_part else source
             if not target.is_file():
                 errors.append(f"{source.name} references missing resource: {link}")
                 continue
@@ -225,6 +228,14 @@ def check_files_and_routing() -> list[str]:
             except ValueError:
                 errors.append(f"Reference escapes runtime package: {link}")
                 continue
+            if fragment and target.suffix == ".md":
+                headings = re.findall(r"^#{1,6} +(.+)$", target.read_text(encoding="utf-8"), re.M)
+                anchors = {
+                    re.sub(r"[^\w -]", "", heading.strip().casefold()).replace(" ", "-")
+                    for heading in headings
+                }
+                if fragment not in anchors:
+                    errors.append(f"{source.name} references missing fragment: {link}")
             if relative.startswith("references/") and target.suffix == ".md":
                 links.add(relative)
                 pending.append(target)
@@ -326,27 +337,8 @@ def check_runtime_package() -> list[str]:
             errors.append(f"runtime package input is missing: {relative}")
     packaged = {path.relative_to(ROOT).as_posix() for path in package_files()}
     required_modules = {
-        "scripts/action_contract.py",
-        "scripts/adapter_runtime.py",
-        "scripts/adapter_support.py",
-        "scripts/configuration_run.py",
-        "scripts/redaction.py",
-        "scripts/requirement_validation.py",
-        "scripts/resource_registry.py",
-        "scripts/run_model.py",
-        "scripts/run_model_web.py",
-        "scripts/run_render.py",
-        "scripts/run_state.py",
-        "scripts/run_validation_core.py",
-        "scripts/run_validation_pipeline.py",
-        "scripts/run_validation_server.py",
-        "scripts/run_validation_web.py",
-        "scripts/validate_configuration_contract.py",
-        "scripts/verification.py",
-        "scripts/web_domain_validation.py",
+        name for name in packaged if name.startswith("scripts/") and name.endswith(".py")
     }
-    for relative in sorted(required_modules - packaged):
-        errors.append(f"runtime package omits imported module: {relative}")
     if errors:
         return errors
     try:

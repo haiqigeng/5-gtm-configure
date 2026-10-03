@@ -5,6 +5,11 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from native_configuration import (
+    CONFIGURATION_SETTINGS_TYPES,
+    EVENT_SETTINGS_TYPES,
+    USER_DATA_VARIABLE_TYPES,
+)
 from run_model import (
     MUTATING_ACTIONS,
     RESOURCE_FAMILIES,
@@ -19,15 +24,8 @@ class ResourceRegistryError(ValueError):
 
 _TOKEN = re.compile(r"[^a-z0-9]+")
 
-CONFIGURATION_SETTINGS_VARIABLE_TYPES = {
-    "gtcs",
-    "googtagconfigsettings",
-    "googtagconfigurationsettings",
-    "googletagconfigurationsettings",
-}
 
-
-def is_configuration_settings_mutation(operation: dict[str, Any]) -> bool:
+def is_google_settings_mutation(operation: dict[str, Any]) -> bool:
     """Include both old and new type so replacement/removal cannot hide consumers."""
     if (
         operation.get("resource_family") or operation.get("object_type")
@@ -35,18 +33,44 @@ def is_configuration_settings_mutation(operation: dict[str, Any]) -> bool:
         return False
     return any(
         _TOKEN.sub("", str(snapshot.get("type", "")).casefold())
-        in CONFIGURATION_SETTINGS_VARIABLE_TYPES
+        in CONFIGURATION_SETTINGS_TYPES | EVENT_SETTINGS_TYPES
         for snapshot in (operation.get("intended"), operation.get("pre_change"))
         if isinstance(snapshot, dict)
+    )
+
+
+def requires_variable_consumer_check(operation: dict[str, Any]) -> bool:
+    if (
+        operation.get("resource_family") or operation.get("object_type")
+    ) != "variable" or operation.get("action") not in MUTATING_ACTIONS:
+        return False
+    before, after = operation.get("pre_change"), operation.get("intended")
+    if (
+        operation.get("action") == "update"
+        and isinstance(before, dict)
+        and isinstance(after, dict)
+        and before != after
+        and {key: value for key, value in before.items() if key != "notes"}
+        == {key: value for key, value in after.items() if key != "notes"}
+    ):
+        return False
+    return (
+        operation["action"] != "create"
+        or is_google_settings_mutation(operation)
+        or any(
+            _TOKEN.sub("", str(snapshot.get("type", "")).casefold()) in USER_DATA_VARIABLE_TYPES
+            for snapshot in (operation.get("intended"), operation.get("pre_change"))
+            if isinstance(snapshot, dict)
+        )
     )
 
 
 def required_baseline_families(operations: list[dict[str, Any]], container_type: str) -> set[str]:
     required = {item["resource_family"] for item in operations}
     if container_type == "web" and any(
-        is_configuration_settings_mutation(item) for item in operations
+        requires_variable_consumer_check(item) for item in operations
     ):
-        required.add("tag")
+        required.update({"tag", "variable"})
     return required
 
 

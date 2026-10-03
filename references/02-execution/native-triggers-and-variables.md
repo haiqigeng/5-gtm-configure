@@ -1,5 +1,10 @@
 # Native trigger and variable selection
 
+Author `customEventFilter`, `filter`, and `autoEventFilter` as native Condition arrays with typed
+Parameter rows. A compact event-name string is not a native custom-event filter. For an exact
+custom event, use an `equals` condition with `arg0: {{_event}}` and `arg1` holding the approved
+event name, both native TEMPLATE parameters; use the inspected native regex condition when needed.
+
 ## Contents
 
 - Cover every applicable web trigger
@@ -18,7 +23,7 @@ families:
 | Page View / DOM Ready / Window Loaded | Choose the earliest event that has every required value and DOM dependency; prevent automatic/manual overlap. |
 | Custom Event | Preferred for approved application success events and vendor-neutral dataLayer timing. |
 | Just Links | Use only for a real anchor-navigation interaction. Configure `Wait for Tags` and `Check Validation` only after proving their page-enable condition, timeout, browser behavior, and navigation impact; those options are mechanics, not conversion-success proof. |
-| All Elements | Use when the approved interaction is not reliably represented by an anchor. Filter on the clicked element/ancestor contract deliberately and do not substitute it for Just Links only to gain waiting behavior. |
+| All Elements | Use when the approved interaction is not reliably represented by an anchor. Filter on the clicked element/ancestor contract deliberately. This trigger does not offer `Wait for Tags` or `Check Validation`; those options belong to Just Links and Form Submission. |
 | Form Submission | Use only when the browser submit event honestly represents the approved outcome. Configure waiting/check validation and the enable condition from current proof; a valid browser submit is not proof of backend success. |
 | Element Visibility | Define selector/element source, minimum percent, minimum on-screen duration, DOM-change observation, once-per-page/element behavior, and page scope. Dynamic observation cost and repeated elements must be intentional. |
 | Scroll Depth | Define vertical/horizontal direction, percentage/pixel thresholds, page scope, and whether each threshold firing is a distinct approved interaction. Reconcile GA4 Enhanced Measurement scroll. |
@@ -29,6 +34,7 @@ families:
 
 For every trigger, record event type, all-versus-some selection, row-level AND filters, regex intent,
 repeatability, required built-ins, and positive/negative static examples.
+Verify field applicability in the [current Trigger API](https://developers.google.com/tag-platform/tag-manager/api/reference/rest/v2/accounts.containers.workspaces.triggers).
 
 ## Cover built-in and user-defined variables
 

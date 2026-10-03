@@ -163,14 +163,26 @@ created. This is configuration verification, not a test mode or runtime recette.
 Do not claim that these static vectors prove browser execution or add an automatic firing guard
 because a vector is invalid.
 
+## Handle harmful invalid values explicitly
+
+Google explicitly warns that an empty GA4 `transaction_id` can collapse unrelated purchases during
+[deduplication](https://support.google.com/analytics/answer/12313109). Do not treat that known harm as
+a harmless optional field. Reject a design that deliberately supplies the empty literal; for a
+dynamic source, establish the approved invalid-value policy (fix the source, omit only the invalid
+field when technically valid, or suppress/recover the affected occurrence). If suppression changes
+approved measurement timing or coverage, resolve that decision before saving. Prefer a native,
+narrow condition; do not silently add a general payload gate or fabricate a replacement ID. Record
+the remaining source correction and runtime acceptance cases, including valid zero and repeated orders.
+
 ## Handle browser event IDs narrowly
 
-Never generate a browser/server event ID, transaction-based deduplication map, or
-`gtm.start`/`gtm.uniqueEventId` Custom JavaScript variable in the current client-side-only scope. An
+Do not invent a transaction-based deduplication map or a `gtm.start`/`gtm.uniqueEventId` Custom
+JavaScript generator in a web-only request. An
 explicit media brief may authorize mapping a supplied browser `event_id` when current official
 browser documentation and the installed template support that exact field. For a server or
 pipeline request, resolve its owner through the pipeline and server references; do not borrow the
-browser field name.
+browser field name. Approved non-purchase shared generation is a pipeline capability governed by
+[shared ID generation](pipeline/browser-server-deduplication.md#configure-shared-id-generation).
 Load `transformation-patterns.md` when the same source-to-destination projection pattern recurs,
 especially ecommerce item arrays, destination identifier arrays, scalar validation, or explicit
 mapping vectors. The pattern reference standardizes the function contract but current official

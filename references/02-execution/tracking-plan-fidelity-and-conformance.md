@@ -83,6 +83,12 @@ For a `ga4-tracking-plan` delivery, use
 canonical plan and every inventoried artifact by SHA-256, and emits one normalized approved
 semantic requirement per event. That machine path is authoritative for configuration intake; the
 XLSX remains the human review surface and must not be reparsed into a competing interpretation.
+The supported producer contract is `ga4-tracking-plan` 3.0.0: handoff `2.0.0`, canonical plan
+schema `6.0.0`. Older handoffs are rejected without migration. Event identity becomes
+`GA4::<event_name>`; preserve parameter paths, destinations, conditional and nullable semantics,
+business timing and clear-before-push instructions. If only a suite workbook is supplied, request
+its complete approved delivery directory. Do not relabel its version or reconstruct missing
+machine authority from the workbook. Independent client plans still use the general intake above.
 
 ## Classify official-documentation discrepancies
 

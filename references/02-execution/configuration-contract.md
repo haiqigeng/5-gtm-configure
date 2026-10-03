@@ -43,14 +43,14 @@ Every new mutation map uses `"schema_version": "7.0"` and
 | `scope` | Disjoint included, reference-only, and excluded requirement IDs |
 | `requirements` | Approved semantics/business intent, source, destination, and field authority |
 | `targets` | Explicitly authorized stable web/server workspaces with independent target IDs |
-| `implementation.execution_mode` | `isolated-lightweight`, `isolated-durable`, or `refonte-durable` |
+| `implementation.execution_mode` | `isolated-durable`, or `refonte-durable` |
 | `implementation.objects` | Exact target-scoped GTM actions, intended state, and dependencies |
-| `implementation.field_bindings` | Explicit resolution of approved fields into mapped GTM/template fields; required for a mapped first-party route |
+| `implementation.field_bindings` | Explicit resolution for every approved event, item or user field, including ordinary dataLayer parameters; pending fields are rejected before execution |
 | `pipelines` | Sender/receiver graph, request/Client, page-view, event/field flow, and cutover |
 | `consent_topologies` | Per-destination web, transport, server mechanism, signal, and event coverage |
 | `execution_topologies` | One bound firing/blocking/consent/lifecycle decision per executing web tag |
 | `page_view_decisions` | One effective owner per web destination and occurrence role, with an applicable `send_page_view` decision |
-| `first_party_data_routes` | Approved user-data/User-ID feature, source, timing, hashing, consent, and consumers |
+| `first_party_data_routes` | Approved user-data/User-ID feature, source, timing, hashing, consent, and consumers; native Ads event overrides also bind inspected parameter/control paths as described in the [Ads procedure](media-google-ads.md#configure-enhanced-conversions-only-explicitly) |
 | `inventory_dispositions` | Ordered one-row-per-tag refonte disposition linked to exact object actions |
 | `dedup_contracts` | Only overlapping delivery, with one occurrence identity and exact product fields |
 | `evidence` | Approved, official-current, container-confirmed, and sample provenance |
@@ -154,14 +154,19 @@ operation. Configure and read back the receiver before cutover.
 
 ## Map consent and deduplication
 
-For web tags, preserve the strict/basic default: baseline/page-load tags use a verified CMP
-lifecycle event plus vendor block; business and interaction tags keep the approved business trigger
-plus vendor block. Default every
-product to strict/basic CMP blocking unless an explicitly approved and documented advanced/native
-route applies. A template's built-in consent checks are intrinsic product behavior, not configurable
-Additional Consent Checks. Under strict/basic, remove duplicate consent conditions from the normal
-firing trigger, keep one vendor-denied blocking trigger as the configurable gate, and leave
-Additional Consent Checks empty.
+For new strict/basic gates, the preferred convention is CMP lifecycle/business triggers plus vendor
+blocks, with Additional Consent Checks empty. This is a local default, not the only vendor-supported
+pattern. Preserve a proved existing firing-condition or Additional Consent Checks convention using
+the explicit fields in [CMP consent](cmp-consent.md#existing-consent-conventions). Do not stack
+equivalent gates. Built-in template checks remain intrinsic product behavior.
+
+An explicitly approved ungated web policy uses `client-policy-ungated` in both consent and execution
+topologies, with `signal_authority: none`, `unknown_state_behavior: explicit-policy`,
+`transport_behavior: always-transported`, server mechanism `none` and no server/transporter bindings.
+`web_enforcement` is `{"mechanism":"none","client_policy":{"grade":"approved-input","locator":"exact client instruction","scope":"approved site, audience and destination scope"}}`.
+Its tag has no blocking triggers or Additional Consent Checks and no pre-CMP behavior. Absence of a
+CMP or a country label never supplies this authority. Report the client policy without asserting a
+legal exemption. Pipeline/server ungated policy is not implemented by this route.
 
 For each pipeline destination, record `consent_mode`, `transport_behavior`, exact web mechanism,
 exact server mechanism, signal source, denied/unknown behavior, and event coverage. Server mechanism
@@ -172,16 +177,21 @@ must not receive an equivalent server gate unless intentional double gating is e
 Record dedup only when the same destination occurrence can arrive twice. A `dual-shared-id` route
 binds browser and transporter to one occurrence source, transports it unchanged, and maps exact
 current browser/server field names and companion fields. Purchase uses approved transaction/order
-identity when the product supports it; do not synthesize an occurrence identity from GTM internals.
+identity when the product supports it; do not replace it with a generated per-page occurrence ID.
 
-Every other dual event also needs an approved stable occurrence ID. If none exists, select one
-delivery channel or keep the overlap blocked; do not synthesize identity from GTM internals.
+Other dual events may use an approved supplied identity or the reviewed `generated-event-id`
+route. Generated IDs require an installed-template review, exact consumer field bindings and one
+direct source event without sequencing. See
+[shared generation](pipeline/browser-server-deduplication.md#configure-shared-id-generation) for
+the `generation` fields and preconditions. Do not create independent browser/server generators.
 
 ## Validate and materialize
 
 Run `scripts/validate_configuration_contract.py` before mutation. For analytics, also use
 `validate_contract_conformance.py` to prove identical requirement IDs, events, timing/filters,
-outgoing field set, and approved sources/literals.
+declared outgoing field set, and approved sources/literals. The scoped native event-parameter checks below
+connect supported implementation fields to that declaration; other structures and automatic
+product behavior remain inspected ownership decisions.
 
 The validated contract deterministically materializes active `configuration-run@4.0` sections.
 Do not hand-edit requirements, pipelines, immutable operation intention/dependencies, payload maps,
@@ -189,13 +199,35 @@ consent topologies, dedup contracts, or publication dependencies; section finger
 drift. Adapters may populate baselines, journals, readbacks, comparisons, and results only.
 
 Resolve field implementation in the contract, not by editing the materialized run. Each
-`implementation.field_bindings` row has exactly `requirement_id`, `field_scope`,
+`implementation.field_bindings` row requires `requirement_id`, `field_scope`,
 `destination_field`, `status`,
 `shape_compatibility`, `mapping_method`, `gtm_resolution`, `template_field`, and `missing_behavior`.
+Deterministic native mapping proof covers explicit scalar GA4 Event (`gaawe`) event parameters,
+excluding `native-template` mappings. These require
+`native_binding: {"object_key": "target::tag::name", "field": "lead_type"}`.
+The owner must be an active tag for the requirement. `field` must equal the approved destination
+exactly, including case and punctuation. Only native `eventSettingsTable` (`parameter` /
+`parameterValue`) and `eventParameters` (`name` / `value`) rows establish event-parameter equality.
+Shared event settings via native `eventSettingsVariable` / `inheritedEventSettings` references
+are resolved with exact-name local overrides. Configuration tables, metadata, user properties,
+and item fields cannot supply event-parameter proof. The effective value must equal `gtm_resolution`;
+a `direct-dlv` reference must resolve to a represented native `v` variable whose `parameter[name]`
+equals the approved source. Use a scalar value/reference, not prose, in `gtm_resolution`.
+
+User-property and item-parameter scopes, other tag/template structures, automatic `native-template`
+fields, and whole ecommerce payloads remain supported as **agent-reviewed mapping declarations**.
+They do not require a fabricated scalar native binding. Inspect their exact destination namespace,
+source routing, and actual native product/template structure before marking them mapped; record
+that review in the mapping rationale. A supplied binding still requires an exact destination name
+and active owning tag, but does not confer field-equality or source-routing proof outside the
+supported scope. The rendered handoff labels this limitation even when a binding is present.
+Do not fabricate duplicate parameter rows for automatic values or ecommerce passthrough.
 Use the existing payload-mapping enums. The approved requirement supplies source, provenance, and
 source/destination shapes; a binding cannot rewrite them. For example, the Ads carrier maps
 `user_data` with `native-template`, `compatible`, the actual UPD variable reference, the documented
-template field, and explicit omission behavior. Unbound fields stay `pending`, not implicitly mapped.
+template field, and explicit omission behavior. Unbound fields are rejected before execution; they
+must not remain pending until finalization. An explicit external/omission decision uses the existing
+mapping status and supporting evidence, rather than an invented binding.
 
 Use only the canonical statuses in `acceptance-and-handoff.md`. External site/dataLayer, CMP,
 analytics/media account, credentials, catalog/feed, cloud/DNS, publication, and recette work remains
@@ -223,10 +255,22 @@ named variable references are included. Retained candidates use the same runtime
 other objects. Candidate input is discovery material, not an authenticated runtime baseline. Raw
 opaque references still need exact resolution; missing semantics fail normal contract validation.
 
+With a [preparation inventory](tool-adapters.md#read-only-preparation-discovery), pass
+`--inventory inventory.json` and omit `intended` from explicitly selected `reuse_candidates`.
+Keep each candidate's exact `resource_family`, `name`, target when ambiguous, justification,
+evidence and risk. Include referenced candidate dependencies as usual. The compiler matches the
+approved target identity, requires an exhausted family listing and a unique object, resolves
+native IDs through the inventory, and retains all non-metadata native fields. It does not fill
+mutation bodies, choose consent, declare evidence, or supply missing policy. A supplied `intended`
+remains explicit. Redacted inventory fields remain presence-only evidence; they do not prove
+secret equality or supply credentials. Runtime verification rejects stale compatibility targets.
+
 ```powershell
 python "<skill-dir>/scripts/compile_configuration_request.py" request.json -o contract.json
 python "<skill-dir>/scripts/configuration_run.py" init --contract contract.json --run-id RUN-001 --source-locator "Approved input" --output configuration-run.json
 ```
+
+For inventory-assisted preparation, add `--inventory inventory.json` to the first command.
 
 Review the compiled delta against the user's approved scope, then execute with the same adapter
 runtime. Existing authorization covers routine mechanical materialization; a hash is not new consent.

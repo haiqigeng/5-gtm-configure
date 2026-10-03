@@ -25,13 +25,18 @@ remain authoritative for cross-object semantics, mutation eligibility, and final
 The configuration-contract 7.0 artifact owns approved requirements, authorized targets, pipeline design, and
 intended actions. The run owns execution state, per-target evidence, recovery, idempotency, and the
 configuration result. Neither authorizes publication, runtime recette, site/cloud work, or
-external-platform administration. An isolated low-risk web change may keep the same structure in
-memory; it does not receive weaker acceptance.
+external-platform administration. Isolated web changes use the same durable run artifact and acceptance.
 
 Only the current target-scoped run schema is executable. Obsolete runs must be regenerated from an
 approved current contract; the controller does not guess or migrate mutation history.
 
 ## Materialize deterministically
+
+Saved readbacks retain every primary object field and the complete contextual ID/name index.
+Full contextual bodies participate in redaction and comparison before that index is compacted;
+they are not repeated in each object's observation. The authenticated baseline retains its full
+redacted bodies. Compaction does not omit fresh reads, alter comparison fingerprints, or treat
+redacted secrets as equal values.
 
 `init` validates contract 7.0 and deterministically creates target-scoped operations and stable
 operation IDs. It refuses an existing path unless `--replace-planned` is explicit and no write
@@ -203,9 +208,29 @@ cannot recognize every arbitrary secret in executable code; inspect secret-beari
 before persistence. Redact the whole sensitive field rather than claiming complete code parsing.
 Keep secret discovery separate from literal-value output.
 
-The packaged disk queue redacts responses before writing them and rejects credential-bearing
-mutation arguments. Updating such an object requires a secure in-memory adapter and existing
-applicable authority; otherwise mark only that operation Blocked with the reason and continue
-independent work. Never substitute a marker for the live value or infer value equality. Host/MCP
-transcripts are outside the queue's persistence boundary; do not describe disk canary tests as
-proof about those external logs.
+The packaged MCP worker keeps responses in memory until graph-aware redaction, and writes no
+response queue. The host may still retain raw MCP output and encoded session input in transcripts;
+the skill's artifact redaction does not control those logs. Inspect host access/retention policy
+when credential-bearing objects are encountered. Do not reproduce the values in diagnostics.
+The relay blocks credential-bearing writes without an appropriate bound provider. Record the
+operation as `failed` with a specific reason; the derived requirement/target verdict is `Blocked`.
+Continue independent authorized work when its dependencies remain safe.
+
+Public browser collection identifiers are distinct from private authentication credentials. For
+an ambiguous `apiKey`/`token` field, inspect official documentation and the exact installed template.
+Record object-level `public_identifiers` entries with `path` (native key/index array),
+`value_sha256` (SHA-256 of the exact UTF-8 literal), `source_url` (a recorded official-current
+source), and `reason` (the inspected public field purpose). Use unique native Parameter keys in the
+path, for example `["parameter", "apiKey", "value"]`, so array reordering is harmless. When updating
+the identifier itself, `previous_value_sha256` binds the reviewed pre-change literal as well.
+The contract carries the classification
+through baseline, comparison, reporting and mutation. It exempts only that exact object/type/value
+field from generic key/name heuristics and ambiguous URL query keys. For a loader embedded in
+Custom HTML, bind the full inspected HTML value. Credential formats, auth headers, URL userinfo,
+secret webhook paths, personal data and credential assignments elsewhere in the same value
+remain protected, including decoded query values. A changed literal needs a reviewed declaration. A vendor-looking name or an
+unverified flag cannot authorize an exemption. Metadata preserves evidence, not source authenticity.
+
+Packaged MCP startup validates all profile structures before authenticated calls. Identity lookup
+failures are recorded per target and reach the same baseline/dependency failure handling: independent
+authorized targets continue, and operations depending on the failed target remain stopped.

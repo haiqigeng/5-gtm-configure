@@ -6,7 +6,7 @@ VERIFICATION_SCHEMA_VERSION = "1.0"
 
 RUN_MODES = {"web", "server", "pipeline"}
 TARGET_TYPES = {"web", "server"}
-EXECUTION_MODES = {"isolated-lightweight", "isolated-durable", "refonte-durable"}
+EXECUTION_MODES = {"isolated-durable", "refonte-durable"}
 RUN_PHASES = {"preflight", "mutation", "readback", "complete"}
 RUN_STATUSES = {"In progress", "Configured", "Partial", "Blocked", "Deferred"}
 REQUIREMENT_STATUSES = RUN_STATUSES.copy()
@@ -73,9 +73,11 @@ MUTATING_ACTIONS = {"create", *DELTA_ACTIONS}
 HIGH_IMPACT_ACTIONS = {"replace", "pause", "unpause", "remove"}
 AUTHORITY_GRADES = {"approved-input", "official-current", "container-confirmed"}
 
-CONSENT_MODES = {"strict-basic", "advanced-native", "product-specific"}
+CONSENT_MODES = {"strict-basic", "advanced-native", "product-specific", "client-policy-ungated"}
 TRANSPORT_BEHAVIORS = {"blocked", "always-transported", "conditionally-transported"}
 WEB_CONSENT_MECHANISMS = {
+    "firing-trigger-condition",
+    "additional-consent-checks",
     "cmp-lifecycle-plus-vendor-block",
     "business-trigger-plus-vendor-block",
     "transport-trigger-only",
@@ -110,18 +112,26 @@ DEDUP_SOURCE_TYPES = {
     "transaction-id",
     "stable-occurrence-id",
     "approved-event-id",
+    "generated-event-id",
     "template-native",
     "none",
 }
 
 SHAPES = {"scalar", "array", "object"}
 FIELD_FLOW_STATUSES = {"proved", "blocked", "external"}
-PUBLICATION_DEPENDENCY_KINDS = {
-    "server-publication",
-    "server-recette",
-    "web-cutover-publication",
-    "web-pipeline-recette",
+PUBLICATION_ORDER = {
+    "web": [],
+    "server": ["server-recette", "server-publication", "post-publication-smoke"],
+    "pipeline": [
+        "server-recette",
+        "web-pipeline-recette",
+        "server-publication",
+        "web-cutover-publication",
+        "post-publication-smoke",
+    ],
 }
+PUBLICATION_DEPENDENCY_KINDS = set(PUBLICATION_ORDER["pipeline"])
+
 
 TOP_LEVEL_KEYS = {
     "schema_version",

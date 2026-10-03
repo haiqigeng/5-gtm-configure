@@ -23,6 +23,8 @@ from configuration_run import (
     load_document,
     run_file_lock,
 )
+from native_configuration import variable_consumers
+from public_identifiers import public_identifier_paths
 from redaction import (
     SecretProvider,
     SecretResolutionError,
@@ -32,11 +34,10 @@ from redaction import (
 )
 from resource_registry import (
     capability_matrix,
-    is_configuration_settings_mutation,
     required_baseline_families,
+    requires_variable_consumer_check,
     unsupported_operation_reason,
 )
-from web_domain_validation import configuration_settings_consumers
 
 AdapterExecutionError = adapter_support.AdapterExecutionError
 RateLimitError = adapter_support.RateLimitError
@@ -112,6 +113,7 @@ class TargetAdapterRegistry:
 
     def __init__(self) -> None:
         self._bindings: dict[str, TargetBinding] = {}
+        self._unavailable: dict[str, AdapterExecutionError] = {}
 
     def register(
         self,
@@ -132,14 +134,24 @@ class TargetAdapterRegistry:
             secret_provider=secret_provider,
         )
 
+        self._unavailable.pop(target_id, None)
+
+    def record_unavailable(self, target_id: str, error: AdapterExecutionError) -> None:
+        """Retain a failed authenticated registration for target-local execution failure."""
+        self._unavailable[target_id] = error
+
     def binding(self, target_id: str) -> TargetBinding:
+        if target_id in self._unavailable:
+            raise self._unavailable[target_id]
         try:
             binding = self._bindings[target_id]
         except KeyError as exc:
             raise AdapterExecutionError(
                 f"no adapter is registered for target {target_id!r}", code="target_unavailable"
             ) from exc
-        _verified_adapter_identity(binding.identity, binding.adapter)
+        # Identity is verified on registration, baseline capture, immediately
+        # before mutation, and once per target during final convergence.
+        # Object reads retain their independent target-scope validation.
         return binding
 
     def discovered_capabilities(self, target_id: str) -> dict[str, dict[str, bool]] | None:
@@ -188,7 +200,10 @@ def _call_with_rate_limit(
 
 
 def _save(path: Path, document: dict[str, Any]) -> None:
-    atomic_write(path, redact_for_persistence(document))
+    atomic_write(
+        path,
+        redact_for_persistence(document, public_identifier_paths=public_identifier_paths(document)),
+    )
 
 
 def _operation(document: dict[str, Any], operation_id: str) -> dict[str, Any]:
@@ -305,6 +320,7 @@ def _capture_authenticated_baselines(
             continue
         try:
             binding = registry.binding(target["target_id"])
+            _verified_adapter_identity(binding.identity, binding.adapter)
             value = _capture_one_authenticated_baseline(value, target, binding, **options)
         except Exception as exc:
             error = "baseline_capture_failed: " + (
@@ -398,15 +414,26 @@ def _execute_current_locked(
             ephemeral_values: set[str] = set()
             write_accepted_or_ambiguous = False
             try:
-                if operation["container_type"] == "web" and is_configuration_settings_mutation(
+                if operation["container_type"] == "web" and requires_variable_consumer_check(
                     operation
                 ):
-                    if not binding.capabilities.get("tag", {}).get("list"):
+                    if not all(
+                        binding.capabilities.get(family, {}).get("list")
+                        for family in ("tag", "variable")
+                    ):
                         raise AdapterExecutionError(
-                            "shared Configuration Settings require tag-list capability"
+                            "shared variable review requires tag/variable-list capabilities"
                         )
                     current_tags = collect_paginated(
                         lambda cursor: binding.adapter.list_resource_page("tag", cursor),
+                        max_rate_limit_retries=max_rate_limit_retries,
+                        base_retry_delay_seconds=base_delay_seconds,
+                        max_retry_delay_seconds=max_delay_seconds,
+                        sleep=sleep,
+                        random_value=random_value,
+                    )
+                    current_variables = collect_paginated(
+                        lambda cursor: binding.adapter.list_resource_page("variable", cursor),
                         max_rate_limit_retries=max_rate_limit_retries,
                         base_retry_delay_seconds=base_delay_seconds,
                         max_retry_delay_seconds=max_delay_seconds,
@@ -420,11 +447,12 @@ def _execute_current_locked(
                         and item["resource_family"] == "tag"
                     }
                     missing_consumers = (
-                        configuration_settings_consumers(operation, current_tags) - in_scope_names
+                        variable_consumers(operation, current_tags, current_variables)
+                        - in_scope_names
                     )
                     if missing_consumers:
                         raise AdapterExecutionError(
-                            "shared Configuration Settings have unreviewed current consumers: "
+                            "shared variable has unreviewed current consumers: "
                             + ", ".join(sorted(missing_consumers))
                         )
                 current = _call_with_rate_limit(
@@ -455,6 +483,7 @@ def _execute_current_locked(
                             note="Create conflict; existing semantic object was not overwritten.",
                             timestamp=timestamp(),
                             error="create_conflict",
+                            result={"comparison": comparison, "saved": safe_current},
                         )
                     _save(run_path, document)
                     progress = True
@@ -489,6 +518,7 @@ def _execute_current_locked(
                                 note="Existing object does not match the approved reuse contract.",
                                 timestamp=timestamp(),
                                 error="reuse_mismatch",
+                                result={"comparison": comparison, "saved": safe_current},
                             )
                     _save(run_path, document)
                     progress = True
@@ -513,6 +543,7 @@ def _execute_current_locked(
                             note="Fresh target state differs from the approved pre-change snapshot; no write performed.",
                             timestamp=timestamp(),
                             error="container_drift",
+                            result={"comparison": pre_write_comparison, "saved": safe_current},
                         )
                         _save(run_path, document)
                         progress = True
@@ -549,8 +580,30 @@ def _execute_current_locked(
                 operation = _operation(document, operation_id)
                 try:
                     _verified_adapter_identity(binding.identity, binding.adapter)
+                    mutation_attempted = False
+
+                    def mutate_with_fresh_retry():
+                        nonlocal mutation_attempted
+                        if mutation_attempted:
+                            # A documented quota rejection did not write, but the backoff
+                            # consumed the prior read proof. Re-read and compare before
+                            # retrying so missing fingerprints and intervening drift are safe.
+                            _verified_adapter_identity(binding.identity, binding.adapter)
+                            if operation["action"] != "create":
+                                retry_saved = _read(binding.adapter, operation)
+                                retry_comparison, _ = build_pre_write_comparison(
+                                    operation, retry_saved
+                                )
+                                if not retry_comparison["pass"]:
+                                    raise AdapterExecutionError(
+                                        "Target changed during quota backoff; no retry write performed",
+                                        code="container_drift",
+                                    )
+                        mutation_attempted = True
+                        return binding.adapter.mutate(deepcopy(mutation_operation))
+
                     _call_with_rate_limit(
-                        lambda: binding.adapter.mutate(deepcopy(mutation_operation)),
+                        mutate_with_fresh_retry,
                         max_retries=max_rate_limit_retries,
                         base_delay_seconds=base_delay_seconds,
                         max_delay_seconds=max_delay_seconds,
@@ -598,6 +651,7 @@ def _execute_current_locked(
                                 note="Ambiguous response did not match saved target; no retry.",
                                 timestamp=timestamp(),
                                 error="ambiguous_write_mismatch",
+                                result={"comparison": comparison, "saved": safe_saved},
                             )
                     _save(run_path, document)
                     progress = True
@@ -639,6 +693,7 @@ def _execute_current_locked(
                             note="Saved readback differs from the intended object; no retry.",
                             timestamp=timestamp(),
                             error="saved_readback_mismatch",
+                            result={"comparison": comparison, "saved": safe_saved},
                         )
                 _save(run_path, document)
                 progress = True
@@ -729,7 +784,7 @@ def execute_ready_operations(
     timestamp = kwargs.pop("timestamp", None) or _utc_now
     max_rate_limit_retries = kwargs.pop("max_rate_limit_retries", 2)
     base_delay_seconds = kwargs.pop("base_delay_seconds", 0.25)
-    max_delay_seconds = kwargs.pop("max_delay_seconds", 2.0)
+    max_delay_seconds = kwargs.pop("max_delay_seconds", 100.0)
     sleep = kwargs.pop("sleep", time.sleep)
     random_value = kwargs.pop("random_value", random.random)
     if max_rate_limit_retries < 0:
@@ -773,8 +828,12 @@ def verify_idempotent_rerun(
                     code="run_not_verified",
                 )
             observations = []
+            verified_targets = set()
             for operation in document["object_changes"]:
                 binding = registry.binding(operation["target_id"])
+                if operation["target_id"] not in verified_targets:
+                    _verified_adapter_identity(binding.identity, binding.adapter)
+                    verified_targets.add(operation["target_id"])
                 try:
                     saved = _read(binding.adapter, operation)
                 except Exception as exc:

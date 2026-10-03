@@ -18,9 +18,9 @@ from configuration_run import (
     load_document,
 )
 from current_support import valid_web_contract
-from mcp_queue_adapter import FAMILIES, McpTargetAdapter
+from mcp_adapter import FAMILIES, McpTargetAdapter
 
-OUT = Path(sys.argv[1])
+OUT = Path(sys.argv[1]) if __name__ == "__main__" else None
 clone = copy.deepcopy
 
 
@@ -165,7 +165,17 @@ class FakeGtm:
             "fingerprint": "7",
         }
 
+        self.scope = {
+            "accountId": "account-1",
+            "containerId": "GTM-WEBTEST",
+            "workspaceId": "workspace-web",
+        }
+        for objects in self.data.values():
+            for item in objects.values():
+                item.update(self.scope)
+
     def call(self, tool, args):
+        scope = self.scope
         self.calls.append([tool, clone(args)])
         t = tool.removeprefix("synthetic__")
         a = args["action"]
@@ -199,7 +209,7 @@ class FakeGtm:
         self.writes.append([f, a, clone(args)])
         if a in {"create", "update"}:
             ident = str(500 + len(self.writes)) if a == "create" else args[idf]
-            value = {**clone(args["createOrUpdateConfig"]), idf: ident, "fingerprint": "2"}
+            value = {**clone(args["createOrUpdateConfig"]), **scope, idf: ident, "fingerprint": "2"}
             self.data[f][ident] = value
             if self.uncertain:
                 self.uncertain = False

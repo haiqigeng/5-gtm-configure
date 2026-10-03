@@ -1,18 +1,22 @@
 # Configure GTM
 
-An agent-neutral operational skill for expert web analysts configuring Google Tag Manager web
+Operational guidance and a portable Python engine for expert web analysts configuring Google Tag Manager web
 containers, server containers, or their connected event pipeline. It converts approved analytics
 requirements and explicit media briefs into clean, consent-controlled, saved and verified GTM
 object graphs. It never publishes and never substitutes configuration for runtime recette.
 
 ## Current Release
 
-**v10.1.0** repairs credential redaction and tracking-plan intake, adds a packaged MCP transport
-and compact request compiler, and makes results delta-first. Product-specific reading is routed
-conditionally. The existing authority, drift, recovery and convergence checks remain in one engine.
-
-The paired ga4-tracking-plan 2.9.2 update emits current handoffs only; obsolete input must be
-regenerated. See CHANGELOG.md for tested scope and transport limitations.
+**v10.2.0** fixes native readback, scoped field mapping, independent-target recovery and
+credential detection, while reducing repeated identity requests. It replaces the disk queue with
+a bounded in-memory MCP relay and adds ChatGPT Ads playbooks, complete Meta matching bindings,
+and clearer Google user-data, consent and server ownership guidance.
+The packaged relay supports Codex on Windows with Python 3.11+ and PowerShell 7. Claude Code and
+Gemini CLI use the optional official MCP SDK runner with the same engine. Approved non-purchase
+pipelines can configure one reviewed template-generated shared event ID. This update changes only configure-gtm.
+The release passed 369 tests and an assisted live API configuration exercise with 870 independent
+saved-state assertions. These checks do not certify website or vendor runtime behavior.
+See CHANGELOG.md for validation and known limitations.
 
 Existing coverage includes GTM server Clients, Event Data variables, server triggers/tags/templates,
 Transformations, GA4 and media destinations, transport ownership, consent propagation, field-shape
@@ -54,7 +58,7 @@ dedicated workspace. High-impact changes retain their explicit authority gates.
 The web route configures tags, normal and blocking triggers, user-defined and built-in variables,
 templates, folders, Google tag configuration/destinations, workspaces, and explicitly authorized
 Zones, environments, and settings. It supports GA4, documented non-GA4 analytics, Google Ads,
-Floodlight, Microsoft Advertising, Meta, TikTok, Snap, LinkedIn, Pinterest, X, Reddit, Criteo,
+Floodlight, Microsoft Advertising, Meta, ChatGPT Ads, TikTok, Snap, LinkedIn, Pinterest, X, Reddit, Criteo,
 affiliate/partner tags, and unlisted documented products.
 
 The server route configures supported Clients, tags, Event Data/template variables, server
@@ -100,9 +104,11 @@ The pipeline route additionally resolves:
 - Create no dedup contract for single-channel delivery. For dual delivery, use one current
   vendor-documented occurrence identity across browser and server. A dual-delivery purchase needs
   a stable product-supported transaction/order/occurrence identity. If no stable occurrence identity
-  exists, choose another delivery strategy or leave that dual route blocked.
-- Do not synthesize browser/server occurrence identity from GTM internals. Browser-only runs still
-  do not generate an event ID.
+  exists for another event, use the approved shared-generation route or keep the overlap blocked.
+- Shared generation uses one inspected variable template, exact native field bindings and direct
+  same-event consumers. It excludes purchase replacement and sequencing. Browser-only runs still
+  map supplied IDs. Explicit web-sender preparation may use the documented generation route with
+  an external receiver dependency; it does not authorize receiver changes or certify deduplication.
 - Never create payload-eligibility helpers or validity triggers merely because a runtime value may
   be absent.
 
@@ -125,8 +131,8 @@ pipelines, consent, deduplication, and object intention. Removal is verified by 
 absence. A failed operation can be reopened only after stale pre-write/readback/comparison evidence
 is cleared.
 
-The packaged runtime intentionally uses the Python standard library only so the skill remains
-executable without installing packages in an analyst environment. Draft 2020-12 JSON Schemas are
+The core runtime and Codex relay use the Python standard library only. The Claude/Gemini runner
+adds the optional official MCP SDK (`scripts/requirements-mcp.txt`). Draft 2020-12 JSON Schemas are
 structural/editor aids and are meta-validated with the existing development-only `jsonschema`
 dependency; the focused Python modules remain authoritative for cross-object, semantic, consent,
 authorization, and lifecycle invariants that JSON Schema cannot express cleanly.
@@ -141,7 +147,8 @@ record from that requirement's approved-input locator. A payload change invalida
 authority still comes from the user's instructions and source material, never from a hash.
 `official-current` documents mechanics but never authorizes a write. First-party `user_data` and
 `user_id` configuration must be owned by an explicit first-party-data route. Shared Google
-Configuration Settings changes require complete closure over all authenticated baseline consumers.
+Configuration/Event Settings and UPD-variable creation, and changes to existing variables, require
+complete closure over direct and indirect authenticated baseline consumers and a fresh prewrite check.
 These are consistency and operational checks. They do not cryptographically authenticate user
 approval, prove documentation relevance, or make editable local artifacts a security boundary.
 
@@ -161,8 +168,9 @@ field/consent/dedup mappings, saved readback, unresolved external dependencies, 
 fact that runtime validation was not performed. Runtime recette independently uses the tracking
 plan and live GTM/Preview evidence; it does not consume or trust a configure-gtm result artifact.
 
-The external rollout sequence is server publication, server recette, web cutover publication, then
-web and end-to-end recette. This repository never executes those steps.
+The [external rollout sequence](references/02-execution/pipeline/architecture-and-workflow.md#separate-saved-configuration-from-publication)
+requires draft acceptance before authorized publication, followed by post-publication smoke checks.
+This repository never executes those steps.
 
 ## Boundaries
 
@@ -185,6 +193,8 @@ extensions.
 - `scripts/configuration_run.py`: current-only CLI over split validation/state/render modules.
 - `scripts/adapter_runtime.py`: target registry, capability-local execution, redaction, and
   dependency containment.
+- `scripts/mcp_discovery.py`: read-only preparation inventory through the existing MCP adapter;
+  selected reuse bodies feed the current compiler, with fresh execution checks retained.
 - `scripts/diff_object_graph.py`: target-aware normalized graph comparison, including Clients and
   Transformations.
 - `tests/`: current web, server/pipeline, security, adapter, schema, and
@@ -193,16 +203,18 @@ extensions.
 ## Install And Validate
 
 Install the release archive or copy `VERSION`, `SKILL.md`, `agents/`, `references/`, `schemas/`,
-the packaged runtime scripts, and `LICENSE` into the target skill directory.
+the packaged runtime scripts, and `LICENSE` into the target skill directory. For Claude Code or
+Gemini CLI, also install `scripts/requirements-mcp.txt` in the execution Python environment and
+follow [host execution](references/02-execution/tool-adapters.md#claude-code-and-gemini-cli).
 
 ~~~powershell
 python -m pip install -e ".[dev]"
 python -m ruff format --no-cache --check scripts tests
 python -m ruff check --no-cache scripts tests
-python scripts/check_release.py --tag v10.1.0 --release-notes CHANGELOG.md
+python scripts/check_release.py --tag v10.2.0 --release-notes CHANGELOG.md
 python -m unittest discover -s tests -v
 python -m compileall -q scripts
-python scripts/build_skill_package.py --output dist/configure-gtm-v10.1.0.zip
+python scripts/build_skill_package.py --output dist/configure-gtm-v10.2.0.zip
 git diff --check
 ~~~
 

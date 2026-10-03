@@ -6,6 +6,7 @@ from datetime import datetime
 from typing import Any
 
 from action_contract import validate_action_contract
+from public_identifiers import public_identifier_paths, validate_public_identifiers
 from redaction import sensitive_paths
 from resource_registry import (
     ResourceRegistryError,
@@ -204,6 +205,7 @@ def _validate_operations(
         "approval",
         "replacement_reason",
         "permission_delta",
+        "public_identifiers",
         "scope",
         "evidence",
         "risk",
@@ -589,7 +591,11 @@ def validate_document(value: Any) -> dict[str, Any]:
         requirements=document["requirements"],
     )
     validate_pipeline_run(document, target_types, _fail)
-    leaks = sensitive_paths(document)
+    try:
+        validate_public_identifiers(document)
+    except ValueError as exc:
+        _fail(str(exc))
+    leaks = sensitive_paths(document, public_identifier_paths=public_identifier_paths(document))
     if leaks:
         _fail("run contains literal secret or user data at: " + ", ".join(leaks))
     validate_web_domain(

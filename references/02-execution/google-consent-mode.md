@@ -35,6 +35,12 @@ Default this skill to basic behavior: prevent Google tags from loading until the
 
 Basic Consent Mode blocks Google tags until the required grant. Advanced Consent Mode loads consent-aware Google tags under documented defaults and changes their behavior according to consent state.
 
+When explaining this choice for Google destinations, state the measurement trade-off: basic mode
+sends nothing while consent is denied and supports general conversion modeling; advanced mode
+can support advertiser-specific modeling from documented denied-state signals. Eligibility and
+reporting outcomes still depend on Google's product requirements. This is an informed choice,
+not authority to change the approved default. See the [official comparison](https://developers.google.com/tag-platform/security/concepts/consent-mode).
+
 Do not describe built-in consent checks as a strict firing gate. Google tags with built-in checks can still execute in advanced mode and alter storage/transmission according to consent state.
 
 ## Verify consent types
@@ -47,6 +53,17 @@ Map the client-approved policy to the current Google consent types required by e
 - `ad_personalization` for personalized advertising.
 
 Check any additional consent type or privacy setting against current official documentation. Do not assume that GA4 always needs only `analytics_storage`; advertising features can introduce additional requirements.
+
+For traffic covered by Google's consent requirements, record applicable products, regions, the
+consent-signal owner, and evidence for the required defaults and updates. Google's
+[EEA guidance](https://support.google.com/tagmanager/answer/13695607) requires consent signals for
+the specified measurement and advertising uses, including `ad_user_data` and
+`ad_personalization`; its [EU user consent policy](https://www.google.com/about/company/user-consent-policy/)
+also covers the UK and Switzerland where that policy applies. Verify the exact product obligations
+instead of treating geography as permission to select a legal basis or force every consent type
+to the same value. Missing required signal ownership blocks the affected configuration. In basic
+mode, verify signals when the tag becomes eligible; do not introduce a denied-state request to
+prove propagation. Network-level confirmation remains runtime recette.
 
 ## Distinguish consent mechanisms
 

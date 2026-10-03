@@ -40,7 +40,7 @@ Never publish or create a GTM version.
 | Well organized | Clear target-aware naming, shallow folders when useful, readable ownership, and semantic reuse. |
 | Correct | Faithful authority, current technical validity, compatible source/wire/Client/template fields, correct triggers and consent, and authoritative readback; not runtime certification. |
 | Best practice | The smallest maintainable architecture satisfying the approved requirement and current documentation; never tracking-plan optimization. |
-| Consent controlled | Strict/basic CMP control by default on the web route; advanced/native or server enforcement only when explicitly requested or required by the approved topology and proved for the exact product. |
+| Consent controlled | Strict/basic CMP control by default; preserve proved existing conventions. Advanced/native, server enforcement or an ungated web client policy requires explicit scope and appropriate evidence; see the configuration contract. |
 
 ## Requirement authority
 
@@ -87,7 +87,9 @@ only unresolved facts that change the architecture or authorization:
 Do not ask whether an actual named-container configuration request should mutate. Do not require a
 separate source-contract document when approved inputs and container evidence establish the facts.
 A missing design-time source or supported field blocks; a mapped runtime value that may be empty is
-a site/dataLayer and recette dependency, not authority for payload-eligibility variables.
+a site/dataLayer and recette dependency, not authority for generic payload-eligibility variables.
+When a specific value is documented as harmful, resolve the narrow omission/firing policy under
+the approved semantics before implementing its native condition.
 
 ## Operational output
 
@@ -119,6 +121,7 @@ The agent must establish authorization from the user's instructions and approved
 and establish product behavior from the exact live documentation and inspected template. Routine
 implementation choices within existing authority do not require a second approval ceremony.
 Only a material scope expansion or an uncovered high-impact action needs new authority.
+Record out-of-scope improvements as advisories without adding them to the mutation graph.
 
 JSON validation checks structure and the encoded semantic invariants. Approval records, pagination
 receipts, and hashes preserve traceability and detect inconsistent edits; they do not authenticate

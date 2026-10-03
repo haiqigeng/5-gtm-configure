@@ -70,9 +70,12 @@ readback per target. Overall `Partial` must not hide a completely safe target re
 Configuration success is saved and readback-verified state; open publication dependencies do not
 make it `Blocked`. Record the external order:
 
-1. publish the server workspace;
-2. execute server-container recette;
-3. publish the web endpoint cutover;
-4. execute web and cross-preview/end-to-end recette.
+1. run server Preview acceptance against the saved draft;
+2. run coordinated web/server Preview and end-to-end acceptance before deployment;
+3. obtain the applicable publication authority, then deploy the verified server workspace;
+4. deploy the verified web cutover and run postpublication smoke checks.
+
+Google supports testing workspace drafts in [Preview](https://support.google.com/tagmanager/answer/6107056)
+and inspecting the receiving pipeline in [server Preview](https://developers.google.com/tag-platform/tag-manager/server-side/debug).
 
 The skill never performs those steps or claims that either preview ran.

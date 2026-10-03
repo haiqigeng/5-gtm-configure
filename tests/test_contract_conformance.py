@@ -163,7 +163,7 @@ class ContractConformanceTest(unittest.TestCase):
         self.assertIn("non-empty string id", report["error"])
 
     def test_ga4_delivery_requirement_ids_survive_event_reordering(self) -> None:
-        def event(name: str, requirement_id: str | None = None) -> dict:
+        def event(name: str) -> dict:
             value = {
                 "event_name": name,
                 "classification": "custom",
@@ -173,24 +173,26 @@ class ContractConformanceTest(unittest.TestCase):
                 "data_layer": {"clear": [], "push": {"event": name}},
                 "parameters": [],
             }
-            if requirement_id:
-                value["requirement_id"] = requirement_id
             return value
 
         handoff = {
-            "skill": {"version": "2.5.0"},
+            "skill": {"version": "3.0.0"},
             "approval": {"state": "approved"},
             "plan": {"canonical_sha256": "plan-hash"},
         }
-        alpha = event("alpha_event", "TP::event::alpha")
+        alpha = event("alpha_event")
         beta = event("beta_event")
-        original = normalized_approved_semantics(handoff, {"events": [alpha, beta]})
-        reordered = normalized_approved_semantics(handoff, {"events": [beta, alpha]})
+        original = normalized_approved_semantics(
+            handoff, {"schema_version": "6.0.0", "events": [alpha, beta]}
+        )
+        reordered = normalized_approved_semantics(
+            handoff, {"schema_version": "6.0.0", "events": [beta, alpha]}
+        )
 
         original_ids = {item["event_name"]: item["id"] for item in original["requirements"]}
         reordered_ids = {item["event_name"]: item["id"] for item in reordered["requirements"]}
         self.assertEqual(original_ids, reordered_ids)
-        self.assertEqual(original_ids["alpha_event"], "TP::event::alpha")
+        self.assertEqual(original_ids["alpha_event"], "GA4::alpha_event")
         self.assertEqual(original_ids["beta_event"], "GA4::beta_event")
         self.assertNotEqual(
             original["requirements"][0]["source_order"],
@@ -199,6 +201,7 @@ class ContractConformanceTest(unittest.TestCase):
 
     def test_ga4_delivery_import_preserves_approved_semantics_and_hashes(self) -> None:
         plan = {
+            "schema_version": "6.0.0",
             "events": [
                 {
                     "event_name": "generate_lead",
@@ -224,7 +227,7 @@ class ContractConformanceTest(unittest.TestCase):
                         }
                     ],
                 }
-            ]
+            ],
         }
         with tempfile.TemporaryDirectory() as raw:
             delivery = Path(raw)
@@ -232,10 +235,10 @@ class ContractConformanceTest(unittest.TestCase):
             plan_path.write_text(json.dumps(plan), encoding="utf-8")
             digest = hashlib.sha256(plan_path.read_bytes()).hexdigest()
             handoff = {
-                "handoff_version": "1.1.0",
-                "skill": {"name": "ga4-tracking-plan", "version": "2.5.0"},
+                "handoff_version": "2.0.0",
+                "skill": {"name": "ga4-tracking-plan", "version": "3.0.0"},
                 "approval": {"state": "approved", "approved_by": "Analyst"},
-                "plan": {"canonical_sha256": digest},
+                "plan": {"canonical_sha256": digest, "schema_version": "6.0.0"},
                 "artifacts": [
                     {
                         "path": "plan.json",
@@ -251,7 +254,7 @@ class ContractConformanceTest(unittest.TestCase):
             self.assertEqual(imported["scope"]["included"], ["GA4::generate_lead"])
             requirement = imported["requirements"][0]
             self.assertEqual(requirement["source_order"], 1)
-            self.assertEqual(requirement["measurement_opportunity_ids"], ["lead_success"])
+            self.assertNotIn("measurement_opportunity_ids", requirement)
             self.assertEqual(
                 requirement["parameters"]["event::form_name"]["source"],
                 "event_data.form_name",

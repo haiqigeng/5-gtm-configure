@@ -63,7 +63,7 @@ def collect_paginated(
     max_pages: int = 1000,
     max_rate_limit_retries: int = 2,
     base_retry_delay_seconds: float = 0.5,
-    max_retry_delay_seconds: float = 8.0,
+    max_retry_delay_seconds: float = 100.0,
     sleep: Callable[[float], None] = time.sleep,
     random_value: Callable[[], float] = random.random,
 ) -> list[dict[str, Any]]:
@@ -85,7 +85,7 @@ def collect_paginated_with_receipt(
     max_pages: int = 1000,
     max_rate_limit_retries: int = 2,
     base_retry_delay_seconds: float = 0.5,
-    max_retry_delay_seconds: float = 8.0,
+    max_retry_delay_seconds: float = 100.0,
     sleep: Callable[[float], None] = time.sleep,
     random_value: Callable[[], float] = random.random,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:

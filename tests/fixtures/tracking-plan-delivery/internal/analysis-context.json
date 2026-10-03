@@ -1,5 +1,5 @@
 {
-  "context_version": "1.0.0",
+  "context_version": "2.0.0",
   "run_id": "run_11111111111111111111111111111111",
   "created_at": "2026-08-01T10:05:00+00:00",
   "target_state": "to_be",
@@ -42,6 +42,19 @@
         "project_types",
         "login_statuses"
       ]
+    },
+    {
+      "source_id": "supplied_specification",
+      "source_type": "technical_specification",
+      "reference": "example-product-offer.md",
+      "sha256": "e862c3ac79cc050e9211d5d960da828c6d2bd94bdf9b775e622460d24fa20254",
+      "evidence_role": "future_design",
+      "state": "to_be",
+      "supports": [
+        "item_price",
+        "item_quantity",
+        "item_values"
+      ]
     }
   ],
   "discovery_reports": [
@@ -50,7 +63,7 @@
       "run_id": "run_11111111111111111111111111111111",
       "source_id": "live_site",
       "reference": "example-discovery-report.json",
-      "sha256": "e6991df5e7286c34470e9595089645bc7959cc86cd33908e10eaa35f530b225d",
+      "sha256": "e0a9dbdbf5c6466d04653ef7ef075c6f481f74d9799e8d3d74c29c88330af6e6",
       "outcome": "completed",
       "hint_ids": [
         "item_consideration",
@@ -100,9 +113,6 @@
             "progression"
           ]
         }
-      ],
-      "opportunity_ids": [
-        "product_item_consideration"
       ]
     },
     {
@@ -142,9 +152,6 @@
             "failure"
           ]
         }
-      ],
-      "opportunity_ids": [
-        "quote_intentional_start"
       ]
     }
   ],
@@ -358,10 +365,10 @@
       ],
       "kind": "dynamic",
       "normalization": "numeric",
-      "rule": "Calculate the current item value from price and quantity.",
+      "rule": "Calculate value as the sum of item price times quantity, excluding tax and shipping.",
       "dynamic_reason": "changing_inventory",
       "evidence_refs": [
-        "live_site"
+        "supplied_specification"
       ]
     },
     {
@@ -423,6 +430,36 @@
       "evidence_refs": [
         "live_site"
       ]
+    },
+    {
+      "dynamic_reason": "changing_inventory",
+      "kind": "dynamic",
+      "evidence_refs": [
+        "supplied_specification"
+      ],
+      "domain_id": "item_price",
+      "event_names": [
+        "view_item"
+      ],
+      "scope": "item",
+      "rule": "Use the selected offer unit price excluding tax and shipping. This fictional supplied offer has no discount.",
+      "parameter_name": "price",
+      "normalization": "numeric"
+    },
+    {
+      "dynamic_reason": "changing_inventory",
+      "kind": "dynamic",
+      "evidence_refs": [
+        "supplied_specification"
+      ],
+      "domain_id": "item_quantity",
+      "event_names": [
+        "view_item"
+      ],
+      "scope": "item",
+      "rule": "Use 1 for the single displayed product unit.",
+      "parameter_name": "quantity",
+      "normalization": "numeric"
     }
   ],
   "assumptions": [],
@@ -440,8 +477,6 @@
         "live_site"
       ],
       "business_question": "Which products and variants attract consideration before later commerce actions?",
-      "official_candidate": "view_item",
-      "official_fit": "fit",
       "decision": "measure",
       "decision_reason": "The official ecommerce event represents the rendered product-detail state.",
       "event_names": [
@@ -463,8 +498,6 @@
         "business_brief"
       ],
       "business_question": "How many visitors intentionally enter the quote journey, and for which projects?",
-      "official_candidate": "form_start",
-      "official_fit": "gap",
       "decision": "measure",
       "decision_reason": "The business start spans interfaces that do not all expose a standard form start.",
       "event_names": [

@@ -1,5 +1,5 @@
 {
-  "contract_version": "1.0.0",
+  "contract_version": "2.0.0",
   "plan_version": "1.0",
   "data_layer_convention": {
     "name": "Default web dataLayer",
@@ -21,7 +21,6 @@
         "product_discovery",
         "quote_request"
       ],
-      "measurement_opportunity_ids": [],
       "trigger": "Push on every full page load and SPA route change after page and user state are available, and refresh the same context after an authentication-state change.",
       "locations": [
         {
@@ -52,8 +51,9 @@
           "name": "user_id",
           "scope": "user",
           "type": "string",
+          "nullable": true,
           "requirement": "conditional",
-          "condition": "Send after authentication when a stable first-party User-ID is available; do not send before first sign-in and clear the GA4 setting with null after sign-out.",
+          "condition": "Omit user_id before the first sign-in. Send the stable opaque account identifier as a string while signed in. After sign-out, send user_id as null to clear the GA4 User-ID setting.",
           "data_layer_path": "user.user_id",
           "destination": "ga4_user_id"
         }
@@ -64,9 +64,6 @@
       "classification": "official_ecommerce",
       "journey_ids": [
         "product_discovery"
-      ],
-      "measurement_opportunity_ids": [
-        "product_item_consideration"
       ],
       "business_question": "Which products and selected variants attract consideration before later commerce actions?",
       "trigger": "Push once after the primary product detail and selected default variant are rendered.",
@@ -138,6 +135,22 @@
           "requirement": "optional",
           "data_layer_path": "ecommerce.items[].item_color",
           "destination": "ga4_item_parameter"
+        },
+        {
+          "name": "price",
+          "scope": "item",
+          "type": "number",
+          "requirement": "required",
+          "data_layer_path": "ecommerce.items[].price",
+          "destination": "ga4_item_parameter"
+        },
+        {
+          "name": "quantity",
+          "scope": "item",
+          "type": "number",
+          "requirement": "required",
+          "data_layer_path": "ecommerce.items[].quantity",
+          "destination": "ga4_item_parameter"
         }
       ]
     },
@@ -146,9 +159,6 @@
       "classification": "custom",
       "journey_ids": [
         "quote_request"
-      ],
-      "measurement_opportunity_ids": [
-        "quote_intentional_start"
       ],
       "business_question": "How many visitors intentionally enter the quote journey, and for which project types?",
       "trigger": "Push once when the visitor enters the first interactive quote step after selecting a quote call to action.",

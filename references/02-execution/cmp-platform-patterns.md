@@ -50,6 +50,13 @@ ownership as approved CMP inputs.
 
 ## Didomi
 
+Signal card checked 2026-09-29: `didomi-ready` occurs once at page load and can carry unknown state;
+`didomi-consent-changed` follows a user change; `didomi-consent` covers initial state and changes.
+`didomiVendorsEnabled`, `didomiVendorsDisabled` and `didomiVendorsUnknown` contain comma-separated
+vendor IDs with a trailing comma. Enabled vendors incorporate their required purposes. Match full
+tokens and verify the actual API ID and deployed value format; readiness alone is not a grant.
+Source: https://developers.didomi.io/cmp/web-sdk/third-parties/tags-management/events-and-variables
+
 Inspect the current Didomi web SDK, direct-site versus GTM deployment, documented readiness/change
 events, vendor/purpose variables, and exact vendor identifiers. Prefer documented Didomi state
 variables and events; do not parse a consent string with custom code when a direct variable exists.
@@ -64,6 +71,13 @@ Keep readiness and change triggers repeatable only where the consumer must becom
 later grant.
 
 ## Axeptio
+
+Signal card checked 2026-09-29: `axeptio_update` accompanies initial/update choices;
+`axeptio_activate_<service>` identifies activation and `axeptio_disable_<service>` refusal or
+withdrawal. `axeptio_authorized_vendors` is an array of service names from the site's project.
+Use the inspected consent-state variable/template and exact service membership; `$$` entries are
+internal, not vendor approval. Check the template's Trigger GTM Events setting and dataLayer name.
+Source: https://support.axeptio.eu/en/articles/348263-how-axeptio-communicates-with-gtm-events-and-variables
 
 Inspect the current Axeptio CMP Gallery template, direct-site versus GTM deployment, Project ID,
 cookie configuration, dataLayer name, GTM-event option, template version, and permissions. When GTM

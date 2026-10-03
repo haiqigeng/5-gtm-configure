@@ -77,7 +77,7 @@ def ads_transport_contract() -> dict:
     next(item for item in contract["evidence"] if item["grade"] == "official-current")[
         "supports"
     ].append("REQ-ADS")
-    contract["implementation"]["field_bindings"] = [
+    contract["implementation"]["field_bindings"] += [
         {
             "requirement_id": "REQ-ADS",
             "field_scope": "event-parameter",
@@ -103,7 +103,18 @@ def ads_transport_contract() -> dict:
             "trigger",
             "Purchase",
             web_trigger_key,
-            {"type": "customEvent", "customEventFilter": "purchase"},
+            {
+                "type": "customEvent",
+                "customEventFilter": [
+                    {
+                        "type": "equals",
+                        "parameter": [
+                            {"type": "template", "key": "arg0", "value": "{{_event}}"},
+                            {"type": "template", "key": "arg1", "value": "purchase"},
+                        ],
+                    }
+                ],
+            },
             [],
         ),
         (
@@ -111,7 +122,18 @@ def ads_transport_contract() -> dict:
             "trigger",
             "Purchase",
             server_trigger_key,
-            {"type": "customEvent", "customEventFilter": "purchase"},
+            {
+                "type": "customEvent",
+                "customEventFilter": [
+                    {
+                        "type": "equals",
+                        "parameter": [
+                            {"type": "template", "key": "arg0", "value": "{{_event}}"},
+                            {"type": "template", "key": "arg1", "value": "purchase"},
+                        ],
+                    }
+                ],
+            },
             [],
         ),
         (
@@ -353,6 +375,7 @@ class UtilityEvolutionTest(unittest.TestCase):
         operation = {
             "operation_id": "OP",
             "target_id": "web",
+            "resource_family": "tag",
             "name": "Tag",
             "pre_change": {"name": "Tag", "fields": {"value": 1}},
         }
@@ -382,25 +405,28 @@ class UtilityEvolutionTest(unittest.TestCase):
                 ("purchase.json", "event_push_schema"),
             ]:
                 path = root / name
-                path.write_text("{}", encoding="utf-8")
+                path.write_text(
+                    json.dumps({"schema_version": "6.0.0"} if name == "plan.json" else {}),
+                    encoding="utf-8",
+                )
                 artifacts.append(
                     {
                         "path": name,
                         "role": role,
-                        "bytes": 2,
-                        "sha256": hashlib.sha256(b"{}").hexdigest(),
+                        "bytes": path.stat().st_size,
+                        "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
                     }
                 )
             handoff = {
-                "handoff_version": "1.1.0",
+                "handoff_version": "2.0.0",
                 "skill": {"name": "ga4-tracking-plan"},
                 "approval": {"state": "approved"},
                 "artifacts": artifacts,
-                "plan": {"canonical_sha256": artifacts[0]["sha256"]},
+                "plan": {"canonical_sha256": artifacts[0]["sha256"], "schema_version": "6.0.0"},
             }
             (root / "handoff.json").write_text(json.dumps(handoff), encoding="utf-8")
-            self.assertEqual(verify_delivery(root)[1], {})
-            handoff["handoff_version"] = "1.0.0"
+            self.assertEqual(verify_delivery(root)[1], {"schema_version": "6.0.0"})
+            handoff["handoff_version"] = "1.1.0"
             (root / "handoff.json").write_text(json.dumps(handoff), encoding="utf-8")
             with self.assertRaises(HandoffError):
                 verify_delivery(root)
@@ -459,8 +485,10 @@ class UtilityEvolutionTest(unittest.TestCase):
             if item.get("requirement_ids") != ["REQ-ADS"]:
                 continue
             intended = item.get("intended", {})
-            if intended.get("customEventFilter") == "purchase":
-                intended["customEventFilter"] = "form_submit"
+            for condition in intended.get("customEventFilter", []):
+                for parameter in condition.get("parameter", []):
+                    if parameter.get("key") == "arg1" and parameter.get("value") == "purchase":
+                        parameter["value"] = "form_submit"
             if intended.get("event_name") == "purchase":
                 intended["event_name"] = "form_submit"
         ads_flow = next(
@@ -678,7 +706,7 @@ class UtilityEvolutionTest(unittest.TestCase):
             command.return_value = subprocess.CompletedProcess(
                 ["git"], 128, "", "synthetic failure"
             )
-            errors = check_git_state(tag="v10.1.0", require_tag=True, require_clean=True)
+            errors = check_git_state(tag="v10.2.0", require_tag=True, require_clean=True)
         self.assertEqual(len(errors), 2)
         self.assertTrue(all("git exited 128" in error for error in errors))
 

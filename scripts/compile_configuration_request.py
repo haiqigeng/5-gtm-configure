@@ -4,23 +4,32 @@
 from __future__ import annotations
 
 import argparse
+import json
 import re
+import sys
 from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
 from action_contract import build_mutation_approval
-from redaction import sensitive_paths
+from public_identifiers import public_identifier_paths, validate_public_identifiers
+from redaction import scrub_sensitive_text, sensitive_paths
 from resource_registry import semantic_object_key
 from run_model import MUTATING_ACTIONS
 from strict_json import load_json, write_json_atomic
 from validate_configuration_contract import SCHEMA_VERSION, validate_document
 
 
-def compile_request(request: dict[str, Any]) -> dict[str, Any]:
+def compile_request(request: dict[str, Any], *, inventory: dict | None = None) -> dict[str, Any]:
     """Derive identities, approvals and explicit-reference closure, never product policy."""
-    if sensitive_paths(request):
-        raise ValueError("Remove literal secrets/user data before compiling the request")
+    if inventory is not None:
+        from mcp_discovery import fill_reuse_candidates
+
+        request = fill_reuse_candidates(request, inventory)
+    validate_public_identifiers(request)
+    findings = sensitive_paths(request, public_identifier_paths=public_identifier_paths(request))
+    if findings:
+        raise ValueError("Remove literal secrets/user data at: " + ", ".join(findings))
     contract = deepcopy(request)
     candidates = contract.pop("reuse_candidates", [])
     supplied_objects = contract.pop("objects")
@@ -135,8 +144,32 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("request", type=Path)
     parser.add_argument("--output", "-o", type=Path, required=True)
+    parser.add_argument(
+        "--inventory",
+        type=Path,
+        help="Fill omitted native bodies of explicitly selected reuse_candidates",
+    )
     args = parser.parse_args()
-    write_json_atomic(args.output, compile_request(load_json(args.request)))
+    try:
+        write_json_atomic(
+            args.output,
+            compile_request(
+                load_json(args.request),
+                inventory=load_json(args.inventory) if args.inventory else None,
+            ),
+        )
+    except (ValueError, KeyError, TypeError, OSError) as exc:
+        print(
+            json.dumps(
+                {
+                    "status": "Blocked",
+                    "error_type": type(exc).__name__,
+                    "error": scrub_sensitive_text(str(exc), set()),
+                }
+            ),
+            file=sys.stderr,
+        )
+        return 1
     return 0
 
 

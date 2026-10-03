@@ -23,7 +23,7 @@ the request to one exact feature and delivery route before creating any variable
 | --- | --- | --- |
 | GA4 `user_id` | Signed-in, cross-session identity using an approved stable non-PII identifier | Google tag configuration with explicit set/omit/reset lifecycle |
 | GA4 user-provided-data collection | GA4's separately activated collection of consented first-party identifiers | Native User-Provided Data variable selected in `user_data` on only the authorized GA4 Event tag(s) |
-| Google Ads enhanced conversions for web | Improve a specific web conversion with consented first-party identifiers | Associated Google tag's documented `user_data` field; see the ownership matrix for standard collection and event overrides |
+| Google Ads enhanced conversions for web | Improve a specific web conversion with consented first-party identifiers | Reuse sufficient documented collection; otherwise choose authorized tag-wide Google tag collection or an inspected native Ads event override. See the [Ads procedure](media-google-ads.md#configure-enhanced-conversions-only-explicitly). |
 | Google Ads tag-wide user-provided data | Make a documented user-data value available to compatible Google Ads conversions | Current documented Google tag route, only after explicit tag-wide authorization |
 | Google Ads User-Provided Data Event | Capture user data on an earlier page when it is unavailable at the later conversion event | Native User-Provided Data Event tag on the exact earlier event; the conversion remains a separate tag |
 | Google Ads server enhanced conversions | Carry approved identifiers to the receiving Ads tag | Documented Google sender `user_data` transport, claiming Client/Event Data, and authorized server Ads consumer |
@@ -55,8 +55,8 @@ destination, consent route, and page scope is compatible.
 In the durable run, bind each feature route to one exact mapped destination field and every
 authorized consumer object. Read the consumer target back and prove that field is configured on
 the correct product surface: GA4 `user_id` on a Google configuration tag, GA4 `user_data` on the
-authorized GA4 Event tag, client Google Ads enhanced-conversion data on its associated Google tag, tag-wide Google Ads
-`user_data` on the authorized Google tag, and prior-page collection on the User-Provided Data Event
+authorized GA4 Event tag, Google Ads user data on its explicitly authorized tag-wide Google tag or
+inspected native Ads conversion-event field, and prior-page collection on the User-Provided Data Event
 tag. Record positive product identity, implementation kind, saved tag type, and—for a community
 template—the exact installed template identity with current official/template evidence. A route
 label, consumer name, or negative “not GA4” test is insufficient. Custom HTML/Image cannot claim
@@ -67,7 +67,7 @@ Before considering the browser graph complete, record the applicable external or
 - **GA4 user-provided data:** eligible property, accepted terms/feature activation, compatible
   Google tag capability, Google Ads link where required by the intended use, and any current
   industry restriction;
-- **Google Ads enhanced conversions:** account and conversion-action enablement, customer-data
+- **Google Ads enhanced conversions:** effective account/conversion-action enablement, customer-data
   terms and policies, supported conversion source/category, destination/linking state, and the
   current unified enhanced-conversion setting;
 - **Other media matching:** vendor account/pixel activation, terms, destination identity, and
@@ -85,7 +85,7 @@ Choose the Google implementation by when the approved value exists:
 | GA4 `user_id` lifecycle on one Google tag | Configure it directly on that Google tag. |
 | Same GA4 `user_id` lifecycle across several enumerated compatible Google tags | A Configuration Settings variable is allowed only when source, set/reset behavior, consumers, destination, and consent are identical. |
 | GA4 user-provided data exists on a selected event | Native User-Provided Data variable in the `user_data` field of that GA4 Event tag only. |
-| Google Ads enhanced-conversion data exists on the conversion event | Associated Google tag's `user_data` event parameter for the documented standard route; use the authoritative ownership matrix and current Google event-override guidance for narrower timing. |
+| Google Ads enhanced-conversion data is available on the conversion page | Reuse sufficient existing collection. For GTM-managed data, use `google-ads-tag-wide-user-data` only with authority for all consumers, or `google-ads-enhanced-conversions` for an inspected native conversion-event override. |
 | Google Ads enhanced-conversion data exists only on an earlier page/event | Native User-Provided Data Event tag on that earlier event, using the same approved feature and exact timing documented by Google. Do not delay or fabricate the later conversion payload. |
 | Google Ads data is explicitly authorized tag-wide | Current native Google tag route; enumerate every conversion consumer before saving. |
 
@@ -97,8 +97,9 @@ unauthorized forwarding at the receiving tag/Transformation scope and record the
 collection consent independently. Do not attach one event's data to unrelated events.
 
 Do not require a User-Provided Data Event tag universally. Use it when the current feature requires
-earlier collection; data available with the conversion can use the documented same-event route.
-Inspect the current Google-tag/event fields instead of requiring an obsolete conversion-tag checkbox.
+earlier collection. Follow the [Ads route selection and native-field proof](media-google-ads.md#configure-enhanced-conversions-only-explicitly)
+for existing collection, manual/code/automatic sources, event overrides, and current account settings.
+Google tag fields remain tag-wide; server transport remains a separate capability.
 Check the supported trigger for earlier collection as well: Google's GTM procedure specifies Form
 Submission in that route. A site's custom event with a similar business meaning does not prove
 native trigger compatibility. Resolve this against current feature/template evidence without
@@ -227,7 +228,8 @@ reporting as external platform evidence, not static GTM proof.
 
 For a `web` route, configure only the requested browser feature. Do not create server-side GTM
 transformations, Conversions API, enhanced conversions for leads uploads, offline conversion
-uploads, CRM jobs, or browser/server deduplication. A browser Google tag routed through
+uploads, or CRM jobs. Authorized browser/transporter shared-ID preparation can remain in web
+scope; receiver configuration and deduplication certification require separate scope. A browser Google tag routed through
 `server_container_url` remains in web scope, but the receiver is external unless the user separately
 authorizes a `server` or `pipeline` target. In an authorized pipeline, keep every web and server
 consumer explicit rather than treating transport as authority.
@@ -249,6 +251,14 @@ cached field catalogue:
 - Google Consent Mode: https://developers.google.com/tag-platform/security/concepts/consent-mode
 
 ## Extend first-party data through the server pipeline
+
+A web-only `google-ads-server-user-data-transport` route may save explicitly authorized
+same-event `user_data` on the GA4 Event sender using the native UPD variable. Set
+`server_consumer_object_keys: []` and `external_receiver_dependency_id` to a requirement-scoped
+entry also listed in `external_dependency_ids`; record its receiver owner and required action.
+Keep recipient/event/consent scope explicit and exclude unrelated analytics consumers. Completion
+proves saved sender mapping only, not receiver consumption, hashing results or conversion matching.
+Pipeline mode still requires actual receiver objects and proved field flows below.
 
 For every approved server consumer, record the complete ownership chain:
 
@@ -296,14 +306,7 @@ store them only in supported secret/template fields, redact before persistence, 
 
 Add a user property only when it is explicitly approved, stable, has a valid analysis use, and current GA4 documentation permits it. Never add one merely because the source dataLayer exposes it. Keep it in an Event Settings variable only when it genuinely applies across the intended events.
 
-Treat `user_id` as a separately approved Google tag configuration contract, not a routine event
-parameter, user property, or custom dimension. Omit it while the user is not signed in, set the
-stable approved non-PII identifier when authentication state is established, and send `null` when
-the approved logout/reset event must clear a previously set value. Establish source, lifecycle,
-consent, persistence, and every consuming Google tag before configuration. Configure `user_id`
-directly on one consuming Google tag; use a Configuration Settings variable only when the same
-contract is genuinely reused by multiple compatible Google tags. Keep `user_id`, GA4
-user-provided data, and user properties as separate features with separate owners and scopes.
+Use the [User-ID lifecycle rules](#govern-the-ga4-user-id-lifecycle) for identity and reset ownership.
 
 Configure approved user properties separately from `user_id`. Record their stable analysis purpose,
 source, scope, limits, and reset behavior. Treat content groups as explicit approved configuration

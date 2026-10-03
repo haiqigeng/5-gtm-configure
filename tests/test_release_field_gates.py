@@ -335,6 +335,7 @@ class ReleaseFieldGatesTest(unittest.TestCase):
         imported = normalized_approved_semantics(
             {},
             {
+                "schema_version": "6.0.0",
                 "events": [
                     {
                         "event_name": "page_view",
@@ -345,7 +346,7 @@ class ReleaseFieldGatesTest(unittest.TestCase):
                         "data_layer": {"push": {"event": "page_view"}},
                         "parameters": [],
                     }
-                ]
+                ],
             },
         )
         requirement = imported["requirements"][0]
@@ -370,6 +371,33 @@ class ReleaseFieldGatesTest(unittest.TestCase):
             valid_web_contract(), run_id="RELEASE-GATE", source_locator="approved input"
         )
         self.assertEqual(run["container_baselines"][0]["resource_identities"], {})
+
+    def test_direct_prewrite_object_type_preserves_identity_and_native_defaults(self):
+        operation = {
+            "operation_id": "OP-DIRECT",
+            "target_id": "web-main",
+            "object_type": "tag",
+            "name": "Native tag",
+            "pre_change": {"name": "Native tag", "consentSettings": {"consentStatus": "notSet"}},
+        }
+        primary = {"target_id": "web-main", "object_type": "tag", "name": "Native tag"}
+        self.assertTrue(build_pre_write_comparison(operation, {"objects": [primary]})[0]["pass"])
+        for field, value in (("target_id", "elsewhere"), ("object_type", "variable")):
+            with self.subTest(field=field), self.assertRaisesRegex(ValueError, "identity"):
+                build_pre_write_comparison(operation, {"objects": [{**primary, field: value}]})
+        with self.assertRaisesRegex(ValueError, "identity"):
+            build_pre_write_comparison(
+                {**operation, "object_type": None},
+                {"objects": [{**primary, "object_type": None}]},
+            )
+        for family in ("tag", "variable", None):
+            direct = {**operation, "object_type": family}
+            saved = {"name": "Native tag", "consentSettings": {"consentStatus": "needed"}}
+            self.assertFalse(build_pre_write_comparison(direct, saved)[0]["pass"])
+            if family != "tag":
+                self.assertFalse(
+                    build_pre_write_comparison(direct, {"name": "Native tag"})[0]["pass"]
+                )
 
     def test_raw_prewrite_trigger_ids_compare_without_semantic_rewriting(self) -> None:
         operation = {
@@ -484,7 +512,7 @@ class ReleaseFieldGatesTest(unittest.TestCase):
             consent_types={"ad_user_data"},
         )
 
-    def test_client_enhanced_conversions_use_the_associated_google_tag(self) -> None:
+    def test_google_tag_user_data_cannot_claim_same_event_scope(self) -> None:
         common = {
             "path": "$.first_party_data_routes[0]",
             "feature": "google-ads-enhanced-conversions",
@@ -495,17 +523,25 @@ class ReleaseFieldGatesTest(unittest.TestCase):
             "dependency_ids": {"EXT-ADS"},
             "consent_types": {"ad_user_data"},
         }
-        web._validate_first_party_feature_contract(**common, consumer_targets=[{"type": "googtag"}])
-        with self.assertRaisesRegex(Exception, "associated with the Ads conversion action"):
+        with self.assertRaisesRegex(Exception, "tag-wide"):
             web._validate_first_party_feature_contract(
-                **common, consumer_targets=[{"type": "awct"}]
+                **common, consumer_targets=[{"type": "googtag"}]
             )
+        web._validate_first_party_feature_contract(**common, consumer_targets=[{"type": "awct"}])
+
+        common.update(feature="google-ads-tag-wide-user-data", timing="tag-wide")
+        web._validate_first_party_feature_contract(**common, consumer_targets=[{"type": "googtag"}])
 
     def test_external_dependencies_use_only_the_structured_current_form(self) -> None:
-        contract = valid_web_contract()
-        contract["external_dependencies"] = ["legacy shorthand"]
-        with self.assertRaisesRegex(ContractValidationError, "must be an object"):
-            validate_document(contract)
+        for value, message in (
+            (["legacy shorthand"], "must be an object"),
+            ("invalid", "must be an array"),
+        ):
+            with self.subTest(value=value):
+                contract = valid_web_contract()
+                contract["external_dependencies"] = value
+                with self.assertRaisesRegex(ContractValidationError, message):
+                    validate_document(contract)
 
     def test_generic_token_keys_are_redacted_in_objects_rows_and_errors(self) -> None:
         source = {

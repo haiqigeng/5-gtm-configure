@@ -1,5 +1,14 @@
 # Meta Pixel browser tags
 
+For native `advancedMatchingList`, author one scalar payload mapping and route per approved
+matching field (`destination_field: em`, `ph`, etc.), rather than using the table name as a
+scalar destination. Each route binds only its own approved field and source; multiple fields
+may share the same requirement and consumer. Bind the inspected value cell with the existing
+consumer `user_data_path`, for example `["parameter", "advancedMatchingList", "list", 0, "map",
+"value", "value"]`. The row's `name` must match an approved matching field such as `em`.
+Bind `activation_paths` to `["parameter", "advancedMatching", "value"]` and record `field_review`.
+The native LIST/MAP table is not a scalar field; binding the whole table does not prove its email cell.
+
 ## Contents
 
 - [Resolve the Meta requirement](#resolve-the-meta-requirement)

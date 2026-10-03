@@ -1,107 +1,377 @@
 {
   "status": "passed",
   "mode": "live",
-  "checked_at": "2026-09-27T17:30:11.381215+00:00",
-  "selected_source_count": 8,
+  "verification_scope": "retrieved_table_constraints_and_source_text",
+  "analyst_review_required": "Semantic fit and faithful adaptation quality are not certified by source-text presence.",
+  "checked_at": "2026-09-28T20:11:56.834528+00:00",
+  "selected_source_count": 10,
   "pages": [
     {
-      "status": 200,
-      "final_url": "https://developers.google.com/analytics/devguides/collection/ga4/user-id",
-      "content_sha256": "106c4d9934be470ba1b5c39eae2f0d68eecafdc1b9be46f1623d65b19978fb43",
-      "fetched_at": "2026-09-27T17:30:07.113931+00:00",
-      "response_source": "live",
-      "url": "https://developers.google.com/analytics/devguides/collection/ga4/user-id"
-    },
-    {
+      "url": "https://developers.google.com/analytics/devguides/collection/ga4/reference/events",
+      "fetched_at": "2026-09-28T20:11:55.427632+00:00",
       "status": 200,
       "final_url": "https://developers.google.com/analytics/devguides/collection/ga4/reference/events",
-      "content_sha256": "7729a184cc06be0aa3d41209e866f2772cebfc9b90595d0025e1a78f003f23b1",
-      "fetched_at": "2026-09-27T17:30:11.321497+00:00",
-      "response_source": "live",
-      "url": "https://developers.google.com/analytics/devguides/collection/ga4/reference/events"
+      "content_sha256": "183578ace9fa6101d42a2c4c9f5b5f2269ef5f433a780885ffd96fd96ab27932",
+      "response_source": "live"
+    },
+    {
+      "url": "https://developers.google.com/analytics/devguides/collection/ga4/user-id",
+      "fetched_at": "2026-09-28T20:11:56.109405+00:00",
+      "status": 200,
+      "final_url": "https://developers.google.com/analytics/devguides/collection/ga4/user-id",
+      "content_sha256": "6f0dfadb9b907ca5c4085b45858097ff47ae36ed37c1b1532ef85e9a81d73fed",
+      "response_source": "live"
+    }
+  ],
+  "selected_catalog_facts": [
+    {
+      "event": "view_item",
+      "group": "Online sales",
+      "description": "This event signifies that some content was shown to the user. Use this event to discover the most popular items viewed.",
+      "parameters": [
+        {
+          "name": "currency",
+          "scope": "event",
+          "type": "string",
+          "required": "Yes*",
+          "example": "USD",
+          "description": "Currency of the items associated with the event, in 3-letter ISO 4217 format. * Value metrics on the view_item event to not contribute to revenue * If you set value then currency is required for revenue metrics to be computed accurately."
+        },
+        {
+          "name": "value",
+          "scope": "event",
+          "type": "number",
+          "required": "Yes*",
+          "example": "30.03",
+          "description": "The monetary value of the event. * Set value to the sum of (price * quantity) for all items in items. Don't include shipping or tax. * value is typically required for meaningful reporting. If you mark the event as a key event then it's recommended you set value. * currency is required if you set value."
+        },
+        {
+          "name": "items",
+          "scope": "event",
+          "type": "Array<Item>",
+          "required": "Yes",
+          "example": "",
+          "description": "The items for the event."
+        },
+        {
+          "name": "item_id",
+          "scope": "item",
+          "type": "string",
+          "required": "Yes*",
+          "example": "SKU_12345",
+          "description": "The ID of the item. *One of item_id or item_name is required."
+        },
+        {
+          "name": "item_name",
+          "scope": "item",
+          "type": "string",
+          "required": "Yes*",
+          "example": "Stan and Friends Tee",
+          "description": "The name of the item. *One of item_id or item_name is required."
+        },
+        {
+          "name": "affiliation",
+          "scope": "item",
+          "type": "string",
+          "required": "No",
+          "example": "Google Store",
+          "description": "A product affiliation to designate a supplying company or brick and mortar store location. Note: affiliation is only available at the item-scope."
+        },
+        {
+          "name": "coupon",
+          "scope": "item",
+          "type": "string",
+          "required": "No",
+          "example": "SUMMER_FUN",
+          "description": "The coupon name/code associated with the item. Event-level and item-level coupon parameters are independent."
+        },
+        {
+          "name": "discount",
+          "scope": "item",
+          "type": "number",
+          "required": "No",
+          "example": "2.22",
+          "description": "The unit monetary discount value associated with the item."
+        },
+        {
+          "name": "index",
+          "scope": "item",
+          "type": "number",
+          "required": "No",
+          "example": "5",
+          "description": "The index/position of the item in a list."
+        },
+        {
+          "name": "item_brand",
+          "scope": "item",
+          "type": "string",
+          "required": "No",
+          "example": "Google",
+          "description": "The brand of the item."
+        },
+        {
+          "name": "item_category",
+          "scope": "item",
+          "type": "string",
+          "required": "No",
+          "example": "Apparel",
+          "description": "The category of the item. If used as part of a category hierarchy or taxonomy then this will be the first category."
+        },
+        {
+          "name": "item_category2",
+          "scope": "item",
+          "type": "string",
+          "required": "No",
+          "example": "Adult",
+          "description": "The second category hierarchy or additional taxonomy for the item."
+        },
+        {
+          "name": "item_category3",
+          "scope": "item",
+          "type": "string",
+          "required": "No",
+          "example": "Shirts",
+          "description": "The third category hierarchy or additional taxonomy for the item."
+        },
+        {
+          "name": "item_category4",
+          "scope": "item",
+          "type": "string",
+          "required": "No",
+          "example": "Crew",
+          "description": "The fourth category hierarchy or additional taxonomy for the item."
+        },
+        {
+          "name": "item_category5",
+          "scope": "item",
+          "type": "string",
+          "required": "No",
+          "example": "Short sleeve",
+          "description": "The fifth category hierarchy or additional taxonomy for the item."
+        },
+        {
+          "name": "item_list_id",
+          "scope": "item",
+          "type": "string",
+          "required": "No",
+          "example": "related_products",
+          "description": "The ID of the list in which the item was presented to the user. If set, event-level item_list_id is ignored. If not set, event-level item_list_id is used, if present."
+        },
+        {
+          "name": "item_list_name",
+          "scope": "item",
+          "type": "string",
+          "required": "No",
+          "example": "Related products",
+          "description": "The name of the list in which the item was presented to the user. If set, event-level item_list_name is ignored. If not set, event-level item_list_name is used, if present."
+        },
+        {
+          "name": "item_variant",
+          "scope": "item",
+          "type": "string",
+          "required": "No",
+          "example": "green",
+          "description": "The item variant or unique code or description for additional item details/options."
+        },
+        {
+          "name": "location_id",
+          "scope": "item",
+          "type": "string",
+          "required": "No",
+          "example": "ChIJIQBpAG2ahYAR_6128GcTUEo (the Google Place ID for San Francisco)",
+          "description": "The physical location associated with the item (e.g. the physical store location). It's recommended to use the Google Place ID that corresponds to the associated item. A custom location ID can also be used. Note: location_id is only available at the item-scope."
+        },
+        {
+          "name": "price",
+          "scope": "item",
+          "type": "number",
+          "required": "No",
+          "example": "10.01",
+          "description": "The monetary unit price of the item, in units of the specified currency parameter. If a discount applies to the item, set price to the discounted unit price and specify the unit price discount in the discount parameter."
+        },
+        {
+          "name": "quantity",
+          "scope": "item",
+          "type": "number",
+          "required": "No",
+          "example": "3",
+          "description": "Item quantity. If not set, quantity is set to 1."
+        }
+      ]
     }
   ],
   "checks": [
     {
       "owner": "parameter:core_data:user_id:user",
+      "technical_name": "user_id",
       "url": "https://developers.google.com/analytics/devguides/collection/ga4/user-id",
       "section": "Send user IDs",
-      "wording_origin": "faithful_translation",
+      "wording_origin": "faithful_adaptation",
+      "official_text": "The user_id parameter is a configuration parameter, not a custom user property or standard event parameter.",
+      "declared_checked_date": "2026-08-01",
+      "definition": "Identifies the stable first-party account identifier mapped to the official GA4 User-ID configuration setting.",
       "base_url": "https://developers.google.com/analytics/devguides/collection/ga4/user-id",
       "fragment": "",
       "reachable": true,
-      "anchor_found": true
+      "anchor_found": null,
+      "excerpt_found": true,
+      "technical_name_found": true,
+      "verification_scope": "visible_article_text"
     },
     {
       "owner": "event:view_item",
+      "technical_name": "view_item",
       "url": "https://developers.google.com/analytics/devguides/collection/ga4/reference/events#view_item",
       "section": "view_item",
       "wording_origin": "exact",
+      "official_text": "This event signifies that some content was shown to the user. Use this event to discover the most popular items viewed.",
+      "declared_checked_date": "2026-08-01",
+      "definition": "This event signifies that some content was shown to the user. Use this event to discover the most popular items viewed.",
       "base_url": "https://developers.google.com/analytics/devguides/collection/ga4/reference/events",
       "fragment": "view_item",
       "reachable": true,
-      "anchor_found": true
+      "anchor_found": true,
+      "excerpt_found": true,
+      "technical_name_found": null,
+      "verification_scope": "visible_fragment_section"
     },
     {
       "owner": "parameter:view_item:currency:event",
+      "technical_name": "currency",
       "url": "https://developers.google.com/analytics/devguides/collection/ga4/reference/events#view_item",
       "section": "view_item parameters",
       "wording_origin": "exact",
+      "official_text": "Currency of the items associated with the event, in 3-letter ISO 4217 format. * Value metrics on the view_item event to not contribute to revenue * If you set value then currency is required for revenue metrics to be computed accurately.",
+      "declared_checked_date": "2026-08-01",
+      "definition": "Currency of the items associated with the event, in 3-letter ISO 4217 format. * Value metrics on the view_item event to not contribute to revenue * If you set value then currency is required for revenue metrics to be computed accurately.",
       "base_url": "https://developers.google.com/analytics/devguides/collection/ga4/reference/events",
       "fragment": "view_item",
       "reachable": true,
-      "anchor_found": true
+      "anchor_found": true,
+      "excerpt_found": true,
+      "technical_name_found": null,
+      "verification_scope": "visible_fragment_section"
     },
     {
       "owner": "parameter:view_item:value:event",
+      "technical_name": "value",
       "url": "https://developers.google.com/analytics/devguides/collection/ga4/reference/events#view_item",
       "section": "view_item parameters",
-      "wording_origin": "exact",
+      "wording_origin": "faithful_adaptation",
+      "official_text": "The monetary value of the event. * Set value to the sum of (price * quantity) for all items in items. Don't include shipping or tax. * value is typically required for meaningful reporting. If you mark the event as a key event then it's recommended you set value. * currency is required if you set value.",
+      "declared_checked_date": "2026-08-01",
+      "definition": "Monetary value of the event’s items, excluding shipping and tax.",
       "base_url": "https://developers.google.com/analytics/devguides/collection/ga4/reference/events",
       "fragment": "view_item",
       "reachable": true,
-      "anchor_found": true
+      "anchor_found": true,
+      "excerpt_found": true,
+      "technical_name_found": null,
+      "verification_scope": "visible_fragment_section"
     },
     {
       "owner": "parameter:view_item:items:event",
+      "technical_name": "items",
       "url": "https://developers.google.com/analytics/devguides/collection/ga4/reference/events#view_item",
       "section": "view_item parameters",
       "wording_origin": "exact",
+      "official_text": "The items for the event.",
+      "declared_checked_date": "2026-08-01",
+      "definition": "The items for the event.",
       "base_url": "https://developers.google.com/analytics/devguides/collection/ga4/reference/events",
       "fragment": "view_item",
       "reachable": true,
-      "anchor_found": true
+      "anchor_found": true,
+      "excerpt_found": true,
+      "technical_name_found": null,
+      "verification_scope": "visible_fragment_section"
     },
     {
       "owner": "parameter:view_item:item_id:item",
+      "technical_name": "item_id",
       "url": "https://developers.google.com/analytics/devguides/collection/ga4/reference/events#view_item",
       "section": "items parameter",
       "wording_origin": "exact",
+      "official_text": "The ID of the item. *One of item_id or item_name is required.",
+      "declared_checked_date": "2026-08-01",
+      "definition": "The ID of the item. *One of item_id or item_name is required.",
       "base_url": "https://developers.google.com/analytics/devguides/collection/ga4/reference/events",
       "fragment": "view_item",
       "reachable": true,
-      "anchor_found": true
+      "anchor_found": true,
+      "excerpt_found": true,
+      "technical_name_found": null,
+      "verification_scope": "visible_fragment_section"
     },
     {
       "owner": "parameter:view_item:item_name:item",
+      "technical_name": "item_name",
       "url": "https://developers.google.com/analytics/devguides/collection/ga4/reference/events#view_item",
       "section": "items parameter",
       "wording_origin": "exact",
+      "official_text": "The name of the item. *One of item_id or item_name is required.",
+      "declared_checked_date": "2026-08-01",
+      "definition": "The name of the item. *One of item_id or item_name is required.",
       "base_url": "https://developers.google.com/analytics/devguides/collection/ga4/reference/events",
       "fragment": "view_item",
       "reachable": true,
-      "anchor_found": true
+      "anchor_found": true,
+      "excerpt_found": true,
+      "technical_name_found": null,
+      "verification_scope": "visible_fragment_section"
     },
     {
       "owner": "parameter:view_item:item_variant:item",
+      "technical_name": "item_variant",
       "url": "https://developers.google.com/analytics/devguides/collection/ga4/reference/events#view_item",
       "section": "items parameter",
       "wording_origin": "exact",
+      "official_text": "The item variant or unique code or description for additional item details/options.",
+      "declared_checked_date": "2026-08-01",
+      "definition": "The item variant or unique code or description for additional item details/options.",
       "base_url": "https://developers.google.com/analytics/devguides/collection/ga4/reference/events",
       "fragment": "view_item",
       "reachable": true,
-      "anchor_found": true
+      "anchor_found": true,
+      "excerpt_found": true,
+      "technical_name_found": null,
+      "verification_scope": "visible_fragment_section"
+    },
+    {
+      "owner": "parameter:view_item:price:item",
+      "technical_name": "price",
+      "url": "https://developers.google.com/analytics/devguides/collection/ga4/reference/events#view_item",
+      "section": "Item parameters",
+      "wording_origin": "exact",
+      "official_text": "The monetary unit price of the item, in units of the specified currency parameter. If a discount applies to the item, set price to the discounted unit price and specify the unit price discount in the discount parameter.",
+      "declared_checked_date": "2026-09-27",
+      "definition": "The monetary unit price of the item, in units of the specified currency parameter. If a discount applies to the item, set price to the discounted unit price and specify the unit price discount in the discount parameter.",
+      "base_url": "https://developers.google.com/analytics/devguides/collection/ga4/reference/events",
+      "fragment": "view_item",
+      "reachable": true,
+      "anchor_found": true,
+      "excerpt_found": true,
+      "technical_name_found": null,
+      "verification_scope": "visible_fragment_section"
+    },
+    {
+      "owner": "parameter:view_item:quantity:item",
+      "technical_name": "quantity",
+      "url": "https://developers.google.com/analytics/devguides/collection/ga4/reference/events#view_item",
+      "section": "Item parameters",
+      "wording_origin": "exact",
+      "official_text": "Item quantity. If not set, quantity is set to 1.",
+      "declared_checked_date": "2026-09-27",
+      "definition": "Item quantity. If not set, quantity is set to 1.",
+      "base_url": "https://developers.google.com/analytics/devguides/collection/ga4/reference/events",
+      "fragment": "view_item",
+      "reachable": true,
+      "anchor_found": true,
+      "excerpt_found": true,
+      "technical_name_found": null,
+      "verification_scope": "visible_fragment_section"
     }
   ],
-  "errors": []
+  "errors": [],
+  "warnings": []
 }

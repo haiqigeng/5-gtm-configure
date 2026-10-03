@@ -13,6 +13,19 @@ MAX_JSON_BYTES = 64 * 1024 * 1024
 MAX_JSON_DEPTH = 256
 
 
+def validate_output_paths(*, inputs: list[Path], outputs: list[Path]) -> None:
+    """Reject input/output and output/output aliases before any generated file is written."""
+    occupied = [path.resolve() for path in inputs]
+    for output in outputs:
+        resolved = output.resolve()
+        for other in occupied:
+            if os.path.normcase(str(resolved)) == os.path.normcase(str(other)) or (
+                resolved.exists() and other.exists() and resolved.samefile(other)
+            ):
+                raise ValueError("Generated output must differ from all inputs and other outputs")
+        occupied.append(resolved)
+
+
 class StrictJsonError(ValueError):
     """Raised when runtime JSON is unreadable, ambiguous, or excessively nested."""
 

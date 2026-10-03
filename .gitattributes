@@ -1,5 +1,13 @@
 * text=auto eol=lf
 *.bat text eol=crlf
 *.ps1 text eol=crlf
+# Preserve reviewed runtime bytes so clean-checkout release archives reproduce the tested hash.
+VERSION -text whitespace=cr-at-eol
+SKILL.md -text whitespace=cr-at-eol
+LICENSE -text whitespace=cr-at-eol
+agents/openai.yaml -text whitespace=cr-at-eol
+references/** -text whitespace=cr-at-eol
+schemas/** -text whitespace=cr-at-eol
+scripts/** -text whitespace=cr-at-eol
 # Delivery manifests bind exact bytes; preserve fixture hashes across platforms.
 tests/fixtures/tracking-plan-delivery/** -text whitespace=cr-at-eol

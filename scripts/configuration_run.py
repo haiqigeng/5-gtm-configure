@@ -16,7 +16,7 @@ from run_model import OPERATION_STATES, RUN_PHASES, RUN_STATUSES, SCHEMA_VERSION
 from run_model_web import FIRST_PARTY_FEATURES
 from run_render import render_markdown as render_current_markdown
 from run_validation_core import validate_document as validate_current_document
-from strict_json import StrictJsonError, load_json, write_text_atomic
+from strict_json import StrictJsonError, load_json, validate_output_paths, write_text_atomic
 from verification import build_pre_write_comparison as build_current_pre_write_comparison
 from verification import build_verification_comparison as build_current_verification_comparison
 from verification import canonical_sha256
@@ -200,6 +200,11 @@ def main() -> int:
                 atomic_write(args.run, document)
             _emit_json({"pass": True, "operation": args.operation, "state": "planned"})
         else:
+            if args.output:
+                try:
+                    validate_output_paths(inputs=[args.run], outputs=[args.output])
+                except ValueError as exc:
+                    raise RunValidationError(str(exc)) from exc
             rendered = render_markdown(load_document(args.run), embed_machine=args.embed_machine)
             if args.output:
                 write_text_atomic(args.output, rendered)

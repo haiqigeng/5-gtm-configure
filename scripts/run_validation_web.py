@@ -5,16 +5,22 @@ from __future__ import annotations
 
 import hashlib
 import json
-from copy import deepcopy
 from datetime import datetime
 from typing import Any
 from urllib.parse import urlparse
 
-from requirement_validation import DELTA_ACTIONS
-from resource_registry import CONFIGURATION_SETTINGS_VARIABLE_TYPES
+from native_configuration import (
+    FieldResolutionError,
+    effective_fields,
+    field_key,
+    local_fields,
+)
+from native_configuration import (
+    decode_parameter as _decode_parameter_value,
+)
+from public_identifiers import _locate
 from run_model_web import (
     BUILT_IN_TRIGGER_TYPES,
-    CONFIGURATION_FIELD_ALIASES,
     CONSENT_MODES,
     CUSTOM_CODE_TAG_TYPES,
     ECOMMERCE_ROUTES,
@@ -36,11 +42,9 @@ from run_model_web import (
     PAGE_VIEW_OCCURRENCES,
     PAGE_VIEW_OWNERS,
     PRE_CMP_POLICIES,
-    SCHEMA_VERSION,
     SHAPE_COMPATIBILITY,
     TAG_TYPE_ALIASES,
     TRIGGER_TYPE_ALIASES,
-    VERIFICATION_SCHEMA_VERSION,
 )
 
 # Google product support, native type IDs, and consent parameters checked 2026-09-05:
@@ -130,238 +134,6 @@ def canonical_sha256(value: Any) -> str:
     return f"sha256:{hashlib.sha256(encoded).hexdigest()}"
 
 
-def _verification_target(operation: dict[str, Any]) -> Any:
-    if operation.get("action") == "remove":
-        return {
-            "action": "remove",
-            "object_key": operation.get("object_key"),
-            "expected_saved_state": None,
-        }
-    if isinstance(operation.get("intended"), dict):
-        return operation["intended"]
-    if operation.get("action") in {"reuse", "untouched"} and isinstance(
-        operation.get("pre_change"), dict
-    ):
-        return operation["pre_change"]
-    return {
-        "action": operation.get("action"),
-        "object_id": operation.get("object_id"),
-        "object_key": operation.get("object_key"),
-    }
-
-
-def _required_comparison_fields(operation: dict[str, Any]) -> set[str]:
-    target = _verification_target(operation)
-    if not isinstance(target, dict) or not target:
-        raise RunValidationError("verification target must be a non-empty object")
-    return set(target)
-
-
-def build_verification_comparison(
-    operation: dict[str, Any],
-    saved: Any,
-    *,
-    comparator: str,
-    compared_fields: list[str],
-    differences: list[dict[str, Any]],
-) -> dict[str, Any]:
-    """Build auditable adapter evidence without persisting the complete saved object."""
-    normalized_fields = _unique_texts(
-        compared_fields,
-        "compared_fields",
-        allow_empty=False,
-    )
-    missing_fields = sorted(_required_comparison_fields(operation) - set(normalized_fields))
-    if missing_fields:
-        raise RunValidationError(
-            "compared_fields does not cover intended field(s): " + ", ".join(missing_fields)
-        )
-    return {
-        "schema_version": VERIFICATION_SCHEMA_VERSION,
-        "comparator": _text(comparator, "comparator"),
-        "pass": not differences,
-        "intended_sha256": canonical_sha256(_verification_target(operation)),
-        "saved_sha256": canonical_sha256(saved),
-        "compared_fields": normalized_fields,
-        "differences": deepcopy(differences),
-    }
-
-
-_UNSET = object()
-
-
-def validate_verification_comparison(
-    value: Any,
-    *,
-    operation: dict[str, Any],
-    saved: Any = _UNSET,
-    require_pass: bool = False,
-) -> dict[str, Any]:
-    """Validate structured equality evidence and bind it to the immutable intention."""
-    path = "comparison"
-    comparison = _object(value, path)
-    required = {
-        "schema_version",
-        "comparator",
-        "pass",
-        "intended_sha256",
-        "saved_sha256",
-        "compared_fields",
-        "differences",
-    }
-    unexpected = sorted(set(comparison) - required)
-    missing = sorted(required - set(comparison))
-    if unexpected:
-        raise RunValidationError(f"{path} contains unexpected key(s): {', '.join(unexpected)}")
-    if missing:
-        raise RunValidationError(f"{path} is missing key(s): {', '.join(missing)}")
-    if comparison.get("schema_version") != VERIFICATION_SCHEMA_VERSION:
-        raise RunValidationError(f"{path}.schema_version must be {VERIFICATION_SCHEMA_VERSION!r}")
-    _text(comparison.get("comparator"), f"{path}.comparator")
-    passed = comparison.get("pass")
-    if not isinstance(passed, bool):
-        raise RunValidationError(f"{path}.pass must be a boolean")
-    intended_sha256 = _text(comparison.get("intended_sha256"), f"{path}.intended_sha256")
-    saved_sha256 = _text(comparison.get("saved_sha256"), f"{path}.saved_sha256")
-    for field_path, fingerprint in (
-        (f"{path}.intended_sha256", intended_sha256),
-        (f"{path}.saved_sha256", saved_sha256),
-    ):
-        if len(fingerprint) != 71 or not fingerprint.startswith("sha256:"):
-            raise RunValidationError(f"{field_path} must be a sha256 fingerprint")
-        try:
-            int(fingerprint.removeprefix("sha256:"), 16)
-        except ValueError as exc:
-            raise RunValidationError(f"{field_path} must be a sha256 fingerprint") from exc
-    expected_intended = canonical_sha256(_verification_target(operation))
-    if intended_sha256 != expected_intended:
-        raise RunValidationError(f"{path}.intended_sha256 does not match the operation")
-    if saved is not _UNSET and saved_sha256 != canonical_sha256(saved):
-        raise RunValidationError(f"{path}.saved_sha256 does not match adapter readback")
-    compared_fields = _unique_texts(
-        comparison.get("compared_fields"),
-        f"{path}.compared_fields",
-        allow_empty=False,
-    )
-    missing_fields = sorted(_required_comparison_fields(operation) - set(compared_fields))
-    if missing_fields:
-        raise RunValidationError(
-            f"{path}.compared_fields does not cover intended field(s): " + ", ".join(missing_fields)
-        )
-    differences = _array(comparison.get("differences"), f"{path}.differences")
-    for index, difference in enumerate(differences):
-        if not isinstance(difference, dict) or not difference:
-            raise RunValidationError(f"{path}.differences[{index}] must be a non-empty object")
-    if passed and differences:
-        raise RunValidationError(f"{path}.differences must be empty when pass is true")
-    if not passed and not differences:
-        raise RunValidationError(f"{path}.differences must explain a failed comparison")
-    if require_pass and not passed:
-        raise RunValidationError("verified requires a passing saved-readback comparison")
-    return comparison
-
-
-def _pre_write_operation(operation: dict[str, Any]) -> dict[str, Any]:
-    pre_change = operation.get("pre_change")
-    if operation.get("action") not in DELTA_ACTIONS or not isinstance(pre_change, dict):
-        raise RunValidationError("pre-write comparison requires a delta operation with pre_change")
-    return {
-        "action": "update",
-        "object_key": operation.get("object_key"),
-        "intended": pre_change,
-    }
-
-
-def _subset_differences(expected: Any, observed: Any, path: str = "$") -> list[dict[str, Any]]:
-    """Compare a normalized pre-change snapshot while tolerating extra adapter metadata."""
-    differences: list[dict[str, Any]] = []
-    stack: list[tuple[Any, Any, str]] = [(expected, observed, path)]
-    while stack:
-        expected_value, observed_value, current_path = stack.pop()
-        if isinstance(expected_value, dict):
-            if not isinstance(observed_value, dict):
-                differences.append(
-                    {
-                        "path": current_path,
-                        "expected": deepcopy(expected_value),
-                        "actual": deepcopy(observed_value),
-                    }
-                )
-                continue
-            for key in reversed(list(expected_value)):
-                child_path = f"{current_path}.{key}"
-                if key not in observed_value:
-                    differences.append(
-                        {
-                            "path": child_path,
-                            "expected": deepcopy(expected_value[key]),
-                            "actual": None,
-                            "reason": "missing",
-                        }
-                    )
-                    continue
-                stack.append((expected_value[key], observed_value[key], child_path))
-            continue
-        if isinstance(expected_value, list):
-            if not isinstance(observed_value, list) or len(expected_value) != len(observed_value):
-                differences.append(
-                    {
-                        "path": current_path,
-                        "expected": deepcopy(expected_value),
-                        "actual": deepcopy(observed_value),
-                    }
-                )
-                continue
-            for index in range(len(expected_value) - 1, -1, -1):
-                stack.append(
-                    (expected_value[index], observed_value[index], f"{current_path}[{index}]")
-                )
-            continue
-        if type(expected_value) is not type(observed_value) or expected_value != observed_value:
-            differences.append(
-                {
-                    "path": current_path,
-                    "expected": deepcopy(expected_value),
-                    "actual": deepcopy(observed_value),
-                }
-            )
-    return differences
-
-
-def build_pre_write_comparison(
-    operation: dict[str, Any],
-    saved: Any,
-    *,
-    comparator: str = "configure-gtm-pre-change-subset-v1",
-) -> dict[str, Any]:
-    """Bind one fresh saved read to the approved pre-change snapshot before mutation."""
-    pseudo_operation = _pre_write_operation(operation)
-    pre_change = pseudo_operation["intended"]
-    return build_verification_comparison(
-        pseudo_operation,
-        saved,
-        comparator=comparator,
-        compared_fields=sorted(pre_change),
-        differences=_subset_differences(pre_change, saved),
-    )
-
-
-def validate_pre_write_comparison(
-    value: Any,
-    *,
-    operation: dict[str, Any],
-    saved: Any = _UNSET,
-    require_pass: bool = False,
-) -> dict[str, Any]:
-    """Validate pre-write drift evidence against an operation's immutable pre_change."""
-    return validate_verification_comparison(
-        value,
-        operation=_pre_write_operation(operation),
-        saved=saved,
-        require_pass=require_pass,
-    )
-
-
 def _unique_texts(value: Any, path: str, *, allow_empty: bool = True) -> list[str]:
     items = _array(value, path)
     normalized = [_text(item, f"{path}[]") for item in items]
@@ -439,66 +211,31 @@ def _normalized_trigger_type(value: Any, path: str) -> str:
     return normalized
 
 
-def _decode_parameter_value(value: Any) -> Any:
-    if not isinstance(value, dict):
-        return value
-    if "value" in value:
-        decoded = value["value"]
-        if value.get("type") == "boolean" and isinstance(decoded, str):
-            if decoded.casefold() == "true":
-                return True
-            if decoded.casefold() == "false":
-                return False
-        return decoded
-    return value
-
-
 def _configuration_value(target: dict[str, Any], names: set[str]) -> tuple[bool, Any]:
-    normalized_names = {_normalized_token(name) for name in names}
-    normalized_names = {
-        alias
-        for name in normalized_names
-        for alias in CONFIGURATION_FIELD_ALIASES.get(name, {name})
+    try:
+        return _field_value(local_fields(target), names)
+    except FieldResolutionError as exc:
+        raise RunValidationError(str(exc)) from exc
+
+
+def _field_value(fields: dict[str, Any], names: set[str]) -> tuple[bool, Any]:
+    matches = set(fields) & {field_key(name) for name in names}
+    if len(matches) > 1:
+        raise RunValidationError("ambiguous configuration field aliases")
+    return (True, fields[next(iter(matches))]) if matches else (False, None)
+
+
+def _resolved_fields(target, operations, path, *, event_settings=True):
+    variables = {
+        item["name"]: _effective_target(item, path)
+        for item in (operations or {}).values()
+        if (item.get("object_type") or item.get("resource_family")) == "variable"
+        and item.get("action") not in NON_EXECUTING_TAG_ACTIONS
     }
-    for key, value in target.items():
-        if _normalized_token(key) in normalized_names:
-            return True, _decode_parameter_value(value)
-    for container_key in ("fields", "parameters", "configuration", "eventParameters"):
-        container = target.get(container_key)
-        if isinstance(container, dict):
-            for key, value in container.items():
-                if _normalized_token(key) in normalized_names:
-                    return True, _decode_parameter_value(value)
-    for container_key in ("parameter", "parameters"):
-        container = target.get(container_key)
-        if not isinstance(container, list):
-            continue
-        for item in container:
-            if not isinstance(item, dict):
-                continue
-            key = item.get("key") or item.get("name")
-            if isinstance(key, str) and _normalized_token(key) in normalized_names:
-                return True, _decode_parameter_value(item)
-            if isinstance(key, str) and _normalized_token(key) == "configsettingstable":
-                rows = item.get("list", [])
-                if not isinstance(rows, list):
-                    continue
-                for row in rows:
-                    entries = row.get("map", []) if isinstance(row, dict) else []
-                    if not isinstance(entries, list):
-                        continue
-                    decoded = {
-                        entry.get("key"): _decode_parameter_value(entry)
-                        for entry in entries
-                        if isinstance(entry, dict) and isinstance(entry.get("key"), str)
-                    }
-                    parameter_name = decoded.get("parameter") or decoded.get("name")
-                    if (
-                        isinstance(parameter_name, str)
-                        and _normalized_token(parameter_name) in normalized_names
-                    ):
-                        return True, decoded.get("parameterValue", decoded.get("value"))
-    return False, None
+    try:
+        return effective_fields(target, variables, event_settings=event_settings)
+    except FieldResolutionError as exc:
+        raise RunValidationError(f"{path}: {exc}") from exc
 
 
 def _tag_type(target: dict[str, Any], path: str) -> str:
@@ -553,65 +290,13 @@ def _tag_firing_option(target: dict[str, Any], path: str) -> str:
     return normalized
 
 
-def _configuration_settings_target(
-    target: dict[str, Any],
-    operations: dict[str, dict[str, Any]] | None,
-    path: str,
-) -> dict[str, Any] | None:
-    present, reference = _configuration_value(
-        target,
-        {
-            "configSettingsVariable",
-            "configuration_settings_variable",
-            "configurationSettingsVariable",
-        },
-    )
-    if not present:
-        return None
-    if operations is None:
-        raise RunValidationError(f"{path} cannot resolve its Configuration Settings variable")
-    if not isinstance(reference, str) or not reference.strip():
-        raise RunValidationError(f"{path} Configuration Settings reference must be a string")
-    reference = reference.strip()
-    name = (
-        reference[2:-2].strip() if reference.startswith("{{") and reference.endswith("}}") else None
-    )
-    operation = operations.get(reference)
-    if operation is None and name:
-        operation = next(
-            (
-                item
-                for item in operations.values()
-                if (item.get("object_type") or item.get("resource_family")) == "variable"
-                and item.get("name") == name
-            ),
-            None,
-        )
-    if (
-        operation is None
-        or (operation.get("object_type") or operation.get("resource_family")) != "variable"
-    ):
-        raise RunValidationError(f"{path} Configuration Settings variable is unresolved")
-    settings = _effective_target(operation, f"{path}.configuration_settings")
-    settings_type = _normalized_token(str(settings.get("type", "")))
-    if settings_type not in CONFIGURATION_SETTINGS_VARIABLE_TYPES:
-        raise RunValidationError(
-            f"{path} reference is not a Google tag Configuration Settings variable"
-        )
-    return settings
-
-
 def _effective_configuration_value(
     target: dict[str, Any],
     names: set[str],
     operations: dict[str, dict[str, Any]] | None,
     path: str,
 ) -> tuple[bool, Any]:
-    direct = _configuration_value(target, names)
-    if direct[0]:
-        return direct
-    settings = _configuration_settings_target(target, operations, path)
-    return _configuration_value(settings, names) if settings is not None else (False, None)
+    return _field_value(_resolved_fields(target, operations, path, event_settings=False), names)
 
 
 def _send_page_view_value(
@@ -670,6 +355,7 @@ def _configured_destinations(
             "tagId",
             "measurement_id",
             "measurementId",
+            "measurementIdOverride",
             "destination_id",
             "destinationId",
         },
@@ -759,7 +445,7 @@ def _validate_payload_mappings(raw: Any, requirement_ids: set[str]) -> list[dict
                 "status",
                 "provenance_locator",
             },
-            optional=EXTENDED_MAPPING_KEYS,
+            optional=EXTENDED_MAPPING_KEYS | {"native_binding"},
         )
         requirement_id = _text(item.get("requirement_id"), f"{path}.requirement_id")
         if requirement_id not in requirement_ids:
@@ -1052,6 +738,7 @@ def _validate_execution_topologies(
     operations: dict[str, dict[str, Any]],
     baseline_trigger_types: dict[str, str],
     transporter_tag_keys: set[str] | None = None,
+    consent_enforcements: dict[str, str] | None = None,
 ) -> dict[str, dict[str, Any]]:
     transporter_tag_keys = set(transporter_tag_keys or set())
     operation_by_key = {item["object_key"]: item for item in operations.values()}
@@ -1186,15 +873,17 @@ def _validate_execution_topologies(
                 f"{path}.additional_consent_checks differs from bound tag consentSettings"
             )
         if mode == "strict-basic":
+            convention = (consent_enforcements or {}).get(tag_key)
+            alternative = convention in {"firing-trigger-condition", "additional-consent-checks"}
             if is_transporter and (blocking or block_scope):
                 raise RunValidationError(
                     f"{path} transporter tags must not inherit destination vendor blocks"
                 )
-            if not is_transporter and (not blocking or not block_scope):
+            if not is_transporter and not alternative and (not blocking or not block_scope):
                 raise RunValidationError(
                     f"{path}.strict-basic requires blocking_trigger_keys and blocking_event_scope"
                 )
-            if additional:
+            if additional and convention != "additional-consent-checks":
                 raise RunValidationError(
                     f"{path}.additional_consent_checks must be empty under strict-basic"
                 )
@@ -1204,7 +893,7 @@ def _validate_execution_topologies(
                 )
         elif blocking or block_scope or additional:
             raise RunValidationError(
-                f"{path}.advanced-native must not carry a defeating block or Additional check"
+                f"{path}.{mode} must not carry a defeating block or Additional check"
             )
         firing_option = _text(item.get("firing_option"), f"{path}.firing_option")
         if firing_option not in FIRING_OPTIONS:
@@ -1214,6 +903,12 @@ def _validate_execution_topologies(
         if firing_option != _tag_firing_option(target, f"{path}.bound_tag"):
             raise RunValidationError(f"{path}.firing_option differs from the bound tag")
         may_precede_cmp = item.get("may_precede_cmp")
+        if mode == "client-policy-ungated" and (
+            may_precede_cmp is not False or item.get("pre_cmp_policy") != "not-applicable"
+        ):
+            raise RunValidationError(
+                f"{path}.client-policy-ungated cannot declare CMP-dependent behavior"
+            )
         if not isinstance(may_precede_cmp, bool):
             raise RunValidationError(f"{path}.may_precede_cmp must be a boolean")
         pre_cmp_policy = _text(item.get("pre_cmp_policy"), f"{path}.pre_cmp_policy")
@@ -1514,10 +1209,11 @@ def _validate_first_party_feature_contract(
             raise RunValidationError(
                 f"{path}.google-ads-enhanced-conversions requires same-event user_data"
             )
-        if not product_types <= {"googtag"}:
+        if not product_types <= GOOGLE_ADS_CONVERSION_TAG_TYPES:
             raise RunValidationError(
-                f"{path}.google-ads-enhanced-conversions requires the Google tag associated "
-                "with the Ads conversion action"
+                f"{path}.google-ads-enhanced-conversions requires native Ads conversion event tags; "
+                "a Google tag user_data field is tag-wide and requires the explicitly authorized "
+                "google-ads-tag-wide-user-data route"
             )
     elif feature == "google-ads-tag-wide-user-data":
         if destination_field != "user_data" or timing != "tag-wide":
@@ -1581,6 +1277,95 @@ def _validate_first_party_feature_contract(
         raise RunValidationError(f"{path}.{feature} requires ad_user_data consent")
 
 
+def _first_party_binding_value(
+    route: dict[str, Any],
+    target: dict[str, Any],
+    object_key: str,
+    path: str,
+    operations: dict[str, dict[str, Any]] | None = None,
+) -> tuple[bool, Any]:
+    """Resolve an inspected event override without guessing a native Ads parameter name."""
+    native_matching = route.get("feature") == "vendor-advanced-matching" and any(
+        "user_data_path" in binding for binding in route.get("consumer_bindings", [])
+    )
+    if route.get("feature") != "google-ads-enhanced-conversions" and not native_matching:
+        if route.get("feature") == "ga4-user-provided-data":
+            return _configuration_value(target, {route["destination_field"]})
+        return _field_value(
+            _resolved_fields(
+                target, operations, path, event_settings=route.get("feature") != "ga4-user-id"
+            ),
+            {route["destination_field"]},
+        )
+    bindings = _array(route.get("consumer_bindings"), f"{path}.consumer_bindings")
+    matches = [
+        item for item in bindings if isinstance(item, dict) and item.get("object_key") == object_key
+    ]
+    if len(matches) != 1:
+        raise RunValidationError(f"{path} needs exactly one native field binding per consumer")
+    binding = matches[0]
+    _text(binding.get("field_review"), f"{path}.consumer_binding.field_review")
+    if native_matching:
+        cell_path = binding.get("user_data_path")
+        if (
+            not isinstance(cell_path, list)
+            or len(cell_path) != 7
+            or cell_path[:3] != ["parameter", "advancedMatchingList", "list"]
+            or type(cell_path[3]) is not int
+            or cell_path[3] < 0
+            or cell_path[4:] != ["map", "value", "value"]
+        ):
+            raise RunValidationError(f"{path} must bind an advancedMatchingList value cell")
+        try:
+            matching_name, _ = _locate(target, cell_path[:4] + ["map", "name", "value"])
+        except (KeyError, TypeError, IndexError) as exc:
+            raise RunValidationError(f"{path} matching row has no unique name") from exc
+        if route.get("destination_field") != matching_name or [
+            field.get("name") for field in route.get("fields", [])
+        ] != [matching_name]:
+            raise RunValidationError(
+                f"{path} scalar matching binding must prove exactly its one approved field"
+            )
+        rows = _resolved_fields(target, operations, path).get("advancedmatchinglist", [])
+        if (
+            not isinstance(rows, list)
+            or sum(isinstance(row, dict) and row.get("name") == matching_name for row in rows) != 1
+        ):
+            raise RunValidationError(
+                f"{path} matching field must have exactly one native table row"
+            )
+        if binding.get("activation_paths") != [["parameter", "advancedMatching", "value"]]:
+            raise RunValidationError(f"{path} must bind the native advancedMatching control")
+
+    def native_value(native_path: Any) -> Any:
+        if (
+            not isinstance(native_path, list)
+            or len(native_path) < 3
+            or native_path[0] != "parameter"
+            or native_path[-1] != "value"
+            or any(
+                not (isinstance(part, str) and part or type(part) is int and part >= 0)
+                for part in native_path
+            )
+        ):
+            raise RunValidationError(
+                f"{path}.user_data_path/activation_paths must identify an inspected native parameter value"
+            )
+        try:
+            value, _ = _locate(target, native_path)
+        except (KeyError, TypeError, IndexError) as exc:
+            raise RunValidationError(
+                f"{path}.native field path does not resolve uniquely in the native tag"
+            ) from exc
+        return value
+
+    for activation_path in _array(binding.get("activation_paths"), f"{path}.activation_paths"):
+        activation = native_value(activation_path)
+        if activation is not True and activation != "true":
+            raise RunValidationError(f"{path}.required native user-data control is not enabled")
+    return True, native_value(binding.get("user_data_path"))
+
+
 def _validate_first_party_consumer_bindings(
     raw: Any,
     *,
@@ -1593,17 +1378,22 @@ def _validate_first_party_consumer_bindings(
     for index, binding_raw in enumerate(_array(raw, f"{path}.consumer_bindings")):
         binding_path = f"{path}.consumer_bindings[{index}]"
         binding = _object(binding_raw, binding_path)
+        required = {
+            "object_key",
+            "product",
+            "implementation",
+            "tag_type",
+            "template_identity",
+            "evidence",
+        }
+        if feature == "google-ads-enhanced-conversions" or (
+            feature == "vendor-advanced-matching" and "user_data_path" in binding
+        ):
+            required.update({"user_data_path", "activation_paths", "field_review"})
         _exact_keys(
             binding,
             binding_path,
-            required={
-                "object_key",
-                "product",
-                "implementation",
-                "tag_type",
-                "template_identity",
-                "evidence",
-            },
+            required=required,
         )
         object_key = _text(binding.get("object_key"), f"{binding_path}.object_key")
         if object_key not in consumers or object_key in records:
@@ -1620,6 +1410,8 @@ def _validate_first_party_consumer_bindings(
         implementation = _text(binding.get("implementation"), f"{binding_path}.implementation")
         if implementation not in {"native", "installed-template"}:
             raise RunValidationError(f"{binding_path}.implementation is unsupported")
+        if feature == "google-ads-enhanced-conversions" and implementation != "native":
+            raise RunValidationError(f"{binding_path}.event override requires a native Ads tag")
         actual_type = _tag_type(consumer_targets[object_key], f"{binding_path}.consumer")
         declared_type = _normalized_token(
             _text(binding.get("tag_type"), f"{binding_path}.tag_type")
@@ -1665,7 +1457,6 @@ def _validate_first_party_data_routes(
     operations: dict[str, dict[str, Any]],
     external_dependencies: dict[str, dict[str, Any]],
     payload_mappings: list[dict[str, Any]],
-    schema_version: str,
 ) -> list[dict[str, Any]]:
     operation_by_key = {item["object_key"]: item for item in operations.values()}
     mapped_fields = {
@@ -1678,7 +1469,7 @@ def _validate_first_party_data_routes(
         for item in payload_mappings
         if item["status"] == "mapped"
     }
-    identities: set[tuple[str, str]] = set()
+    identities: set[tuple[str, str, str]] = set()
     records: list[dict[str, Any]] = []
     for index, item_raw in enumerate(_array(raw, "$.first_party_data_routes")):
         path = f"$.first_party_data_routes[{index}]"
@@ -1702,10 +1493,8 @@ def _validate_first_party_data_routes(
             "google-ads-server-user-provided-data-event",
         }:
             required_keys.add("server_consumer_object_keys")
-        if schema_version == SCHEMA_VERSION:
-            required_keys.add("consumer_bindings")
-        else:
-            optional_keys.add("consumer_bindings")
+            optional_keys.add("external_receiver_dependency_id")
+        required_keys.add("consumer_bindings")
         _exact_keys(
             item,
             path,
@@ -1726,7 +1515,11 @@ def _validate_first_party_data_routes(
             raise RunValidationError(
                 f"{path} must bind to a mapped payload field {requirement_id}::{destination_field}"
             )
-        identity = (requirement_id, feature)
+        identity = (
+            requirement_id,
+            feature,
+            destination_field if feature == "vendor-advanced-matching" else "",
+        )
         if identity in identities:
             raise RunValidationError(f"duplicate first-party-data route {identity!r}")
         identities.add(identity)
@@ -1753,7 +1546,9 @@ def _validate_first_party_data_routes(
                     f"{path}.consumer_object_keys contains a tag outside the requirement"
                 )
             target = _effective_target(operation, f"{path}.consumer_object_keys")
-            present, configured_value = _configuration_value(target, {destination_field})
+            present, configured_value = _first_party_binding_value(
+                item, target, object_key, path, operations
+            )
             if not present:
                 raise RunValidationError(
                     f"{path}.consumer {object_key!r} does not configure {destination_field!r}"
@@ -1766,6 +1561,16 @@ def _validate_first_party_data_routes(
                     f"{path}.consumer {object_key!r} {destination_field!r} binding differs "
                     "from the approved field binding"
                 )
+            if feature == "vendor-advanced-matching" and any(
+                "user_data_path" in binding for binding in item.get("consumer_bindings", [])
+            ):
+                mapping = mapping_by_identity[(requirement_id, destination_field)]
+                if item.get("timing") != "same-event":
+                    raise RunValidationError(f"{path} native matching requires same-event timing")
+                if item["fields"][0].get("source") != mapping.get("source"):
+                    raise RunValidationError(
+                        f"{path} matching source differs from the approved field"
+                    )
             consumer_targets[object_key] = target
         if "consumer_bindings" in item:
             _validate_first_party_consumer_bindings(

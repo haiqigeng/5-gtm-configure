@@ -98,13 +98,15 @@ class GraphError(ValueError):
         self.error_code = error_code
 
 
-def _canonical(
+def canonical_native_fields(
     value: Any,
     *,
     parent_key: str | None = None,
     path: str = "$",
     parameter_array_mode: str | None = None,
     parameter_object: bool = False,
+    tag_object: bool = False,
+    native_object: bool = False,
 ) -> Any:
     if isinstance(value, dict):
         is_parameter = parameter_object or parent_key in STANDALONE_PARAMETER_FIELDS
@@ -116,6 +118,15 @@ def _canonical(
         )
         output: dict[str, Any] = {}
         for key in sorted(value):
+            # Readback-only equivalence: mutation payloads keep explicit clearing [].
+            if native_object and key == "parameter" and value[key] == []:
+                continue
+            if (
+                tag_object
+                and key == "consentSettings"
+                and value[key] == {"consentStatus": "notSet"}
+            ):
+                continue
             child_mode = None
             if key == "parameter":
                 child_mode = "keyed"
@@ -126,7 +137,7 @@ def _canonical(
             child = value[key]
             if is_parameter and key == "type" and isinstance(child, str):
                 child = child.casefold()
-            output[key] = _canonical(
+            output[key] = canonical_native_fields(
                 child,
                 parent_key=key,
                 path=f"{path}.{key}",
@@ -151,7 +162,7 @@ def _canonical(
                         raise GraphError(f"{path} contains duplicate GTM Parameter key {key!r}")
                     parameter_keys.add(key)
             normalized.append(
-                _canonical(
+                canonical_native_fields(
                     item,
                     path=f"{path}[{index}]",
                     parameter_object=parameter_array_mode in {"keyed", "ordered"},
@@ -445,7 +456,7 @@ def _normalize_graph(
         cleaned = {field: value for field, value in raw.items() if field not in ROOT_METADATA_KEYS}
         cleaned["object_type"] = object_type
         cleaned["name"] = name
-        normalized[key] = _canonical(
+        normalized[key] = canonical_native_fields(
             _translate_references(
                 cleaned,
                 maps=maps,
@@ -455,6 +466,8 @@ def _normalize_graph(
                 allowed_semantic_references=allowed_semantic_references,
             ),
             path=path,
+            tag_object=object_type == "tag",
+            native_object=object_type in {"tag", "trigger", "variable", "client", "transformation"},
         )
     return {key: normalized[key] for key in sorted(normalized)}
 

@@ -7,7 +7,7 @@
 - [Govern shapes](#govern-shapes)
 - [Assign page-view ownership](#assign-page-view-ownership)
 - [Route environments safely](#route-environments-safely)
-- [Hand off runtime proof](#hand-off-runtime-proof)
+- [Hand off runtime proof](#record-the-runtime-boundary)
 
 ## Prove every layer
 

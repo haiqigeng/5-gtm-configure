@@ -5,7 +5,7 @@
   "additionalProperties": false,
   "required": ["handoff_version", "generated_at", "skill", "plan", "approval", "discovery_reports", "upstream_evidence", "artifacts"],
   "properties": {
-    "handoff_version": {"const": "1.1.0"},
+    "handoff_version": {"const": "2.0.0"},
     "run_id": {"type": "string", "pattern": "^run_[a-f0-9]{32}$"},
     "generated_at": {"type": "string", "format": "date-time"},
     "skill": {
@@ -24,7 +24,7 @@
       "properties": {
         "title": {"type": "string", "minLength": 1},
         "version": {"type": "string", "minLength": 1},
-        "schema_version": {"type": "string", "minLength": 1},
+        "schema_version": {"const": "6.0.0"},
         "target_state": {"enum": ["as_is", "to_be", "hybrid"]},
         "language": {"type": "string", "minLength": 2},
         "scope": {"type": "string", "minLength": 1},
@@ -95,7 +95,7 @@
         "properties": {
           "path": {"type": "string", "minLength": 1},
           "role": {"type": "string", "minLength": 1},
-          "bytes": {"type": "integer", "minimum": 1},
+          "bytes": {"type": "integer", "minimum": 0},
           "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
         }
       }
@@ -103,15 +103,15 @@
   },
   "allOf": [
     {
-      "if": {
-        "properties": {"handoff_version": {"const": "1.1.0"}},
-        "required": ["handoff_version"]
-      },
-      "then": {
-        "required": ["run_id"],
-        "properties": {
-          "discovery_reports": {
-            "items": {"required": ["run_id"]}
+      "required": [
+        "run_id"
+      ],
+      "properties": {
+        "discovery_reports": {
+          "items": {
+            "required": [
+              "run_id"
+            ]
           }
         }
       }

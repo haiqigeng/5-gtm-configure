@@ -97,11 +97,16 @@ scope.
 In a `web`-only run, do not configure:
 
 - server-container clients or server Transformation objects;
-- server-side tags, Conversions API, event-ID, or browser/server deduplication;
+- receiver-side tags, Conversions API processing, and receiver deduplication;
 - account users and permissions;
 - website snippets or application code;
 - container versions, approvals, Submit, or publication;
 - another container merely because it is linked by a Zone or destination.
+
+Authorized browser event-ID generation and sender bindings remain web-side configuration.
+Use [browser/server deduplication](pipeline/browser-server-deduplication.md) for sender-only
+preparation, and record the receiver as an external dependency. A web save does not prove
+receiver processing or end-to-end deduplication.
 
 ## Verify the saved surface
 

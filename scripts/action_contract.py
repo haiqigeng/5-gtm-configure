@@ -16,6 +16,61 @@ def _non_empty_text(value: Any) -> bool:
     return isinstance(value, str) and bool(value.strip())
 
 
+def validate_native_authoring(family, intended, *, path, fail):
+    """Reject demonstrated non-native write forms, without rewriting saved objects."""
+    if not isinstance(intended, dict):
+        return
+    if family == "trigger":
+        for field in ("customEventFilter", "filter", "autoEventFilter"):
+            if field in intended and (
+                not isinstance(intended[field], list)
+                or any(
+                    not isinstance(row, dict)
+                    or not isinstance(row.get("parameter"), list)
+                    or not row.get("type")
+                    for row in intended[field]
+                )
+            ):
+                fail(f"{path}.{field} requires native Condition objects")
+    if family == "tag" and intended.get("type") == "gaawe":
+        parameters = intended.get("parameter", [])
+        keys = (
+            {row.get("key") for row in parameters if isinstance(row, dict)}
+            if isinstance(parameters, list)
+            else set()
+        )
+        if {"eventParameters", "sendEcommerce"} & (set(intended) | keys):
+            fail(
+                f"{path} uses obsolete GA4 authoring fields; use eventSettingsTable and sendEcommerceData"
+            )
+        for row in parameters if isinstance(parameters, list) else []:
+            if not isinstance(row, dict):
+                fail(f"{path}.parameter requires native Parameter objects")
+                continue
+            if row.get("key") == "sendEcommerceData" and (
+                str(row.get("type", "")).lower() != "boolean"
+                or row.get("value") not in {"true", "false"}
+            ):
+                fail(f"{path}.sendEcommerceData requires native BOOLEAN true/false")
+            if row.get("key") != "eventSettingsTable":
+                continue
+            if str(row.get("type", "")).lower() != "list" or not isinstance(row.get("list"), list):
+                fail(f"{path}.eventSettingsTable requires a native LIST")
+                continue
+            for cell in row["list"]:
+                fields = cell.get("map", []) if isinstance(cell, dict) else []
+                if (
+                    not isinstance(cell, dict)
+                    or str(cell.get("type", "")).lower() != "map"
+                    or not isinstance(fields, list)
+                    or {entry.get("key") for entry in fields if isinstance(entry, dict)}
+                    != {"parameter", "parameterValue"}
+                ):
+                    fail(
+                        f"{path}.eventSettingsTable rows require parameter/parameterValue MAP cells"
+                    )
+
+
 def mutation_approval_projection(item: dict[str, Any]) -> dict[str, Any]:
     """Return the exact mutation dimensions that approved input must bind."""
     projection = {
@@ -30,6 +85,7 @@ def mutation_approval_projection(item: dict[str, Any]) -> dict[str, Any]:
         "new_name",
         "replacement_reason",
         "permission_delta",
+        "public_identifiers",
         "scope",
     ):
         if field in item:
@@ -59,6 +115,9 @@ def validate_action_contract(
     """Check action state and authority traceability; source authenticity is a host/agent duty."""
     action = item.get("action")
     family = item.get("resource_family") or item.get("object_type")
+
+    if action in MUTATING_ACTIONS - {"remove"}:
+        validate_native_authoring(family, item.get("intended", {}), path=path, fail=fail)
 
     if action in MUTATING_ACTIONS - {"remove"} or action in {"reuse", "untouched"}:
         if not _non_empty_object(item.get("intended")):

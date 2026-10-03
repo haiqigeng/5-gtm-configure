@@ -1,0 +1,16 @@
+{
+  "producer": "ga4-tracking-plan",
+  "version": "3.0.0",
+  "handoff_version": "2.0.0",
+  "plan_schema_version": "6.0.0",
+  "source": "Installed local producer; no public release commit asserted",
+  "build": "Unmodified build_tracking_plan_delivery.py with producer example plan/context/discovery report, synthetic approval and live official-source checks",
+  "producer_sha256": {
+    "release.json": "a83029c8790f8bc3275275a1bed400fa3c510b35b57edbe3eed149a547845dc1",
+    "scripts/build_tracking_plan_delivery.py": "5b1831d6e363d1c7e321becc76f20118ed9c07817347df619e3a402b19d0e60a",
+    "scripts/delivery_artifacts.py": "031aaf14e4260419a400d3294649a829381aaffbbf497ccbaedbf0b8dfd252f2",
+    "references/example-tracking-plan.json": "fd56d032b754ad305fe68533e9730eb30ef92951c54a986035ffdca51bc65624",
+    "references/schema-tracking-plan.json": "244e11a0b5034315400c9e40d680f2103401d9d6717bcfb4cd2067342b81a4ee"
+  },
+  "handoff_sha256": "fbe460d2faf672734dc70ab68d3b366293faa98fa0b0aa8aa28e117f9abff1e8"
+}

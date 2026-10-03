@@ -22,8 +22,12 @@ documentation controls the browser and server destination schemas. The inspected
 template/version controls what GTM can actually store and send. An official API does not prove that
 an official or compatible GTM server template exists.
 
-Do not freeze event or parameter catalogues in this skill. Reopen the exact live product, feature,
-CMP, Client, Transformation, and template sources for each implementation.
+Do not freeze event or parameter catalogues in this skill. Reuse concise prior evidence when its
+product, feature, template/version and decision still apply; reopen the relevant official section
+to check currency. Do not reread whole vendor manuals for unchanged fields. Carry the source record
+into the current contract with the supported requirement IDs and decision; retain its true access
+date unless the page was actually revisited. The 365-day validator ceiling is not a guarantee that
+guidance remains current for a year. Recheck changed, ambiguous or time-sensitive rules directly.
 
 ## Authority by decision
 

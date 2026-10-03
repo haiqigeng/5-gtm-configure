@@ -8,6 +8,7 @@
 - [Design the analytics graph](#design-the-analytics-graph)
 - [Consent and identity](#consent-and-identity)
 - [Vendor-specific routing](#vendor-specific-routing)
+- [Useful supported routes to investigate](#useful-supported-routes-to-investigate)
 - [Acceptance](#acceptance)
 
 ## Scope
@@ -36,8 +37,8 @@ Before design:
 5. confirm source types, arrays, null behavior, limits, reserved names, identity fields, and consent;
 6. record property-side administration separately.
 
-Use the native tag first, then an official/vendor-supported template, then a verified organization-
-owned template, then another reviewed Gallery template. Block the affected requirement when no
+Use the single selection order in [template governance](template-governance.md), with the
+current installed fields, permissions and applicable authority deciding suitability. Block the affected requirement when no
 current primary schema or safe supported-template install/update path can be established. Custom
 HTML is allowed only when the vendor currently documents that browser implementation and no suitable
 supported template exists; it is never an automatic fallback for missing product knowledge or
@@ -95,9 +96,7 @@ Treat vendor-owned tag managers such as Adobe Tags or Matomo Tag Manager as othe
 skill configures their browser destination from GTM only when a current supported path exists; it
 does not administer those tag managers.
 
-## Acceptance
-
-### Useful supported routes to investigate
+## Useful supported routes to investigate
 
 These are decision aids, not a frozen template catalogue. Reopen the linked feature guide and
 inspect the actual installed version before selecting fields:
@@ -114,7 +113,7 @@ inspect the actual installed version before selecting fields:
 For another product, establish its exact official GTM/SDK route and inspected template. These
 research routes are not certification of an installed implementation.
 
-### Saved acceptance
+## Acceptance
 
 Read back base/event separation, destination identity, complete field set, triggers, consent,
 settings, template version, automatic behavior, and all references. Report external property setup

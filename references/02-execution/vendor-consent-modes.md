@@ -16,12 +16,13 @@ Do not use `advanced consent mode` as a synonym for any built-in consent check. 
 
 | Classification | Denied or unknown behavior | Skill treatment |
 | --- | --- | --- |
-| `strict/basic blocked` | The vendor loader and event requests do not run before the required grant. | Default for every platform. Use the CMP vendor block. |
+| `strict/basic blocked` | The vendor loader and event requests do not run before the required grant. | Default for every platform. Prefer vendor blocks for new gates; proved existing conventions follow [CMP consent](cmp-consent.md#existing-consent-conventions). |
 | `native stop/hold` | A vendor API may load or remain present, but event delivery is stopped or held and no denied-state measurement is documented. | Not advanced. Use only when explicitly selected and proven; otherwise retain strict/basic blocking. |
 | `native cookie-control` | A vendor API changes cookie use, but the complete denied-state event payload or data-use contract is not established. | Not automatically advanced. Prove the remaining behavior or use strict/basic blocking. |
 | `advanced consent-aware` | The tag intentionally loads under a denied default and sends officially documented cookieless, anonymized, or otherwise limited requests while restricting storage or data use. | Explicit approval required. Do not add a block that defeats the documented denied-state behavior. |
 | `adaptive/anonymous analytics` | The analytics product can collect a reduced cookieless or anonymous dataset without cookie consent, often under a separate policy or exemption decision. | Treat as a vendor-native advanced-equivalent route, not automatically as legal permission or as the vendor's branded Advanced Consent Mode. |
 | `unverified` | The denied-state request, storage, or data-use behavior cannot be established. | Use strict/basic blocking or mark the advanced request `Blocked`. |
+| `client-policy-ungated` | No consent gate is configured under an explicit scoped client instruction. | Web-only contract route; not native advanced behavior or a legal exemption. No policy is inferred from missing CMP or geography. |
 
 Advanced matching, enhanced conversions, modeled reporting, restricted-data processing, and a template's GTM consent checkbox do not by themselves prove `advanced consent-aware` behavior.
 
@@ -46,11 +47,14 @@ authority and not an expansion of the selected tag-configuration scope. Matomo a
 classify consent capability only; actual tag configuration must also pass the generic analytics
 destination and installed-template route.
 
-Discovery baseline last reviewed: 2026-07-21. Record a new access date and current official evidence for every implementation.
+Discovery baseline reviewed: 2026-09-28 for the linked Google, Microsoft UET/Clarity, Matomo,
+Piwik PRO, TikTok and Pinterest sources. Unverified rows remain unverified. Record a new access
+date and current official evidence for every implementation.
 
 ## Use the current verified capability map
 
-The following map was verified from official browser documentation on 2026-07-18. Current official documentation and the installed template always override it.
+The following map is a discovery aid. Current official documentation and the installed template
+always override it; a product absent from the review is not certified by this table.
 
 | Product | Officially documented denied-state capability | Classification and default |
 | --- | --- | --- |
@@ -62,7 +66,7 @@ The following map was verified from official browser documentation on 2026-07-18
 | Microsoft Advertising UET | Advanced UET Consent Mode loads immediately with `ad_storage` denied and sends anonymized data used in aggregate modeling until grant. | Microsoft `advanced consent-aware` capable; strict/basic remains the default. |
 | Microsoft Clarity | Clarity's script operates in advanced mode, loads regardless of consent, and uses a limited cookieless mode without consent. `analytics_Storage` and `ad_Storage` are separate. | `advanced consent-aware` capable. Treat Clarity separately from UET even when they are integrated. |
 | Matomo | `requireCookieConsent` keeps tracking requests active without cookies; `requireConsent` prevents both cookies and tracking requests. | `adaptive/anonymous analytics` capable only under an explicitly approved client policy. Do not confuse cookie consent with tracking consent. |
-| Piwik PRO Analytics | Its own tracking tag can switch among consent, anonymous, or no-collection modes and can collect anonymous data from non-consenting visitors. | `adaptive/anonymous analytics` capable only when explicitly approved. The anonymous mode does not automatically apply to third-party tags. |
+| Piwik PRO Analytics | Its own tracking tag can switch among consent, anonymous, or no-collection modes. Non-consenting collection can use different session mechanisms, including session hashes or short-lived visitor cookies. | `adaptive/anonymous analytics` capable only when explicitly approved. Inspect the chosen storage and session settings; the label anonymous does not prove cookieless behavior, and this mode does not automatically apply to third-party tags. |
 | TikTok Pixel | TikTok documents a Pixel cookie-consent mode and cookie enable/disable controls, while also documenting tag-manager/CMP control of the base tag. The public help page does not establish the complete denied-state event payload or an advertiser-specific advanced modeling contract. | `native cookie-control`, not automatically `advanced consent-aware`. Use strict/basic unless current product documentation and template prove the intended limited-data route. |
 | Pinterest tag | `setconsent(false)` prevents events from being sent and deletes first-party session storage. | `native stop/hold`, not advanced denied-state measurement. Strict/basic remains valid. |
 | Meta Pixel | No current official browser source in the implementation record proves an approved cookieless/anonymized denied-state measurement contract equivalent to Google or UET. | `unverified` for advanced behavior; use strict/basic. A grant/revoke API alone would not prove advanced measurement. |

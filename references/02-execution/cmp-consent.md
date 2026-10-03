@@ -56,6 +56,32 @@ block or Additional Consent Check.
 
 Design the normal-trigger lifecycle separately from the block. A page-load trigger that is blocked while consent is unknown or denied does not retry automatically. When a base/configuration tag must initialize after consent, use verified CMP readiness/grant events and an appropriate once-per-page control so both an initial grant and a later grant have a valid firing opportunity. Keep any page-view event and late-consent page-view policy separate from initialization.
 
+## Existing consent conventions
+
+The vendor-block pattern above is the preferred convention for new strict/basic implementations.
+For an existing, inspected container convention, the same `strict-basic` mode also accepts:
+
+- `web_enforcement.mechanism: firing-trigger-condition`, with `evidence` identifying the inspected
+  CMP state contract and an exact native GTM `grant_condition`. Every firing trigger must contain
+  that condition in its `filter`. Supported conditions are positive `equals` or `contains`, with
+  exactly `arg0` (the consent variable) and `arg1` (the granted value/token). No negation, empty
+  value or unknown/denied match is accepted. Establish exact token boundaries and unknown values
+  from the deployed CMP; substring matching is not proof of vendor membership. Complex regex or
+  multiple independent grant conditions remain outside this alternate convention.
+- `web_enforcement.mechanism: additional-consent-checks`, with `evidence` and `default_bindings`
+  mapping each configured consent type to `{object_key, field_path}`. Each native path must resolve
+  to `denied` in the inspected default-owner tag, which fires on Consent Initialization. Bind that
+  owner as an explicit dependency; include a consent-kind requirement for it. Review the actual
+  template/version to establish that each field controls the declared consent type and that updates
+  occur before business events. This route accepts event-driven, once-per-event tags only; it does
+  not solve page-load or once-per-page retry behavior.
+
+Both conventions require unknown state `deny`, no parallel vendor blocks, exact tag settings and
+current official/CMP evidence. The validator checks saved structure; actual CMP behavior remains a
+recette responsibility. See [Google's consent checks](https://support.google.com/tagmanager/answer/10718549)
+(checked 2026-09-29). An ungated approved client policy is a separate
+[contract route](configuration-contract.md#map-consent-and-deduplication), never an invented CMP.
+
 ## Distinguish observation from gating
 
 Classify the final GTM logic:

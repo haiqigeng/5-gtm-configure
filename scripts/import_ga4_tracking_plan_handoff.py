@@ -45,8 +45,12 @@ def _safe_artifact(root: Path, relative: str) -> Path:
 def verify_delivery(delivery: Path) -> tuple[dict[str, Any], dict[str, Any]]:
     root = delivery.resolve()
     handoff = _load(root / "handoff.json")
-    if handoff.get("handoff_version") != "1.1.0":
-        raise HandoffError("Unsupported GA4 tracking-plan handoff version.")
+    if handoff.get("handoff_version") != "2.0.0":
+        raise HandoffError(
+            "Unsupported GA4 tracking-plan handoff version: this importer requires "
+            "handoff 2.0.0 / plan 6.0.0. Request a complete approved delivery from "
+            "ga4-tracking-plan 3.0.0; do not edit version fields or reinterpret its workbook."
+        )
     if handoff.get("skill", {}).get("name") != "ga4-tracking-plan":
         raise HandoffError("The handoff does not come from ga4-tracking-plan.")
     if handoff.get("approval", {}).get("state") != "approved":
@@ -86,7 +90,15 @@ def verify_delivery(delivery: Path) -> tuple[dict[str, Any], dict[str, Any]]:
         raise HandoffError("The handoff has no canonical_tracking_plan artifact.")
     if _digest(plan_path) != handoff.get("plan", {}).get("canonical_sha256"):
         raise HandoffError("The canonical plan hash differs from handoff.plan.canonical_sha256.")
-    return handoff, _load(plan_path)
+    plan = _load(plan_path)
+    if (
+        handoff.get("plan", {}).get("schema_version") != "6.0.0"
+        or plan.get("schema_version") != "6.0.0"
+    ):
+        raise HandoffError(
+            "Unsupported plan schema: handoff and canonical plan must both declare 6.0.0."
+        )
+    return handoff, plan
 
 
 EVENT_NAME = re.compile(r"^[a-z][a-z0-9_]{1,39}$")
@@ -122,14 +134,9 @@ def _text_array(value: Any, path: str, *, allow_empty: bool = True) -> list[str]
     return items
 
 
-def _requirement_id(event: dict[str, Any], event_name: str, path: str) -> str:
-    supplied = event.get("requirement_id")
-    if supplied is not None:
-        return _text(supplied, f"{path}.requirement_id")
-    return f"GA4::{event_name}"
-
-
 def _validated_events(plan: dict[str, Any]) -> list[dict[str, Any]]:
+    if plan.get("schema_version") != "6.0.0":
+        raise HandoffError("Unsupported plan schema: expected 6.0.0.")
     events = plan.get("events")
     if not isinstance(events, list) or not events:
         raise HandoffError("$.events must be a non-empty array.")
@@ -150,14 +157,6 @@ def _validated_events(plan: dict[str, Any]) -> list[dict[str, Any]]:
             raise HandoffError(f"{path}.classification is unsupported.")
         _text(event.get("trigger"), f"{path}.trigger")
         _text_array(event.get("journey_ids"), f"{path}.journey_ids", allow_empty=False)
-        measurement_opportunity_ids = _text_array(
-            event.get("measurement_opportunity_ids", []),
-            f"{path}.measurement_opportunity_ids",
-        )
-        if classification != "context" and not measurement_opportunity_ids:
-            raise HandoffError(
-                f"{path}.measurement_opportunity_ids must not be empty outside context events."
-            )
         data_layer = event.get("data_layer")
         if not isinstance(data_layer, dict):
             raise HandoffError(f"{path}.data_layer must be an object.")
@@ -182,6 +181,8 @@ def _validated_events(plan: dict[str, Any]) -> list[dict[str, Any]]:
             parameter_type = _text(parameter.get("type"), f"{parameter_path}.type")
             if parameter_type not in PARAMETER_TYPES:
                 raise HandoffError(f"{parameter_path}.type is unsupported.")
+            if "nullable" in parameter and type(parameter["nullable"]) is not bool:
+                raise HandoffError(f"{parameter_path}.nullable must be a boolean.")
             requirement = _text(parameter.get("requirement"), f"{parameter_path}.requirement")
             if requirement not in PARAMETER_REQUIREMENTS:
                 raise HandoffError(f"{parameter_path}.requirement is unsupported.")
@@ -205,7 +206,7 @@ def normalized_approved_semantics(handoff: dict[str, Any], plan: dict[str, Any])
     requirement_ids: set[str] = set()
     for order, event in enumerate(_validated_events(plan), start=1):
         event_name = str(event.get("event_name", ""))
-        requirement_id = _requirement_id(event, event_name, f"$.events[{order - 1}]")
+        requirement_id = f"GA4::{event_name}"
         if requirement_id in requirement_ids:
             raise HandoffError(
                 f"$.events[{order - 1}] duplicates requirement ID {requirement_id!r}."
@@ -227,6 +228,7 @@ def normalized_approved_semantics(handoff: dict[str, Any], plan: dict[str, Any])
                 "scope": parameter.get("scope"),
                 "source": parameter.get("data_layer_path"),
                 "type": parameter.get("type"),
+                **({"nullable": parameter["nullable"]} if "nullable" in parameter else {}),
                 "source_shape": parameter.get("type"),
                 "destination_shape": parameter.get("type"),
                 "requirement": parameter.get("requirement"),
@@ -248,13 +250,17 @@ def normalized_approved_semantics(handoff: dict[str, Any], plan: dict[str, Any])
                 "source_event": event_name,
                 "business_timing": event.get("trigger"),
                 "journey_ids": event.get("journey_ids", []),
-                "measurement_opportunity_ids": event.get("measurement_opportunity_ids", []),
+                **(
+                    {"business_question": event["business_question"]}
+                    if event.get("business_question")
+                    else {}
+                ),
                 "clear_before_push": event.get("data_layer", {}).get("clear", []),
                 "parameters": parameters,
             }
         )
     return {
-        "source_contract": "ga4-tracking-plan-delivery@1.1.0",
+        "source_contract": "ga4-tracking-plan-delivery@2.0.0",
         "source_skill_version": handoff.get("skill", {}).get("version"),
         "source_plan_sha256": handoff.get("plan", {}).get("canonical_sha256"),
         "source_approval": handoff.get("approval"),

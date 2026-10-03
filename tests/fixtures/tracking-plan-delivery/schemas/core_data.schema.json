@@ -34,7 +34,10 @@
           ]
         },
         "user_id": {
-          "type": "string",
+          "type": [
+            "string",
+            "null"
+          ],
           "description": "Identifies the stable first-party account identifier mapped to the official GA4 User-ID configuration setting."
         }
       },

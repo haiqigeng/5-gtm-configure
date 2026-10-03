@@ -103,6 +103,17 @@ Record the template in the configuration result even when no template change occ
 
 ## Official entry points
 
+When inspected vendor `templateData` includes non-operational email examples in `___TESTS___`,
+the existing exact-source provenance declaration may use `classification: inspected-template-source`
+in `public_identifiers`, with `path: ["templateData"]`, the complete source `value_sha256`, recorded
+official `source_url`, and the inspection reason. This applies only to those exact bytes and the
+unique test section. The same inspected-source binding recognizes a static non-private constant
+used only as the fourth `injectScript` argument, whose documented purpose is a
+[script cache identifier](https://developers.google.com/tag-platform/tag-manager/templates/api#injectscript),
+and symbol copies in non-operational test mocks. Literal credentials, Authorization/private-key
+formats, executable personal data, permissions and unrelated paths remain checked. Preserve the complete source for comparison; never redact away source
+differences or classify a runtime personal value as a template fixture.
+
 - https://support.google.com/tagmanager/answer/9454109
 - https://developers.google.com/tag-platform/tag-manager/templates
 - https://developers.google.com/tag-platform/tag-manager/templates/permissions

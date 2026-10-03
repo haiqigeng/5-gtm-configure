@@ -10,7 +10,8 @@ The [utility contract](../01-orientation/utility-contract.md) owns authority and
 Read the approved plan, brief or exact direct requirement. Record included, reference-only and
 excluded requirements. Discover target, adapter, template and CMP facts before asking for missing
 information. Do not infer source paths, destination identities, destructive authority or consent
-policy. Empty values possible at runtime are a recette issue, not permission for eligibility helpers.
+policy. Empty values possible at runtime do not authorize generic eligibility helpers. Resolve a
+documented harmful value through the scoped rule in [data contracts](data-contract-and-transformations.md#separate-configuration-completeness-from-runtime-data-quality).
 
 ## 2. Create or reuse the workspace
 

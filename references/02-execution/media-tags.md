@@ -17,7 +17,7 @@
 - [Record external platform dependencies](#record-external-platform-dependencies)
 - [Handle an undocumented vendor](#handle-an-undocumented-vendor)
 - [Verify the saved media setup](#verify-the-saved-media-setup)
-- [Current client-side boundary](#current-client-side-boundary)
+- [Current client-side boundary](#choose-browser-server-or-dual-delivery-deliberately)
 
 ## Treat the media brief as the primary business input
 

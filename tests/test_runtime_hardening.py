@@ -22,7 +22,7 @@ from strict_json import StrictJsonError, load_json, loads_strict  # noqa: E402
 
 def valid_plan() -> dict:
     return {
-        "schema_version": "1.0.0",
+        "schema_version": "6.0.0",
         "future_metadata": {"producer": "accepted without reinterpretation"},
         "events": [
             {
@@ -100,7 +100,9 @@ class RuntimeHardeningTest(unittest.TestCase):
                     self.assertEqual(result.returncode, 2)
                     self.assertEqual(json.loads(result.stdout)["error_code"], expected_code)
 
-    def test_tracking_plan_importer_is_strict_on_records_but_forward_compatible(self) -> None:
+    def test_tracking_plan_importer_validates_current_records_with_additional_metadata(
+        self,
+    ) -> None:
         plan = valid_plan()
         handoff = {
             "skill": {"version": "3.0.0"},
@@ -133,10 +135,10 @@ class RuntimeHardeningTest(unittest.TestCase):
                 "sha256": digest,
             }
             handoff = {
-                "handoff_version": "1.1.0",
+                "handoff_version": "2.0.0",
                 "skill": {"name": "ga4-tracking-plan", "version": "3.0.0"},
                 "approval": {"state": "approved"},
-                "plan": {"canonical_sha256": digest},
+                "plan": {"canonical_sha256": digest, "schema_version": "6.0.0"},
                 "artifacts": [artifact],
             }
             handoff_path = root / "handoff.json"

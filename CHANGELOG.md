@@ -1,5 +1,162 @@
 # Changelog
 
+## 10.2.0
+
+Released 2026-10-03.
+
+### Final corrections and acceptance
+
+- Accept proved native template BOM/newline/JSON serialization differences without weakening
+  source provenance, code, permissions or credential checks. Treat omitted versus empty optional
+  root parameters equivalently on readback while retaining explicit update-clearing intent.
+- Stop harmless missing-value policy prose from causing a false personal-data block; retain
+  detection of actual personal data and credentials.
+- Bind explicit scalar GA4 mappings to the actual native field/source/value. Isolate startup
+  authentication failures through the existing dependency engine so independent targets proceed.
+- Authenticate immutable native adapter identity once per instance, retaining strict request and
+  response scope. A controlled 124-check probe falls from 248 remote identity calls to two;
+  this is not a whole-run speed guarantee.
+- Recheck fresh state before retrying a rejected quota-limited update; block intervening drift.
+  Preserve ambiguous-write history, input files during rendering and fresh convergence after repair.
+- Support multiple approved Meta matching fields in one requirement using exact native bindings.
+  Add official-first ChatGPT Ads browser/server playbooks with explicit product and template limits.
+- Remove unused comparison code and obsolete binding branches. Clarify web-only sender event-ID
+  preparation without adding a second engine, compatibility layer or package dependency.
+- Complete an assisted live API exercise covering 27 requirements and 98 saved GTM objects, with
+  zero direct rescue writes, 98 fresh no-op checks and 870 independent saved-state assertions.
+  Native schema assistance and synthetic destinations limit the result; it is not runtime QA or
+  a controlled model-performance comparison. No GTM publication or version creation was performed.
+
+### Utility audit follow-up (2026-09-29)
+
+- Recover malformed or inconsistent post-dispatch mutation replies through authoritative readback;
+  preserve uncertainty when recovery fails, without retrying the write.
+- Serialize accepted built-in trigger references and inspected setup/teardown references to native
+  values; reject ambiguous or cross-target references before dispatch.
+- Use the shared native canonicalizer for pre-write keyed parameters/maps while retaining ordered
+  list, unknown-field and redacted-secret checks.
+- Reject diagnostic, report and inventory output aliases before setup, protecting run inputs,
+  profiles and host configuration/approval files even when setup fails.
+- Reject unbound approved payload fields before mutation; retain complete bindings in Ads fixtures.
+- Add explicit scoped ungated web client policy and inspected strict/basic firing-condition or
+  Additional Consent Checks conventions, without changing the default block convention.
+- Cache identical redaction inputs with their full scan context using fingerprints and bounded
+  detector metadata; retain fresh create-absence checks and all readback/recovery gates.
+- Render native fields with readable labels and parameter assignments while retaining unknown fields
+  and complete machine evidence.
+- Clarify actual Claude connector limitations, quota/run sizing, targeted evidence reuse and CMP
+  signals; correct LinkedIn dual-source setup, regional Microsoft consent and Snap entry points.
+- Actual Claude/Gemini CLI model sessions, browser prior-page UPD native-type verification and SPA
+  expansion remain deferred. Large-plan MCP call cost remains an open improvement.
+- Compact repeated readback context only after full-graph redaction and comparison; retain primary
+  fields, complete native-reference identity indexes and full redacted baseline bodies.
+- Add read-only preparation discovery through the existing Codex relay and Claude/Gemini SDK
+  connection. Fill explicitly selected reuse candidates from its inventory without inferring policy
+  or replacing fresh runtime baseline, pre-write and readback checks.
+- Correct the consent-default-owner check to require Consent Initialization (2147479572), explicitly
+  reject ordinary Initialization (2147479573), and use the existing canonical trigger-type map.
+
+### Why This Release Matters
+
+The follow-up audit found legitimate cookie settings blocked, native credential shapes missed,
+and unsafe shell interpolation in the MCP relay. This update repairs those reproduced paths and
+makes product and host limitations explicit while retaining one configuration engine.
+
+### What Changed
+
+- Scan complete collected object graphs before persistence, including Constant/LUT/RLT/JavaScript
+  outputs and transitive variable references. Preserve ordinary cookie controls and distinguish
+  credentials, personal data and unknown redactions in object/field-specific reports.
+- Bind inspected public collection identifiers to an exact native field, value digest and recorded
+  official source. Explicit private authentication fields and strong secret/PII patterns remain
+  protected. Evidence records do not authenticate a source or replace inspection.
+- Remove the disk queue and shell-embedded responses. Use one worker with bounded stdin/stdout
+  frames, timeouts, Unicode-safe path encoding, sanitized diagnostics and forbidden-action checks.
+- Validate discovered profiles before calls, honor explicit pagination and use fresh fingerprints.
+  Normalize reference identity and transient metadata in human deltas.
+- Correct Google tag user-data scope, consent modeling explanations, SPA ordering, server GA4
+  ingress versus forwarding, client identification and script-serving guidance. Restore five
+  lost instructions and keep narrow approved invalid-value rules distinct from generic guards.
+- Validate local Markdown fragments, import every packaged Python module in isolation, and require
+  the native relay tests in CI. Keep runtime archives separate from development files.
+- Show saved native object IDs and readback comparison outcomes in the human change log. Derive
+  the last verified operation from checkpoint order within each target, including recovery.
+- Add Claude Code/Gemini CLI configuration readers and an optional official MCP SDK transport for
+  stdio, Streamable HTTP and SSE, using the existing adapter and engine. Discover input schemas,
+  enforce supported actions, preserve uncertain-write boundaries and suppress raw diagnostics.
+- Resolve native reference context on a fresh adapter before comparing a previously saved tag.
+  A restarted process now verifies no-op convergence without relying on an earlier in-memory cache.
+- Add reviewed template-generated shared IDs for non-purchase pipeline events, with installed
+  template readback, exact consumer field bindings, same-event topology and sequencing rejection.
+- Replace the blanket Ads event-override rejection with native field bindings, enabled-control
+  checks and a native UPD variable requirement. Keep Google tag collection explicitly tag-wide.
+  Align collection-route selection and external activation guidance with Google's current
+  procedures and 2026 unified settings; reuse sufficient existing collection without duplication.
+- Resolve native Configuration/Event Settings and GA4 Event Parameters through one field reader.
+  Check effective overrides, transitive variable references and each consumer's approved source;
+  recheck existing indirect consumers before a shared-variable mutation. Keep numeric GTM resource
+  IDs separate from native Google collection IDs, including GA4's measurement-ID field.
+- Require draft Preview acceptance before the external server/web publication sequence and smoke
+  checks. Use the same canonical rollout instructions in the skill handoff and README.
+- Accept Claude's documented `streamable-http` spelling through the existing HTTP transport.
+- Consume current tracking-plan handoff 2.0.0 / plan 6.0.0 and replace the old delivery fixture
+  with output built by producer 3.0.0. Preserve nullable parameters and reject obsolete handoffs.
+- Allow evidence-bound declarations for ambiguous public loader query keys while retaining
+  strong secret/PII detection, including decoded URL values and mixed script content.
+- Escape report data and isolate embedded machine JSON so object names cannot inject headings,
+  links, HTML or code fences. Keep intended official-source links with safe HTTP(S) targets.
+- Classify connection failures without exposing credentials; require trusted project-server
+  approval settings for Claude `.mcp.json` and document separate OAuth stdio/header routes.
+- Remove repeated identity and reuse-inventory reads while retaining pre-write identity,
+  fresh absence, scoped readback and convergence. The audit benchmark now uses 50 calls vs 81;
+  the audit's proposed 45-call budget is not a correctness requirement.
+
+### What Users Should Do
+
+Install the runtime package and use absolute script paths. Discover current MCP response paths,
+pagination and supported families before binding profiles. The packaged relay requires Codex on
+Windows, Python 3.11+ and PowerShell 7. Use its documented in-memory worker; the queue path was removed.
+Claude/Gemini use `mcp_host_execute.py` and `requirements-mcp.txt` with one explicitly selected,
+authorized server definition. CLI OAuth caches and dynamic header helpers are not reused.
+For public keys, inspect current official/template evidence before recording an exact classification.
+The machine handoff route now targets ga4-tracking-plan 3.0.0 / handoff 2.0.0. Release the matching
+producer and consumer together for suite users; no producer code is changed by these corrections.
+
+### Validation
+
+The local suite exercises native-shaped redaction, public identifier flow, all eight adapter
+families, pagination/fingerprints, recovery, semantic deltas and the real JavaScript/PowerShell/Python
+relay. The actual Codex Windows PTY also round-tripped smart quotes and a 330 KB Unicode payload in
+both directions, rejected publication and handled tool errors. Release verification checks isolated
+package imports and routing; the accompanying review records exact totals and package hashes.
+On an earlier candidate, three fresh-context agent executions against local synthetic GTM state passed ordinary creation,
+interrupted-write recovery without duplication, and preservation of approved advanced consent.
+They exposed two reporting defects, corrected with focused regressions. Fixture-integrity checks
+are distinct from executed behavior. The final candidate passed all 369 tests, required relay tests,
+lint, formatting, release/link checks and isolated runtime-package imports. A subsequent assisted
+live Google Tag Manager API configuration run passed independent saved-state examination; implicit
+skill activation and website/vendor runtime outcomes remain unevaluated. The 110 runtime files
+were unchanged throughout that run. The release ZIP is byte-identical to its tested artifact:
+SHA-256 `d6ebcde2220ce5343e2f011a6eab08161be4aff512b66f74d8c43ec5ab5e11ea`.
+Additional protocol tests execute both host configurations against local MCP servers on all three
+transports, including saved readback, no-op convergence and an interrupted committed write.
+Generated-ID tests execute the configuration graph and reject unsafe field/topology/template cases.
+
+### Known Limits
+
+Triggerless setup/cleanup-only tags, including the current official explicit SPA setup recipe,
+remain unrepresentable. The validator rejects a falsely narrow same-event Google-tag Ads user-data
+route; tag-wide collection requires applicable tag-wide authority. The Codex relay is Windows-specific;
+Claude/Gemini execution uses a separate SDK connection and has not been tested in actual CLI model sessions.
+Generated-ID support is limited to reviewed templates and direct same-event consumers; runtime ID
+equality remains unverified. Browser prior-page User-Provided Data Event native short-code coverage
+still needs an authentic native MCP readback or export; do not substitute its display label or claim that route is validated.
+Fresh create-absence checks
+retain list-call overhead. Framing has explicit size and time bounds, not unlimited throughput.
+Heuristics cannot identify arbitrary obfuscated or unlabeled secrets, and the skill cannot control
+host transcript retention: hex frames are recoverable encoding, not encryption. Credential-bearing
+writes require an explicitly bound secure adapter/provider and are blocked by the packaged relay.
+
 ## 10.1.0
 
 ### Why This Release Matters

@@ -1,5 +1,5 @@
 {
-  "discovery_version": "1.3.0",
+  "discovery_version": "2.0.0",
   "run_id": "run_11111111111111111111111111111111",
   "report_id": "discovery_example_com_fixture",
   "generated_at": "2026-08-01T10:00:00+00:00",
@@ -19,23 +19,27 @@
   ],
   "language_summary": {
     "primary_language": "en",
-    "observed_languages": ["en"],
-    "evidence_urls": ["https://example.com/products/example-window"]
+    "observed_languages": [
+      "en"
+    ],
+    "evidence_urls": [
+      "https://example.com/products/example-window"
+    ]
   },
   "pages_sampled": [
     {
       "url": "https://example.com/products/example-window",
       "template": "product_detail",
       "language": "en",
-      "rendered_structure_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
-      "rendered_dom_sha256": "2222222222222222222222222222222222222222222222222222222222222222"
+      "rendered_structure_sha256": "6026d6c04c1090824077eb0a28c3697d9b9abfb527c4db165f1e15ac7b4cc22a",
+      "rendered_dom_sha256": "d3a9af2451952cd80cf67774b28c0a87365d6cb411d30a31328919e6b6c7a968"
     },
     {
       "url": "https://example.com/request-a-quote",
       "template": "lead_form",
       "language": "en",
-      "rendered_structure_sha256": "3333333333333333333333333333333333333333333333333333333333333333",
-      "rendered_dom_sha256": "4444444444444444444444444444444444444444444444444444444444444444"
+      "rendered_structure_sha256": "cf07accba7e421d70fab939560096634b3de009583777e946bc37191ba27a126",
+      "rendered_dom_sha256": "1bf42dc0a5ce2dae37f7d8afdabba33ce37eac8d09f264bf8ae10370809742c1"
     }
   ],
   "measurement_opportunity_hints": [
@@ -46,8 +50,12 @@
       "variant_id": "product_detail_standard",
       "category": "interaction",
       "materiality": "material",
-      "evidence_urls": ["https://example.com/products/example-window"],
-      "evidence_structure_hashes": ["1111111111111111111111111111111111111111111111111111111111111111"],
+      "evidence_urls": [
+        "https://example.com/products/example-window"
+      ],
+      "evidence_structure_hashes": [
+        "1111111111111111111111111111111111111111111111111111111111111111"
+      ],
       "reason": "Rendered item detail exposes product consideration.",
       "requires_interactive_review": true
     },
@@ -58,8 +66,12 @@
       "variant_id": "quote_request_standard",
       "category": "progression",
       "materiality": "material",
-      "evidence_urls": ["https://example.com/request-a-quote"],
-      "evidence_structure_hashes": ["3333333333333333333333333333333333333333333333333333333333333333"],
+      "evidence_urls": [
+        "https://example.com/request-a-quote"
+      ],
+      "evidence_structure_hashes": [
+        "3333333333333333333333333333333333333333333333333333333333333333"
+      ],
       "reason": "Rendered quote entry exposes an intentional funnel start.",
       "requires_interactive_review": true
     }
@@ -69,18 +81,34 @@
       "journey_id": "product_discovery",
       "material": true,
       "status": "observed",
-      "entry_points": ["https://example.com/products/example-window"],
-      "states_covered": ["entry", "progression"],
-      "variants": ["product detail"],
-      "evidence_urls": ["https://example.com/products/example-window"],
+      "entry_points": [
+        "https://example.com/products/example-window"
+      ],
+      "states_covered": [
+        "entry",
+        "progression"
+      ],
+      "variants": [
+        "product detail"
+      ],
+      "evidence_urls": [
+        "https://example.com/products/example-window"
+      ],
       "variant_coverage": [
         {
           "variant_id": "product_detail_standard",
           "material": true,
           "status": "observed",
-          "entry_points": ["https://example.com/products/example-window"],
-          "states_covered": ["entry", "progression"],
-          "evidence_urls": ["https://example.com/products/example-window"],
+          "entry_points": [
+            "https://example.com/products/example-window"
+          ],
+          "states_covered": [
+            "entry",
+            "progression"
+          ],
+          "evidence_urls": [
+            "https://example.com/products/example-window"
+          ],
           "unvisited_material_candidates": []
         }
       ]
@@ -89,18 +117,38 @@
       "journey_id": "quote_request",
       "material": true,
       "status": "observed",
-      "entry_points": ["https://example.com/request-a-quote"],
-      "states_covered": ["entry", "progression", "success", "failure"],
-      "variants": ["standard quote form"],
-      "evidence_urls": ["https://example.com/request-a-quote"],
+      "entry_points": [
+        "https://example.com/request-a-quote"
+      ],
+      "states_covered": [
+        "entry",
+        "progression",
+        "success",
+        "failure"
+      ],
+      "variants": [
+        "standard quote form"
+      ],
+      "evidence_urls": [
+        "https://example.com/request-a-quote"
+      ],
       "variant_coverage": [
         {
           "variant_id": "quote_request_standard",
           "material": true,
           "status": "observed",
-          "entry_points": ["https://example.com/request-a-quote"],
-          "states_covered": ["entry", "progression", "success", "failure"],
-          "evidence_urls": ["https://example.com/request-a-quote"],
+          "entry_points": [
+            "https://example.com/request-a-quote"
+          ],
+          "states_covered": [
+            "entry",
+            "progression",
+            "success",
+            "failure"
+          ],
+          "evidence_urls": [
+            "https://example.com/request-a-quote"
+          ],
           "unvisited_material_candidates": []
         }
       ]
@@ -114,7 +162,28 @@
       "variant_id": "quote_request_standard",
       "start_url": "https://example.com/request-a-quote",
       "outcome": "completed",
-      "actions": [{"step": 1, "status": "completed"}]
+      "actions": [
+        {
+          "step": 1,
+          "status": "completed"
+        }
+      ],
+      "evidence_state": "success_confirmed",
+      "evidence_claims": [
+        {
+          "claim": "success_confirmed",
+          "evidence_type": "synthetic_fixture_selector",
+          "locator": "#fixture-quote-success",
+          "evidence": {
+            "oracle_type": "configured_selector",
+            "selector": "#fixture-quote-success",
+            "text": "Synthetic fixture success; not live website evidence."
+          }
+        }
+      ]
     }
-  ]
+  ],
+  "interaction_probe_runs": [],
+  "access_profile_runs": [],
+  "side_effect_log": []
 }

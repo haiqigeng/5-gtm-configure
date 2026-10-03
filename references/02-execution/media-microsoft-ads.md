@@ -87,6 +87,13 @@ invent fallback values. Runtime missing data remains a site/dataLayer and recett
 
 ## Apply consent
 
+Checked 2026-09-29 against [Microsoft UET consent guidance](https://learn.microsoft.com/en-us/advertising/msa-help/hlp_ba_conc_uet_consent):
+Microsoft enforces consent signals in the EEA, UK and Switzerland, with denied as the default where
+enforced. Missing a granted update after acceptance can lose conversions. Confirm inherited/current
+consent when UET first loads after a choice, and updates on later pages and changes. Microsoft
+recommends advanced mode; this does not override an approved basic collection policy.
+Clarity has separate consent settings: its [regional enforcement began 2025-10-31](https://learn.microsoft.com/en-us/clarity/setup-and-installation/clarity-consent-api-v2).
+
 Default to basic UET Consent Mode/strict gating:
 
 - block the UET base and event tags until the required vendor consent is granted;

@@ -8,7 +8,9 @@ click identity, consent, authentication, and request diagnostics. Do not infer t
 the Insight Tag label alone.
 
 For browser/server overlap, verify current LinkedIn dedup requirements and one occurrence-level
-`eventId` across the relevant rule/routes. Keep external conversion-rule and token administration
+`eventId` across the relevant routes. Checked 2026-09-29: create a separate conversion rule for each
+data source (Insight Tag and CAPI), associate both with the relevant campaign, and share the event
+identity across them. Keep external conversion-rule and token administration
 outside GTM.
 
 Official sources:

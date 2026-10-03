@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+import io
 import json
 import shutil
-import subprocess
 import sys
 import tempfile
 import unittest
@@ -31,7 +31,8 @@ from import_ga4_tracking_plan_handoff import (  # noqa: E402
     normalized_approved_semantics,
     verify_delivery,
 )
-from mcp_queue_adapter import QueueTransport, unwrap  # noqa: E402
+from mcp_adapter import unwrap  # noqa: E402
+from mcp_transport import StdioTransport  # noqa: E402
 from redaction import is_redacted, redact_for_persistence, sensitive_paths  # noqa: E402
 from run_render import render_markdown  # noqa: E402
 from test_current_adapter_runtime import FakeAdapter, capabilities  # noqa: E402
@@ -66,7 +67,7 @@ class AuditRegressions(unittest.TestCase):
         fixture = ROOT / "tests/fixtures/tracking-plan-delivery"
         handoff, plan = verify_delivery(fixture)
         self.assertEqual(
-            sum(item["role"] == "shared_machine_contract" for item in handoff["artifacts"]), 10
+            sum(item["role"] == "shared_machine_contract" for item in handoff["artifacts"]), 5
         )
         imported = normalized_approved_semantics(handoff, plan)
         self.assertEqual(len(imported["requirements"]), 3)
@@ -74,7 +75,9 @@ class AuditRegressions(unittest.TestCase):
             [item["event_name"] for item in imported["requirements"]],
             [item["event_name"] for item in plan["events"]],
         )
-        self.assertEqual(imported["source_contract"], "ga4-tracking-plan-delivery@1.1.0")
+        self.assertEqual(imported["source_contract"], "ga4-tracking-plan-delivery@2.0.0")
+        self.assertEqual(handoff["skill"]["version"], "3.0.0")
+        self.assertEqual(plan["schema_version"], "6.0.0")
 
     def test_intake_still_rejects_old_versions_and_duplicate_singletons(self):
         fixture = ROOT / "tests/fixtures/tracking-plan-delivery"
@@ -83,11 +86,11 @@ class AuditRegressions(unittest.TestCase):
             shutil.copytree(fixture, delivery)
             handoff_path = delivery / "handoff.json"
             handoff = json.loads(handoff_path.read_text(encoding="utf-8"))
-            handoff["handoff_version"] = "1.0.0"
+            handoff["handoff_version"] = "1.1.0"
             handoff_path.write_text(json.dumps(handoff), encoding="utf-8")
             with self.assertRaisesRegex(ValueError, "Unsupported"):
                 verify_delivery(delivery)
-            handoff["handoff_version"] = "1.1.0"
+            handoff["handoff_version"] = "2.0.0"
             singleton = next(
                 item for item in handoff["artifacts"] if item["role"] == "canonical_tracking_plan"
             )
@@ -187,7 +190,7 @@ class AuditRegressions(unittest.TestCase):
             self.assertEqual(result["run"]["status"], "Configured")
             output = render_markdown(result, embed_machine=True)
             (Path(temp) / "result.md").write_text(output, encoding="utf-8")
-            self.assertIn("Sensitive literals", output)
+            self.assertIn("Credential-like literal", output)
             for artifact in Path(temp).rglob("*"):
                 if artifact.is_file():
                     self.assertNotIn(CANARY.encode(), artifact.read_bytes(), str(artifact))
@@ -287,15 +290,16 @@ class AuditRegressions(unittest.TestCase):
         self.assertNotIn("UNCHANGED_DETAIL", output)
         self.assertIn("before → intended", output)
 
-    def test_queue_rejects_credential_writes_before_disk(self):
-        with tempfile.TemporaryDirectory() as temp:
-            transport = QueueTransport(Path(temp), timeout=0.1)
-            with self.assertRaisesRegex(Exception, "secure in-memory adapter"):
-                transport(
-                    "mcp__gtm__gtm_tag",
-                    {"createOrUpdateConfig": {"parameter": [row("access_token")]}},
-                )
-            self.assertEqual(list(Path(temp).iterdir()), [])
+    def test_transport_rejects_credential_writes_before_dispatch(self):
+        output = io.StringIO()
+        transport = StdioTransport(input_stream=io.BytesIO(), output_stream=output)
+        with self.assertRaisesRegex(Exception, "no write was dispatched"):
+            transport(
+                "mcp__gtm__gtm_tag",
+                {"action": "create", "createOrUpdateConfig": {"parameter": [row("access_token")]}},
+            )
+        self.assertEqual(output.getvalue(), "")
+        self.assertEqual(transport.writes_attempted, 0)
 
     def test_mcp_text_response_is_parsed_before_redaction(self):
         response = {
@@ -307,71 +311,6 @@ class AuditRegressions(unittest.TestCase):
             ]
         }
         self.assertNotIn(CANARY, json.dumps(redact_for_persistence(unwrap(response))))
-
-    def test_reply_command_redacts_every_written_file(self):
-        with tempfile.TemporaryDirectory() as temp:
-            queue = Path(temp)
-            identifier = "a" * 32
-            (queue / f"{identifier}.request.claimed").write_text("{}", encoding="utf-8")
-            result = subprocess.run(
-                [
-                    sys.executable,
-                    "-B",
-                    str(ROOT / "scripts/mcp_queue_adapter.py"),
-                    "reply",
-                    "--queue",
-                    str(queue),
-                ],
-                input=json.dumps(
-                    {
-                        "id": identifier,
-                        "result": {
-                            "content": [
-                                {
-                                    "type": "text",
-                                    "text": json.dumps(
-                                        {"tag": [{"parameter": [row("consumer_secret")]}]}
-                                    ),
-                                }
-                            ]
-                        },
-                    }
-                ),
-                text=True,
-                capture_output=True,
-            )
-            self.assertEqual(result.returncode, 0, result.stderr)
-            for artifact in queue.iterdir():
-                self.assertNotIn(CANARY.encode(), artifact.read_bytes())
-
-    def test_reply_error_reaches_worker_without_a_secret_or_stalled_claim(self):
-        with tempfile.TemporaryDirectory() as temp:
-            queue = Path(temp)
-            identifier = "b" * 32
-            (queue / f"{identifier}.request.claimed").write_text("{}", encoding="utf-8")
-            result = subprocess.run(
-                [
-                    sys.executable,
-                    "-B",
-                    str(ROOT / "scripts/mcp_queue_adapter.py"),
-                    "reply",
-                    "--queue",
-                    str(queue),
-                ],
-                input=json.dumps(
-                    {
-                        "id": identifier,
-                        "result": {"isError": True, "content": [{"type": "text", "text": CANARY}]},
-                    }
-                ),
-                text=True,
-                capture_output=True,
-            )
-            self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertFalse((queue / f"{identifier}.request.claimed").exists())
-            record = json.loads((queue / f"{identifier}.response.json").read_text(encoding="utf-8"))
-            self.assertIn("error", record)
-            self.assertNotIn(CANARY, json.dumps(record))
 
 
 if __name__ == "__main__":

@@ -14,7 +14,7 @@ OPERATION_STATES = {
     "uncertain",
     "skipped",
 }
-CONSENT_MODES = {"strict-basic", "advanced-native"}
+CONSENT_MODES = {"strict-basic", "advanced-native", "client-policy-ungated"}
 CONSENT_MECHANISMS = {"blocking-trigger", "grant-event", "native-advanced"}
 MAPPING_STATUSES = {"pending", "mapped", "intentionally-omitted", "external", "blocked"}
 MAPPING_METHODS = {
@@ -37,7 +37,7 @@ EXTENDED_MAPPING_KEYS = {
     "missing_behavior",
 }
 DEFAULT_VENDOR_BLOCK_SCOPE = "regex:.*"
-EXECUTION_MODES = {"isolated-lightweight", "isolated-durable", "refonte-durable"}
+EXECUTION_MODES = {"isolated-durable", "refonte-durable"}
 LIFECYCLE_ROLES = {"baseline-page-load", "event-driven"}
 NORMAL_TRIGGER_ROLES = {
     "cmp-readiness-grant",

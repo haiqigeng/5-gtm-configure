@@ -52,6 +52,11 @@ external work.
 
 ## Server route
 
+Checked 2026-09-29: redundant Insight Tag + CAPI delivery requires a separate conversion rule for
+each source, associated with the relevant campaign, and the same occurrence ID across both. The
+browser field depends on installation method. Keep conversion IDs distinct from event identity.
+See [LinkedIn deduplication](https://learn.microsoft.com/en-us/linkedin/marketing/conversions/deduplication).
+
 For LinkedIn Conversions API, load `server/media-linkedin.md`. The server conversion rule, user
 matching, click identity, token, and dedup fields come from the current CAPI contract, not the
 browser Insight Tag label.

@@ -1,0 +1,500 @@
+{
+  "provenance": "Synthetic audit v2 cases plus native controls; contains no client data",
+  "canary": "CANARYsecretVALUE_7f3a9c1e5b2d8f4a6c0e",
+  "leaks": {
+    "Constant variable holding a token (name is the only hint)": {
+      "name": "Meta CAPI access token",
+      "type": "c",
+      "parameter": [
+        {
+          "type": "template",
+          "key": "value",
+          "value": "CANARYsecretVALUE_7f3a9c1e5b2d8f4a6c0e"
+        }
+      ]
+    },
+    "Lookup Table variable mapping hostname to token": {
+      "name": "LUT - API token by host",
+      "type": "smm",
+      "parameter": [
+        {
+          "type": "template",
+          "key": "input",
+          "value": "{{Page Hostname}}"
+        },
+        {
+          "type": "list",
+          "key": "map",
+          "list": [
+            {
+              "type": "map",
+              "map": [
+                {
+                  "type": "template",
+                  "key": "key",
+                  "value": "www.example.test"
+                },
+                {
+                  "type": "template",
+                  "key": "value",
+                  "value": "CANARYsecretVALUE_7f3a9c1e5b2d8f4a6c0e"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "Custom JavaScript variable returning a literal": {
+      "name": "JS - API token",
+      "type": "jsm",
+      "parameter": [
+        {
+          "type": "template",
+          "key": "javascript",
+          "value": "function(){ return \"CANARYsecretVALUE_7f3a9c1e5b2d8f4a6c0e\"; }"
+        }
+      ]
+    },
+    "Custom HTML fetch with Authorization header object": {
+      "name": "cHTML - vendor",
+      "type": "html",
+      "parameter": [
+        {
+          "type": "template",
+          "key": "html",
+          "value": "<script>fetch('https://api.example.test/v1', {headers: {'Authorization': 'Bearer CANARYsecretVALUE_7f3a9c1e5b2d8f4a6c0e'}});</script>"
+        }
+      ]
+    },
+    "Custom HTML `var token = ...`": {
+      "name": "cHTML - vendor",
+      "type": "html",
+      "parameter": [
+        {
+          "type": "template",
+          "key": "html",
+          "value": "<script>var token = \"CANARYsecretVALUE_7f3a9c1e5b2d8f4a6c0e\";</script>"
+        }
+      ]
+    },
+    "Custom HTML camelCase `capiToken = ...`": {
+      "name": "cHTML - vendor",
+      "type": "html",
+      "parameter": [
+        {
+          "type": "template",
+          "key": "html",
+          "value": "<script>var capiToken = \"CANARYsecretVALUE_7f3a9c1e5b2d8f4a6c0e\";</script>"
+        }
+      ]
+    },
+    "Custom HTML URL with ?key= query parameter": {
+      "name": "cHTML - vendor",
+      "type": "html",
+      "parameter": [
+        {
+          "type": "template",
+          "key": "html",
+          "value": "<script src='https://api.example.test/js?key=CANARYsecretVALUE_7f3a9c1e5b2d8f4a6c0e'></script>"
+        }
+      ]
+    },
+    "Template table paramName/paramValue columns": {
+      "type": "cvt_123_456",
+      "parameter": [
+        {
+          "type": "list",
+          "key": "params",
+          "list": [
+            {
+              "type": "map",
+              "map": [
+                {
+                  "type": "template",
+                  "key": "paramName",
+                  "value": "api_key"
+                },
+                {
+                  "type": "template",
+                  "key": "paramValue",
+                  "value": "CANARYsecretVALUE_7f3a9c1e5b2d8f4a6c0e"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "Template table fieldName/fieldValue columns": {
+      "type": "cvt_123_456",
+      "parameter": [
+        {
+          "type": "list",
+          "key": "fields",
+          "list": [
+            {
+              "type": "map",
+              "map": [
+                {
+                  "type": "template",
+                  "key": "fieldName",
+                  "value": "client_secret"
+                },
+                {
+                  "type": "template",
+                  "key": "fieldValue",
+                  "value": "CANARYsecretVALUE_7f3a9c1e5b2d8f4a6c0e"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "Header row X-Access-Key": {
+      "type": "sgtm_http",
+      "parameter": [
+        {
+          "type": "list",
+          "key": "headers",
+          "list": [
+            {
+              "type": "map",
+              "map": [
+                {
+                  "type": "template",
+                  "key": "name",
+                  "value": "X-Access-Key"
+                },
+                {
+                  "type": "template",
+                  "key": "value",
+                  "value": "CANARYsecretVALUE_7f3a9c1e5b2d8f4a6c0e"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "Header row Ocp-Apim-Subscription-Key": {
+      "type": "sgtm_http",
+      "parameter": [
+        {
+          "type": "list",
+          "key": "headers",
+          "list": [
+            {
+              "type": "map",
+              "map": [
+                {
+                  "type": "template",
+                  "key": "name",
+                  "value": "Ocp-Apim-Subscription-Key"
+                },
+                {
+                  "type": "template",
+                  "key": "value",
+                  "value": "CANARYsecretVALUE_7f3a9c1e5b2d8f4a6c0e"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "Template field `credentials` holding service-account JSON": {
+      "type": "cvt_789",
+      "parameter": [
+        {
+          "type": "template",
+          "key": "credentials",
+          "value": "{\"type\": \"service_account\", \"private_key\": \"-----BEGIN PRIVATE KEY-----\\nCANARYsecretVALUE_7f3a9c1e5b2d8f4a6c0e\\n-----END PRIVATE KEY-----\"}"
+        }
+      ]
+    },
+    "Template field `passwd`": {
+      "type": "cvt_789",
+      "parameter": [
+        {
+          "type": "template",
+          "key": "passwd",
+          "value": "CANARYsecretVALUE_7f3a9c1e5b2d8f4a6c0e"
+        }
+      ]
+    },
+    "Template field `hapikey` (HubSpot legacy)": {
+      "type": "cvt_789",
+      "parameter": [
+        {
+          "type": "template",
+          "key": "hapikey",
+          "value": "CANARYsecretVALUE_7f3a9c1e5b2d8f4a6c0e"
+        }
+      ]
+    },
+    "Notes field `API key: ...`": {
+      "name": "HTTP - partner",
+      "type": "sgtm_http",
+      "notes": "API key: CANARYsecretVALUE_7f3a9c1e5b2d8f4a6c0e",
+      "parameter": [
+        {
+          "type": "template",
+          "key": "url",
+          "value": "https://partner.example.test/collect"
+        }
+      ]
+    },
+    "Webhook URL whose path is the secret": {
+      "type": "sgtm_http",
+      "parameter": [
+        {
+          "type": "template",
+          "key": "url",
+          "value": "https://hooks.slack.test/services/T000/B000/CANARYsecretVALUE_7f3a9c1e5b2d8f4a6c0e"
+        }
+      ]
+    },
+    "Stripe-style live key in a Constant": {
+      "name": "Stripe key",
+      "type": "c",
+      "parameter": [
+        {
+          "type": "template",
+          "key": "value",
+          "value": "sk_live_CANARYsecretVALUE_7f3a9c1e5b2d8f4a6c0e"
+        }
+      ]
+    },
+    "JWT in a Constant": {
+      "name": "Partner JWT",
+      "type": "c",
+      "parameter": [
+        {
+          "type": "template",
+          "key": "value",
+          "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxIn0.CANARYsecretVALUE_7f3a9c1e5b2d8f4a6c0e"
+        }
+      ]
+    }
+  },
+  "controls": {
+    "Google tag configSettingsTable cookie_domain=auto": {
+      "name": "Google tag - G-XXXX",
+      "type": "googtag",
+      "parameter": [
+        {
+          "type": "template",
+          "key": "tagId",
+          "value": "G-TEST123"
+        },
+        {
+          "type": "list",
+          "key": "configSettingsTable",
+          "list": [
+            {
+              "type": "map",
+              "map": [
+                {
+                  "type": "template",
+                  "key": "parameter",
+                  "value": "cookie_domain"
+                },
+                {
+                  "type": "template",
+                  "key": "parameterValue",
+                  "value": "auto"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "Google tag configSettingsTable cookie_flags=SameSite=None;Secure": {
+      "name": "Google tag - G-XXXX",
+      "type": "googtag",
+      "parameter": [
+        {
+          "type": "template",
+          "key": "tagId",
+          "value": "G-TEST123"
+        },
+        {
+          "type": "list",
+          "key": "configSettingsTable",
+          "list": [
+            {
+              "type": "map",
+              "map": [
+                {
+                  "type": "template",
+                  "key": "parameter",
+                  "value": "cookie_flags"
+                },
+                {
+                  "type": "template",
+                  "key": "parameterValue",
+                  "value": "SameSite=None;Secure"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "Conversion Linker cookie overrides (enableCookieOverrides/cookiePrefix)": {
+      "name": "Conversion Linker",
+      "type": "gclidw",
+      "parameter": [
+        {
+          "type": "boolean",
+          "key": "enableCookieOverrides",
+          "value": "true"
+        },
+        {
+          "type": "template",
+          "key": "cookiePrefix",
+          "value": "_gcl"
+        },
+        {
+          "type": "template",
+          "key": "cookieDomain",
+          "value": "auto"
+        }
+      ]
+    },
+    "Community template field cookieDomain=auto": {
+      "type": "cvt_123_999",
+      "parameter": [
+        {
+          "type": "template",
+          "key": "cookieDomain",
+          "value": "auto"
+        },
+        {
+          "type": "template",
+          "key": "cookieExpiration",
+          "value": "63072000"
+        }
+      ]
+    },
+    "Variable native cookie name/decode": {
+      "name": "Cookie - visitor",
+      "type": "k",
+      "parameter": [
+        {
+          "key": "name",
+          "value": "visitor"
+        },
+        {
+          "key": "decodeCookie",
+          "value": "true"
+        }
+      ]
+    },
+    "awct cookie controls": {
+      "name": "awct fixture",
+      "type": "awct",
+      "parameter": [
+        {
+          "key": "enableCookieOverrides",
+          "value": "true"
+        },
+        {
+          "key": "cookieDomain",
+          "value": "auto"
+        },
+        {
+          "key": "cookiePrefix",
+          "value": "_gcl"
+        },
+        {
+          "key": "cookiePath",
+          "value": "/"
+        }
+      ]
+    },
+    "flc cookie controls": {
+      "name": "flc fixture",
+      "type": "flc",
+      "parameter": [
+        {
+          "key": "enableCookieOverrides",
+          "value": "true"
+        },
+        {
+          "key": "cookieDomain",
+          "value": "auto"
+        },
+        {
+          "key": "cookiePrefix",
+          "value": "_gcl"
+        },
+        {
+          "key": "cookiePath",
+          "value": "/"
+        }
+      ]
+    },
+    "fls cookie controls": {
+      "name": "fls fixture",
+      "type": "fls",
+      "parameter": [
+        {
+          "key": "enableCookieOverrides",
+          "value": "true"
+        },
+        {
+          "key": "cookieDomain",
+          "value": "auto"
+        },
+        {
+          "key": "cookiePrefix",
+          "value": "_gcl"
+        },
+        {
+          "key": "cookiePath",
+          "value": "/"
+        }
+      ]
+    },
+    "gclidw cookie controls": {
+      "name": "gclidw fixture",
+      "type": "gclidw",
+      "parameter": [
+        {
+          "key": "enableCookieOverrides",
+          "value": "true"
+        },
+        {
+          "key": "cookieDomain",
+          "value": "auto"
+        },
+        {
+          "key": "cookiePrefix",
+          "value": "_gcl"
+        },
+        {
+          "key": "cookiePath",
+          "value": "/"
+        }
+      ]
+    },
+    "URL variable": {
+      "name": "URL field",
+      "type": "u",
+      "parameter": [
+        {
+          "key": "component",
+          "value": "QUERY"
+        },
+        {
+          "key": "queryKey",
+          "value": "campaign"
+        }
+      ]
+    }
+  }
+}

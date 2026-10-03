@@ -4,14 +4,18 @@
 
 - [Build the vertical slice first](#build-the-vertical-slice-first)
 - [Inspect the claiming Client](#inspect-the-claiming-client)
+- [Preserve client identification](#preserve-client-identification)
+- [Configure first-party script serving only when requested](#configure-first-party-script-serving-only-when-requested)
 - [Configure GA4 destinations](#configure-ga4-destinations)
 - [Handle additional data](#handle-additional-data)
 - [Respect consent and duplication](#respect-consent-and-duplication)
 
 ## Build the vertical slice first
 
-Before adding media server destinations, prove one complete Google vertical slice: web Google tag
-endpoint → request → intended Google Analytics Client → generated Event Data → server GA4 tag →
+For a Google transport, first prove the approved sender → request → intended Google Analytics
+Client → Event Data slice. Add a server GA4 forwarding tag only when the approved destination
+includes GA4. A media-only pipeline may consume that ingress without forwarding to a GA4 property.
+For approved GA4 forwarding, verify Event Data → server GA4 tag →
 saved readback. Only expand platform coverage after this stage is green.
 
 ## Inspect the claiming Client
@@ -20,6 +24,28 @@ The Google Analytics Client is installed by default in new server containers and
 changes. Verify its type, priority, activation paths/IDs, claim behavior, and generated data.
 Changing priority or activation is high impact. Do not create a second GA4 Client merely for one
 web event tag.
+
+## Preserve client identification
+
+Read back the GA4 Client's **Cookies and Client Identification** setting and applicable cookie
+options. Preserve the selected JavaScript-managed or server-managed strategy. A switch can change
+user continuity and is a high-impact change requiring explicit authority, confirmed first-party
+domain prerequisites, and a runtime continuity check. A server endpoint alone does not prove that
+server-managed identification is suitable. See Google's [GA4 Client setup](https://developers.google.com/tag-platform/learn/sst-fundamentals/5-sst-setup-analytics).
+
+## Configure first-party script serving only when requested
+
+For an approved Google tag gateway request, distinguish CDN serving from serving through the
+tagging server. Configure only the authorized GTM portion exposed by the installed Client: current
+Google guidance uses the **Google Tag Manager: Web Container** Client with allowed web container
+IDs, a distinct tag-serving path, and supported compression settings. Do not append that script
+path to `server_container_url`, broaden allowed IDs, or change the GA4 event-ingress Client by
+analogy. Inspect claim/path conflicts and preserve unrelated serving settings.
+
+The website snippet, DNS, CDN/load balancer, server capacity and publication remain external
+dependencies. Serving scripts first-party does not prove collection routing or consent behavior;
+read back GTM settings and hand off separate script/network checks. See the
+[tagging-server procedure](https://developers.google.com/tag-platform/tag-manager/server-side/dependency-serving?option=sgtm).
 
 ## Configure GA4 destinations
 

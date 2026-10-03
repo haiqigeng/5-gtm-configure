@@ -20,7 +20,7 @@ class ReleaseChecksTest(unittest.TestCase):
                 sys.executable,
                 str(ROOT / "scripts" / "check_release.py"),
                 "--tag",
-                "v10.1.0",
+                "v10.2.0",
                 "--release-notes",
                 str(ROOT / "CHANGELOG.md"),
             ],
@@ -65,7 +65,7 @@ class ReleaseChecksTest(unittest.TestCase):
             notes = Path(temporary) / "CHANGELOG.md"
             notes.write_text(
                 "# Changelog\n\n"
-                "## 10.1.0\n\n"
+                "## 10.2.0\n\n"
                 "### Why This Release Matters\n\n"
                 "### What Changed\n\n"
                 "### What Users Should Do\n\n"
@@ -120,8 +120,14 @@ class ReleaseChecksTest(unittest.TestCase):
             ROOT / "LICENSE",
             ROOT / "scripts" / "action_contract.py",
             ROOT / "scripts" / "compile_configuration_request.py",
-            ROOT / "scripts" / "mcp_queue_adapter.py",
+            ROOT / "scripts" / "mcp_adapter.py",
+            ROOT / "scripts" / "mcp_transport.py",
+            ROOT / "scripts" / "native_configuration.py",
+            ROOT / "scripts" / "public_identifiers.py",
             ROOT / "scripts" / "mcp_execute.py",
+            ROOT / "scripts" / "mcp_host_execute.py",
+            ROOT / "scripts" / "requirements-mcp.txt",
+            ROOT / "scripts" / "shared_event_id.py",
             ROOT / "scripts" / "mcp_relay.js",
             ROOT / "scripts" / "adapter_runtime.py",
             ROOT / "scripts" / "adapter_support.py",
@@ -135,6 +141,8 @@ class ReleaseChecksTest(unittest.TestCase):
             ROOT / "scripts" / "run_model.py",
             ROOT / "scripts" / "run_model_web.py",
             ROOT / "scripts" / "run_render.py",
+            ROOT / "scripts" / "consent_conventions.py",
+            ROOT / "scripts" / "mcp_discovery.py",
             ROOT / "scripts" / "run_state.py",
             ROOT / "scripts" / "run_validation_core.py",
             ROOT / "scripts" / "run_validation_pipeline.py",

@@ -10,7 +10,7 @@ Before opening a pull request, run:
 python -m pip install -e ".[dev]"
 python -m ruff format --no-cache --check scripts tests
 python -m ruff check --no-cache scripts tests
-python scripts/check_release.py --tag v10.1.0 --release-notes CHANGELOG.md
+python scripts/check_release.py --tag v10.2.0 --release-notes CHANGELOG.md
 python -m unittest discover -s tests -v
 python -m compileall -q scripts
 python scripts/build_skill_package.py --output dist/configure-gtm-test.zip
@@ -29,3 +29,9 @@ The release reads and executes only current artifacts. New behavior belongs in c
 4.0. Remove obsolete paths instead of adding compatibility formats, migrations, or fallbacks.
 `run_validation_web.py` is a focused shared authority for current web-domain semantics; it must not
 regain a second controller, state model, renderer, or CLI.
+
+Host transport tests use the optional official MCP SDK against local stdio/HTTP/SSE servers.
+Keep those tests credential-free and preserve uncertainty after an interrupted write. Host
+configuration support is separate from claims about actual Claude/Gemini model sessions.
+Shared-ID tests must verify native consumer bindings, template readback, repeat-run no-op and
+rejection of different-event or sequenced generation. Runtime/browser deduplication remains external.

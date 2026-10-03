@@ -44,8 +44,8 @@ destination, and consent route.
 | GA4 user property | GA4 Event tag user-properties area, or a narrowly shared Event Settings user-properties area | Event-parameter table, Google tag configuration fields |
 | GA4 `user_id` | Google tag configuration, with the documented login/logout lifecycle | GA4 user properties, custom dimensions, `user_data`, dummy or hashed-email substitutes |
 | GA4 user-provided data (`user_data`) | Native User-Provided Data variable selected on only the authorized GA4 Event tag(s) | Shared Event Settings variable, GA4 user properties, ordinary analytics parameters |
-| Google Ads enhanced-conversion user data | Associated Google tag `user_data` event parameter for standard same-page collection, tag-wide Google-tag collection when explicitly approved, or a User-Provided Data Event tag when data is available on an earlier page | GA4 `user_data` by analogy, the browser Ads Conversion Tracking tag as the current standard-data owner, ordinary conversion parameters, Custom HTML hashing |
-| Google Ads server enhanced-conversion transport | `google-ads-server-user-data-transport`: documented event-scoped `user_data` through the GA4 sender/Client, or a separately authorized tag-wide Google-tag sender; bind the receiving server Ads Conversion Tracking tag | The distinct server User-provided Data Event route, the client-only tag-wide feature, unrelated analytics events, GA4 user properties, or unauthorized server consumers |
+| Google Ads enhanced-conversion user data | Authorized tag-wide Google tag collection, a documented event override bound to inspected native Ads conversion-tag fields, or a User-Provided Data Event tag for earlier-page capture. Reuse sufficient existing collection; follow the [Ads procedure](media-google-ads.md#configure-enhanced-conversions-only-explicitly). | GA4 `user_data` by analogy, invented generic Ads parameters, unauthorized shared collection, Custom HTML hashing |
+| Google Ads server enhanced-conversion transport | `google-ads-server-user-data-transport`: documented event-scoped `user_data` on the GA4 sender with native UPD; web-only scope records the external receiver dependency. Pipeline scope binds the receiving server Ads Conversion Tracking tag; separately authorized tag-wide scope remains a pipeline route. | The distinct server User-provided Data Event route, the client-only tag-wide feature, unrelated analytics events, GA4 user properties, or unauthorized server consumers |
 | Google Ads server prior-page user-data event | `google-ads-server-user-provided-data-event`: Google tag or documented GA4 Event override resolves `user_data` on the approved capture event; the server User-provided Data Event tag consumes it | An initialization-only setting when data appears later, the later Ads Conversion Tracking tag as the earlier-data receiver, or conflating capture with conversion |
 | GA4 ecommerce object | One GA4 Event tag ecommerce route: native Data Layer or compatible Custom Object | Shared Event Settings variable, parallel manual `items`, `items.0.*` scalar fields |
 | Google Ads conversion value, currency, transaction ID, and vendor fields | Exact installed Google Ads template fields on the conversion tag, or a narrowly shared supported setting | GA4 parameter table merely because names overlap |
@@ -66,8 +66,9 @@ matching are separate features. They have different identifiers, destinations, a
 consent behavior, timing, and supported fields. Never move a value between them by analogy.
 
 Load `first-party-data.md` whenever any of those features is in scope. In particular, do not make
-`user_id` a GA4 user property and do not distribute `user_data` through a shared Event Settings
-variable.
+`user_id` a GA4 user property and do not distribute GA4 collection `user_data` through a shared
+Event Settings variable. Explicitly authorized Google Ads tag-wide collection follows its own
+documented route and complete consumer scope.
 
 ## Keep ecommerce on one route
 
@@ -97,6 +98,12 @@ routing, and browser/server deduplication as external. In an authorized pipeline
 verify them as separate server-target objects; never infer server authority from the web setting.
 
 ## Verify inherited fields
+
+The shared native-field resolver reads Configuration Settings, Event Settings and GA4 Event
+Parameters tables without changing their saved representation. Local fields override inherited
+settings, including a documented empty override. Duplicate fields, unresolved settings and cycles
+cannot establish effective ownership. Trace variable indirection and affected existing consumers;
+checking only the field names directly visible on a tag is insufficient.
 
 Before saving, expand every inherited Configuration Settings and Event Settings variable into each
 consumer's effective payload. Verify no event receives an unintended parameter, user property,

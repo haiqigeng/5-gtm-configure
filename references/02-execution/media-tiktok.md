@@ -58,7 +58,9 @@ and existing GTM tags using the terminology and controls visible now. Choose one
 source for the action. If an automatic rule and a proposed manual event overlap, do not add the
 manual event until the media owner selects the intended source and any removal or disablement of the
 overlap is separately authorized. Do not preserve dated feature labels as a static capability
-catalogue. Browser/server deduplication remains deferred.
+catalogue. For authorized browser sender preparation, follow the
+[browser/server deduplication route](pipeline/browser-server-deduplication.md). Receiver-side
+implementation and end-to-end deduplication verification remain external to web-only work.
 
 ## Configure Advanced Matching only explicitly
 

@@ -82,12 +82,9 @@ not consume or treat the configuration result as acceptance evidence.
 
 ## External publication sequence
 
-Configuration stops at saved workspaces. Record this external order without executing it:
-
-1. publish the verified server workspace;
-2. run server recette;
-3. publish the verified web cutover;
-4. run web and end-to-end recette.
+Configuration stops at saved workspaces. Use the canonical
+[external rollout sequence](../02-execution/pipeline/architecture-and-workflow.md#separate-saved-configuration-from-publication):
+draft acceptance precedes authorized publication, followed by post-publication smoke checks.
 
 These dependencies protect rollout order. They do not become configuration blockers and do not
 authorize Submit, version creation, or publication.

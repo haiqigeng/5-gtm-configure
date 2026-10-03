@@ -15,10 +15,11 @@ import requirement_validation as requirement_support
 import run_validation_web as web_support
 from action_contract import validate_action_contract
 from event_semantics import approved_event_name
+from public_identifiers import public_identifier_paths, validate_public_identifiers
 from redaction import sensitive_paths
 from resource_registry import (
     ResourceRegistryError,
-    is_configuration_settings_mutation,
+    is_google_settings_mutation,
     semantic_object_key,
     validate_target_family,
 )
@@ -39,6 +40,11 @@ from run_model import (
     TRANSPORT_BEHAVIORS,
     UNKNOWN_STATE_BEHAVIORS,
     WEB_CONSENT_MECHANISMS,
+)
+from shared_event_id import (
+    validate_generated_event_ids,
+    validate_pipeline_dedup,
+    validate_sender_dedup,
 )
 from strict_json import StrictJsonError, load_json
 from web_domain_validation import validate_web_domain
@@ -226,7 +232,7 @@ def _validate_targets(raw: Any, mode: str) -> dict[str, dict[str, Any]]:
 
 def _object_is_high_impact(item: dict[str, Any]) -> bool:
     family = item["resource_family"]
-    if is_configuration_settings_mutation(item):
+    if is_google_settings_mutation(item):
         return True
     if item["action"] in {"remove", "replace", "pause", "unpause"}:
         return True
@@ -541,10 +547,8 @@ def _validate_consent_topologies(
                 raise ContractValidationError(
                     f"{path} transporter tags must not carry destination vendor blocks"
                 )
-        if mode == "web" and (server_tag_keys or transporter_tag_keys):
-            raise ContractValidationError(
-                f"{path} web-only consent must not bind server or transporter tags"
-            )
+        if mode == "web" and server_tag_keys:
+            raise ContractValidationError(f"{path} web-only consent must not bind server tags")
         if mode == "server" and transporter_tag_keys:
             raise ContractValidationError(
                 f"{path} server-only consent must not bind web transporter tags"
@@ -802,7 +806,7 @@ def _validate_pipelines(
     pipelines = _array(raw, "$.pipelines")
     if mode != "pipeline" and pipelines:
         raise ContractValidationError("$.pipelines must be empty outside pipeline mode")
-    if mode != "pipeline" and dedup_contracts:
+    if mode == "server" and dedup_contracts:
         raise ContractValidationError("$.dedup_contracts must be empty outside pipeline mode")
     if mode == "pipeline" and not pipelines:
         raise ContractValidationError("pipeline mode requires at least one pipeline")
@@ -1137,12 +1141,7 @@ def _validate_pipelines(
                             raise ContractValidationError(
                                 f"{path} {role} dedup consumer lacks the dedup requirement"
                             )
-                        if dedup["source_reference"] not in _reference_values(
-                            consumer.get("intended", {})
-                        ):
-                            raise ContractValidationError(
-                                f"{path} {role} dedup consumer does not use the shared ID"
-                            )
+
                 for key in transporter_keys:
                     if transport_owner not in objects[key].get("depends_on", []):
                         raise ContractValidationError(
@@ -1202,7 +1201,7 @@ def _validate_pipelines(
         value for pipeline in pipelines for value in pipeline.get("dedup_contract_ids", [])
     }
     unlinked_dedup = sorted(set(dedup_contracts) - linked_dedup)
-    if unlinked_dedup:
+    if mode == "pipeline" and unlinked_dedup:
         raise ContractValidationError(
             "dedup contracts must be linked to a pipeline: " + ", ".join(unlinked_dedup)
         )
@@ -1282,7 +1281,11 @@ def validate_document(value: Any) -> dict[str, Any]:
         raise ContractValidationError(f"unexpected top-level key(s): {', '.join(unexpected)}")
     if missing:
         raise ContractValidationError(f"missing top-level key(s): {', '.join(missing)}")
-    leaks = sensitive_paths(contract)
+    try:
+        validate_public_identifiers(contract)
+    except ValueError as exc:
+        raise ContractValidationError(str(exc)) from exc
+    leaks = sensitive_paths(contract, public_identifier_paths=public_identifier_paths(contract))
     if leaks:
         raise ContractValidationError(
             "contract contains literal secret or user data at: " + ", ".join(leaks)
@@ -1322,6 +1325,20 @@ def validate_document(value: Any) -> dict[str, Any]:
         contract["consent_topologies"], requirement_ids, objects, targets, mode
     )
     dedup_contracts = _validate_dedup_contracts(contract["dedup_contracts"], requirement_ids)
+    if mode == "web":
+        validate_sender_dedup(
+            contract["dedup_contracts"],
+            list(objects.values()),
+            contract["external_dependencies"],
+            _fail,
+        )
+    validate_generated_event_ids(
+        contract["dedup_contracts"],
+        list(objects.values()),
+        contract["execution_topologies"],
+        {key: item["container_type"] for key, item in targets.items()},
+        _fail,
+    )
     _validate_pipelines(
         contract["pipelines"],
         mode,
@@ -1332,6 +1349,10 @@ def validate_document(value: Any) -> dict[str, Any]:
         consent_topologies,
         dedup_contracts,
     )
+    if mode == "pipeline":
+        validate_pipeline_dedup(
+            contract["dedup_contracts"], list(objects.values()), contract["pipelines"], _fail
+        )
     _validate_server_object_graph(
         objects,
         targets,
@@ -1344,6 +1365,16 @@ def validate_document(value: Any) -> dict[str, Any]:
         payload_mappings = materialize_payload_mappings(contract)
     except web_support.RunValidationError as exc:
         raise ContractValidationError(str(exc)) from exc
+    unresolved = [
+        f"{row['requirement_id']}::{row['destination_field']}"
+        for row in payload_mappings
+        if row.get("status") == "pending"
+    ]
+    if unresolved:
+        raise ContractValidationError(
+            "Bind approved fields before execution (implementation.field_bindings): "
+            + ", ".join(unresolved)
+        )
     for index, pipeline in enumerate(contract["pipelines"]):
         flow_requirement_ids = {flow["requirement_id"] for flow in pipeline.get("event_flows", [])}
         field_flow_identities = {

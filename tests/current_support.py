@@ -260,7 +260,19 @@ def valid_pipeline_contract(*, cutover: bool = False) -> dict:
                         "risk": "routine",
                         "intended": {
                             "type": "customEvent",
-                            "customEventFilter": "cmp_analytics_granted",
+                            "customEventFilter": [
+                                {
+                                    "type": "equals",
+                                    "parameter": [
+                                        {"type": "template", "key": "arg0", "value": "{{_event}}"},
+                                        {
+                                            "type": "template",
+                                            "key": "arg1",
+                                            "value": "cmp_analytics_granted",
+                                        },
+                                    ],
+                                }
+                            ],
                         },
                     },
                     {
@@ -276,7 +288,15 @@ def valid_pipeline_contract(*, cutover: bool = False) -> dict:
                         "risk": "routine",
                         "intended": {
                             "type": "customEvent",
-                            "customEventFilter": "page_view",
+                            "customEventFilter": [
+                                {
+                                    "type": "equals",
+                                    "parameter": [
+                                        {"type": "template", "key": "arg0", "value": "{{_event}}"},
+                                        {"type": "template", "key": "arg1", "value": "page_view"},
+                                    ],
+                                }
+                            ],
                         },
                     },
                 ],
@@ -377,7 +397,18 @@ def valid_web_contract() -> dict:
             "justification": "Blocks the direct analytics destination when the vendor is denied",
             "evidence": ["approved-input", "official-current"],
             "risk": "routine",
-            "intended": {"type": "customEvent", "customEventFilter": ".*"},
+            "intended": {
+                "type": "customEvent",
+                "customEventFilter": [
+                    {
+                        "type": "matchRegex",
+                        "parameter": [
+                            {"type": "template", "key": "arg0", "value": "{{_event}}"},
+                            {"type": "template", "key": "arg1", "value": ".*"},
+                        ],
+                    }
+                ],
+            },
         }
     )
     topology = contract["consent_topologies"][0]
@@ -511,7 +542,18 @@ def add_nonpurchase_dual_dedup(contract: dict) -> dict:
                 "justification": "Matches the approved add_to_cart source event",
                 "evidence": ["approved-input", "official-current"],
                 "risk": "routine",
-                "intended": {"type": "customEvent", "customEventFilter": "add_to_cart"},
+                "intended": {
+                    "type": "customEvent",
+                    "customEventFilter": [
+                        {
+                            "type": "equals",
+                            "parameter": [
+                                {"type": "template", "key": "arg0", "value": "{{_event}}"},
+                                {"type": "template", "key": "arg1", "value": "add_to_cart"},
+                            ],
+                        }
+                    ],
+                },
             },
             {
                 "target_id": "web-main",
@@ -524,7 +566,18 @@ def add_nonpurchase_dual_dedup(contract: dict) -> dict:
                 "justification": "Blocks the browser Meta destination when its vendor is denied",
                 "evidence": ["approved-input", "official-current"],
                 "risk": "routine",
-                "intended": {"type": "customEvent", "customEventFilter": ".*"},
+                "intended": {
+                    "type": "customEvent",
+                    "customEventFilter": [
+                        {
+                            "type": "matchRegex",
+                            "parameter": [
+                                {"type": "template", "key": "arg0", "value": "{{_event}}"},
+                                {"type": "template", "key": "arg1", "value": ".*"},
+                            ],
+                        }
+                    ],
+                },
             },
             {
                 "target_id": "web-main",
@@ -577,7 +630,18 @@ def add_nonpurchase_dual_dedup(contract: dict) -> dict:
                 "justification": "Matches transported add_to_cart Event Data",
                 "evidence": ["approved-input", "official-current"],
                 "risk": "routine",
-                "intended": {"type": "customEvent", "customEventFilter": "add_to_cart"},
+                "intended": {
+                    "type": "customEvent",
+                    "customEventFilter": [
+                        {
+                            "type": "equals",
+                            "parameter": [
+                                {"type": "template", "key": "arg0", "value": "{{_event}}"},
+                                {"type": "template", "key": "arg1", "value": "add_to_cart"},
+                            ],
+                        }
+                    ],
+                },
             },
             {
                 "target_id": "server-main",
@@ -592,7 +656,19 @@ def add_nonpurchase_dual_dedup(contract: dict) -> dict:
                 "risk": "routine",
                 "intended": {
                     "type": "customEvent",
-                    "customEventFilter": "cmp_meta_allowed=false|undefined|unknown",
+                    "customEventFilter": [
+                        {
+                            "type": "matchRegex",
+                            "parameter": [
+                                {"type": "template", "key": "arg0", "value": "{{_event}}"},
+                                {
+                                    "type": "template",
+                                    "key": "arg1",
+                                    "value": "cmp_meta_allowed=false|undefined|unknown",
+                                },
+                            ],
+                        }
+                    ],
                 },
             },
             {
@@ -715,6 +791,31 @@ def add_nonpurchase_dual_dedup(contract: dict) -> dict:
         "occurrence_scope": "one add_to_cart dataLayer event",
         "companion_fields": ["event_name", "pixel_id"],
     }
+    dedup["consumer_bindings"] = [
+        {"object_key": key, "field_path": ["event_id"]} for key in (browser_key, transporter_key)
+    ]
+    receiver_variable_key = "server-main::variable::Event Data - event_id"
+    value["implementation"]["objects"].append(
+        {
+            "target_id": "server-main",
+            "resource_family": "variable",
+            "name": "Event Data - event_id",
+            "object_key": receiver_variable_key,
+            "action": "create",
+            "requirement_ids": ["REQ-ATC"],
+            "depends_on": [],
+            "justification": "Read the exact transported occurrence identifier",
+            "evidence": ["approved-input"],
+            "risk": "routine",
+            "intended": {
+                "type": "ed",
+                "parameter": [{"type": "template", "key": "keyPath", "value": "event_id"}],
+            },
+        }
+    )
+    next(
+        item for item in value["implementation"]["objects"] if item["object_key"] == server_tag_key
+    )["depends_on"].append(receiver_variable_key)
     value["dedup_contracts"] = [dedup]
     value["pipelines"][0]["dedup_contract_ids"] = ["DEDUP-META-ATC"]
     value["execution_topologies"].extend(

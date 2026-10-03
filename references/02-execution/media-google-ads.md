@@ -116,24 +116,73 @@ policy/terms confirmation by the analyst, and the correct Google Ads/Google tag 
 `first-party-data.md` and `google-field-ownership.md` as the authoritative data, timing, and field-
 ownership contracts.
 
-For standard same-page collection, the current Google procedure places the `user_data` event
-parameter on the Google tag associated with the Ads conversion, with a native User-Provided Data
-variable as its value. Use the ownership matrix and the documented event override when narrower
-event timing is required; do not restore an obsolete conversion-tag checkbox or field as an
-alternate route. A site key named `user_provided_data` is only an approved source name;
-it must be mapped into that variable and is not a second Google protocol field. When the data exists
-only on an earlier page, use the native Google Ads User-Provided Data Event tag at the approved
-earlier collection moment; do not create it in addition to a sufficient same-event route. Follow the current
-guide's Form Submission requirement and resolve compatibility with a custom application event
-before promising it; do not broaden the approved collection scope to every form. Use tag-wide data only when that
-wider consumer scope is explicit. Prefer deliberate dataLayer/controlled sources over automatic
-DOM collection. Use native raw-data hashing when supported, omit invalid/empty fields, require
-`ad_user_data`, and never double-hash or put the data in ordinary GA4 parameters. The documented
-server Ads route is distinct: the web event carries the User-Provided Data variable as event
-parameter `user_data`, the claiming GA4 Client must expose the corresponding Event Data
-`user_data` object, and only explicitly authorized server Ads consumers may use it. A server-side
-User-Provided Data Event implementation replaces the equivalent browser User-Provided Data Event
-tag after validation; it does not coexist as a duplicate.
+### Resolve the current account and Google tag settings
+
+Reopen the [2026 settings update](https://support.google.com/google-ads/answer/16884284?hl=en).
+It supersedes older method-selection steps still present in setup articles: website, Data Manager
+and API collection can coexist, and web/leads share an enhanced-conversions switch. Do not require
+a GTM-versus-API selection or rebuild an automatically migrated setup. Inspect the effective
+account/conversion-action activation. Customer lists and offline uploads are separate capabilities.
+
+Distinguish Ads activation/terms, the [Google tag's user-data capability](https://support.google.com/tagmanager/answer/12131703?hl=en),
+source collection, and consent. Enumerate the tag's destinations: disabling the capability prevents
+user-data forwarding, while enabling it does not establish each destination's product activation.
+Record external settings with their owner and status; do not accept terms or enable GA4 matching
+as an incidental consequence of an Ads request.
+
+### Select the documented collection route
+
+Use the [GTM procedure](https://support.google.com/google-ads/answer/13262500?hl=en) and
+[Google tag procedure](https://support.google.com/google-ads/answer/13258081?hl=en) for the actual setup.
+
+| Observed situation | Decision |
+| --- | --- |
+| Existing in-page `gtag('set', 'user_data', ...)` or Google tag collection | Check the Ads destination, effective settings, consent and availability when conversion fires. Reuse a sufficient route; presence alone is not delivery proof. External website collection remains an external dependency. |
+| Data available with the conversion | Choose authorized Google tag collection or a documented event override on the inspected native Ads conversion tag. Google tag collection remains tag-wide; the event override has narrower scope. |
+| Approved data exists only earlier | Use the native User-Provided Data Event route with the documented Form Submission trigger, scoped to approved forms. Resolve custom-event compatibility before promising this route. Preserve the separate later conversion. |
+| Automatic collection or CSS/JavaScript selectors | Inspect the actual collection scope, exclusions and timing. Use only authorized sources; do not silently enable page-wide scanning. |
+| URL-based conversion | Follow Google's stated CSS/JavaScript-selector or automatic route restriction; do not promise a code-only implementation. |
+
+The browser prior-page tag's native short-code coverage remains unverified against an authentic
+native MCP readback or export. Inspect its actual saved type and fields; never substitute a display label to pass the
+runner. If that inspected native surface is unsupported, report the exact limitation and stop
+that route before mutation. Synthetic display-label fixtures do not establish native support.
+
+For GTM source assembly, use the native [User-Provided Data variable](https://support.google.com/tagmanager/answer/7683362?hl=en):
+Manual maps existing variables, including approved DLVs; Code accepts an existing structured DLV or
+JavaScript object; Automatic detects data. A direct supported object source needs no new CJS wrapper.
+Retain the raw/pre-hashed contract, omit absent fields, and never double-hash. Resolve match-key
+requirements against the selected procedure: current GTM and in-page guides differ on phone-only
+eligibility. Do not transfer that assumption between routes.
+
+### Bind inspected native fields before saving
+
+Use `google-ads-tag-wide-user-data` for GTM-managed Google tag collection and
+`google-ads-enhanced-conversions` with `same-event` timing for an inspected native Ads event override.
+For each event consumer, extend its `consumer_bindings` record with:
+
+- `user_data_path`: exact path to the native parameter value holding the approved UPD variable;
+- `activation_paths`: exact native boolean control paths that must be enabled, or `[]` when the
+  inspected supported route has no such control;
+- `field_review`: locator of the current native UI/export/schema inspection, reconciled with the
+  recorded official Google procedure, including why those fields implement event scope.
+
+Paths start with `parameter`, end with `value`, and use native row keys or indices. These records
+bind inspected evidence; they cannot establish field support by themselves. Do not invent a generic
+`user_data` parameter on `awct` merely because an article says "Event Parameters". If the available
+surface cannot represent the documented override, block that route or use another already-authorized
+documented route. Never broaden scope to make the validator pass.
+
+Inspect any user-data control actually exposed by the native tag and its value/mapping. A visible
+checkbox alone proves neither activation nor delivery. Do not declare every such control obsolete
+or recreate a removed control: a Floodlight/SA360 UI change is not evidence for all Google Ads tags.
+Save and read back the complete native fields, required enabled controls, UPD variable and references.
+
+Keep `ad_user_data` separate from `ad_storage`; earlier collection may also use an ads cookie.
+Use synthetic configuration tests; hand off actual request contents, empty-data diagnostics and
+match results for runtime/platform verification. A saved field cannot certify those outcomes.
+For server delivery, use the distinct routes in `first-party-data.md` and `server/media-google-ads.md`;
+browser overrides do not authorize server transport or duplicate capture tags.
 
 ## Apply consent
 
@@ -164,6 +213,10 @@ publication explicitly separate.
 - https://support.google.com/tagmanager/answer/6106009
 - https://support.google.com/google-ads/answer/7305793
 - https://support.google.com/google-ads/answer/13262500
+- https://support.google.com/google-ads/answer/13258081
+- https://support.google.com/google-ads/answer/16884284
+- https://support.google.com/tagmanager/answer/12131703
+- https://support.google.com/tagmanager/answer/7683362
 - https://developers.google.com/tag-platform/security/concepts/consent-mode
 
 ## Server route

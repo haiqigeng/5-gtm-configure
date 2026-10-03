@@ -2,66 +2,94 @@ const fs = require('node:fs');
 const path = require('node:path');
 const cp = require('node:child_process');
 const assert = require('node:assert/strict');
-const root = path.resolve(__dirname, '../..');
-const scriptPath = path.join(root, 'scripts/mcp_queue_adapter.py');
+const root = process.env.RUNTIME_ROOT || path.resolve(__dirname, '../..');
 const pythonPath = process.env.TEST_PYTHON;
+const discoveryMode = process.env.RELAY_DISCOVERY === '1';
 const shellPath = process.env.TEST_PWSH;
 assert(pythonPath && shellPath, 'Set TEST_PYTHON and TEST_PWSH to discovered runtimes');
-const queuePath = path.join(process.argv[2], 'relay-' + Date.now());
-fs.mkdirSync(queuePath);
-const cases = [
-  {id: '1'.repeat(32), tool: 'synthetic__gtm_tag', arguments: {action: 'get', tagId: '101'}},
-  {id: '2'.repeat(32), tool: 'synthetic__gtm_tag', arguments: {action: 'create'}},
-  {id: '3'.repeat(32), tool: 'synthetic__gtm_workspace', arguments: {action: 'publish'}},
-  {id: '4'.repeat(32), tool: 'synthetic__gtm_variable', arguments: {action: 'get', variableId: '9'}},
-  {id: '5'.repeat(32), tool: 'synthetic__gtm_trigger', arguments: {action: 'get', triggerId: '42'}},
-  {id: '6'.repeat(32), tool: 'synthetic__gtm_tag', arguments: {action: 'get', tagId: 'large'}},
-];
-for (const item of cases) fs.writeFileSync(path.join(queuePath,item.id+'.request.json'),JSON.stringify(item));
-fs.writeFileSync(path.join(queuePath,'complete.json'),JSON.stringify({status:'Synthetic relay done'}));
-const calls = [];
-const nativeName = "Événement d'O'Brien — 日本語";
-let receiver;
+const quoted = fs.mkdtempSync(path.join(process.argv[2], "l’agent ‘test’ “double” "));
+const scriptPath = discoveryMode ? path.join(root, 'scripts/mcp_execute.py') : path.join(quoted, 'worker.py');
+if (!discoveryMode) fs.copyFileSync(path.join(__dirname, 'mcp_stdio_worker.py'), scriptPath);
+const runPath = path.join(quoted, 'run.json'), profilesPath = path.join(quoted, 'profiles.json');
+const discoveryPath = path.join(quoted, 'input.json'), discoveryOutputPath = path.join(quoted, 'inventory.json');
+let fixture;
+if (discoveryMode) {
+  fixture = JSON.parse(fs.readFileSync(process.argv[3], 'utf8'));
+  fs.writeFileSync(discoveryPath, JSON.stringify(fixture.request));
+  fs.writeFileSync(profilesPath, JSON.stringify(fixture.profiles));
+}
+let worker, pending = '', exited = false, exitCode;
+const calls = [], commands = [];
+const outputs = [];
+const delay = () => new Promise(resolve => setTimeout(resolve, 10));
+async function pull() {
+  for (let i = 0; i < 100 && !pending && !exited; i++) await delay();
+  const output = pending; pending = '';
+  assert(output.length < 20000, 'Worker output must stay within bounded host chunks');
+  // Mimic wrapped terminal output and ANSI state. The data parser must tolerate it.
+  const wrapped = '\x1b[0m' + output.replace(/(.{79})/g, '$1\b\r\n');
+  return exited ? {exit_code:exitCode, output:wrapped} : {session_id:1, output:wrapped};
+}
+const nativeName = "Événement d'O’Brien ‘quoted’ “double” — 日本語";
 const tools = {
   exec_command: async ({cmd}) => {
-    if (cmd.endsWith(' --stream')) {
-      receiver = cp.spawn(shellPath, ['-NoProfile','-NonInteractive','-Command',cmd], {stdio:['pipe','pipe','pipe']});
-      return {session_id:1, output:'STREAM_READY'};
-    }
-    const child = cp.spawnSync(shellPath, ['-NoProfile','-NonInteractive','-Command',cmd], {encoding:'utf8'});
-    return {exit_code:child.status, output:child.stdout, stderr:child.stderr};
+    commands.push(cmd);
+    worker = cp.spawn(shellPath, ['-NoProfile', '-NonInteractive', '-Command', cmd], {
+      stdio:['pipe','pipe','pipe'], env:{...process.env,RUNTIME_SCRIPTS:path.join(root,'scripts')}
+    });
+    worker.stdout.on('data', value => {pending += value.toString('utf8');});
+    worker.stderr.on('data', value => {pending += value.toString('utf8');});
+    worker.on('close', code => {exited = true; exitCode = code;});
+    return pull();
   },
-  write_stdin: async ({chars}) => {
-    let output = '';
-    receiver.stdout.on('data', value => {output += value.toString('utf8');});
-    receiver.stderr.on('data', value => {output += value.toString('utf8');});
-    const completion = new Promise(resolve => receiver.on('close', code => resolve({exit_code:code,output})));
-    receiver.stdin.end(chars);
-    return completion;
-  },
+  write_stdin: async ({chars}) => {if (chars) worker.stdin.write(chars); return pull();},
   synthetic__gtm_tag: async args => {
-    calls.push(['tag',args]);
-    return {structuredContent:{tagId:args.tagId || '501',name:nativeName,type:'gaawe', notes: args.tagId === 'large' ? 'É日本語'.repeat(20000) : ''}};
+    calls.push(args.action);
+    if (args.tagId === 'sensitive') return {content:[{type:'text',text:JSON.stringify({access_token:'SYNTHETIC_ONLY'})}]};
+    if (args.action === 'create') {
+      assert.equal(args.createOrUpdateConfig.name, nativeName);
+      assert.equal(args.createOrUpdateConfig.notes, 'É日本語'.repeat(30000));
+    }
+    return {structuredContent:{name:nativeName,notes:args.createOrUpdateConfig?.notes || ''}};
   },
-  synthetic__gtm_workspace: async args => {throw new Error('forbidden dispatch unexpectedly occurred');},
-  synthetic__gtm_variable: async args => {calls.push(['variable',args]);throw new Error('synthetic transport exception');},
-  synthetic__gtm_trigger: async args => {calls.push(['trigger',args]);return {isError:true,content:[{type:'text',text:'synthetic MCP tool error'}]};},
+  synthetic__gtm_workspace: async () => {throw new Error('Forbidden action was dispatched');},
+  synthetic__gtm_variable: async () => {calls.push('failed');throw new Error('Synthetic tool failure');},
 };
-const outputs = [];
 const AsyncFunction = Object.getPrototypeOf(async function(){}).constructor;
 const source = fs.readFileSync(path.join(root,'scripts/mcp_relay.js'),'utf8');
-const fn = new AsyncFunction('pythonPath','scriptPath','queuePath','tools','text','notify','yield_control', source);
+if (discoveryMode) {
+  const target = fixture.request.targets[0];
+  for (const family of ['workspace', 'container', ...Object.keys(fixture.data)]) {
+    tools['synthetic__gtm_' + family] = async args => {
+      assert(['get','list','getStatus'].includes(args.action), 'Discovery must never dispatch a mutation');
+      calls.push(args.action);
+      if (family === 'workspace') return args.action === 'getStatus' ? {workspaceChange:[]} : {accountId:target.account_id,containerId:target.container_id,workspaceId:target.workspace_id};
+      if (family === 'container') return {accountId:target.account_id,containerId:target.container_id,usageContext:[target.container_type]};
+      const items = Object.values(fixture.data[family]);
+      return {[family]:items.slice((args.page - 1) * args.itemsPerPage, args.page * args.itemsPerPage)};
+    };
+  }
+}
+const fn = new AsyncFunction('pythonPath','scriptPath','runPath','profilesPath','tools','text','notify','yield_control','discoveryPath','discoveryOutputPath',source);
 (async () => {
-  await fn(pythonPath,scriptPath,queuePath,tools,v=>outputs.push(v),v=>outputs.push(v),async()=>{});
-  const replies = cases.map(item=>JSON.parse(fs.readFileSync(path.join(queuePath,item.id+'.response.json'),'utf8')));
-  fs.writeFileSync(path.join(process.argv[2],'relay-result.json'),JSON.stringify({calls,replies,outputs},null,2));
-  assert.equal(replies[0].result.name,nativeName);
-  assert.equal(replies[1].result.tagId,'501');
-  assert(replies[2].error && replies[3].error && replies[4].error);
-  assert.equal(calls.length,5);
-  assert.equal(replies[5].result.notes, 'É日本語'.repeat(20000));
-  assert.equal(outputs.at(-1).status,'Synthetic relay done');
-  assert.equal(fs.readdirSync(queuePath).filter(x=>x.endsWith('.claimed') || x.endsWith('.request.json')).length,0);
-  fs.writeFileSync(path.join(process.argv[2],'relay-result.json'),JSON.stringify({calls,replies,outputs},null,2));
-  console.log('PASS packaged JS relay syntax/execution with local mocked MCP tools and real PowerShell queue CLI; apostrophe/Unicode preserved; forbidden action blocked; thrown tool error delivered');
+  try {
+    await fn(pythonPath,scriptPath,discoveryMode ? undefined : runPath,profilesPath,tools,v=>outputs.push(v),v=>outputs.push(v),async()=>{},discoveryMode ? discoveryPath : undefined,discoveryMode ? discoveryOutputPath : undefined);
+    while (!exited) await delay();
+    assert.equal(exitCode,0,pending);
+    if (discoveryMode) {
+      assert.equal(outputs.at(-1).status,'Discovered');
+      const inventory = JSON.parse(fs.readFileSync(discoveryOutputPath,'utf8'));
+      assert.equal(inventory.targets[0].objects.length,Object.values(fixture.data).reduce((sum,items)=>sum+Object.keys(items).length,0));
+      assert.equal(commands.length,1);
+      console.log('PASS actual discovery CLI through JS/PowerShell/Python relay, zero mutations');
+      return;
+    }
+    assert.equal(outputs.at(-1).status,'Synthetic relay done');
+    assert.equal(calls.length,4);
+    assert.equal(commands.length,1, 'A persistent worker should be launched exactly once');
+    assert(commands.every(command => !command.includes(nativeName) && !command.includes('SYNTHETIC_ONLY')));
+    assert(!JSON.stringify(outputs).includes('SYNTHETIC_ONLY'));
+    assert.deepEqual(fs.readdirSync(quoted), ['worker.py'], 'Transport must not create a disk reply queue');
+    console.log('PASS actual JS/PowerShell/Python relay: smart quotes, Unicode, 100KB+ payloads, bounded chunks, no response shell interpolation, forbidden actions, tool errors');
+  } finally { if (worker && !exited) worker.kill(); }
 })().catch(error=>{console.error(error);process.exitCode=1;});

@@ -4,6 +4,9 @@
   "type": "object",
   "additionalProperties": false,
   "required": [
+    "context_version",
+    "run_id",
+    "created_at",
     "target_state",
     "scope_claim",
     "language_decision",
@@ -15,7 +18,7 @@
     "value_domains"
   ],
   "properties": {
-    "context_version": {"enum": ["1.0.0", "1.1.0", "1.2.0"]},
+    "context_version": {"const": "2.0.0"},
     "run_id": {"type": "string", "pattern": "^run_[a-f0-9]{32}$"},
     "created_at": {"type": "string", "format": "date-time"},
     "target_state": {
@@ -185,7 +188,8 @@
           "outcome",
           "hint_ids",
           "journey_ids",
-          "variant_ids"
+          "variant_ids",
+          "run_id"
         ],
         "properties": {
           "report_id": {"type": "string", "pattern": "^[a-z][a-z0-9_]{1,119}$"},
@@ -226,8 +230,7 @@
           "status",
           "evidence_refs",
           "entry_points",
-          "states_covered",
-          "opportunity_ids"
+          "states_covered"
         ],
         "properties": {
           "journey_id": {
@@ -255,14 +258,6 @@
                 {"enum": ["entry", "progression", "submission", "success", "failure", "empty", "post_conversion"]},
                 {"type": "string", "pattern": "^interaction:[a-z][a-z0-9_]{1,79}$"}
               ]
-            }
-          },
-          "opportunity_ids": {
-            "type": "array",
-            "uniqueItems": true,
-            "items": {
-              "type": "string",
-              "pattern": "^[a-z][a-z0-9_]{1,79}$"
             }
           },
           "variants": {
@@ -389,8 +384,6 @@
           "evidence_status",
           "evidence_refs",
           "business_question",
-          "official_candidate",
-          "official_fit",
           "decision",
           "decision_reason",
           "event_names",
@@ -438,8 +431,6 @@
             }
           },
           "business_question": {"type": "string", "minLength": 1},
-          "official_candidate": {"type": "string", "minLength": 1},
-          "official_fit": {"enum": ["fit", "gap", "not_applicable"]},
           "decision": {"enum": ["measure", "covered_elsewhere", "exclude", "unresolved"]},
           "decision_reason": {"type": "string", "minLength": 1},
           "event_names": {

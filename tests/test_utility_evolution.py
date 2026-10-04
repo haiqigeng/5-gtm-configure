@@ -706,7 +706,7 @@ class UtilityEvolutionTest(unittest.TestCase):
             command.return_value = subprocess.CompletedProcess(
                 ["git"], 128, "", "synthetic failure"
             )
-            errors = check_git_state(tag="v10.2.0", require_tag=True, require_clean=True)
+            errors = check_git_state(tag="v10.3.0", require_tag=True, require_clean=True)
         self.assertEqual(len(errors), 2)
         self.assertTrue(all("git exited 128" in error for error in errors))
 

@@ -41,7 +41,7 @@ For each GA4 event:
 5. Validate event-level and item-level placement.
 6. Map each approved destination parameter to a named GTM variable or documented transformation.
 7. Validate a representative resolved event, including all ecommerce items.
-8. Prove exact approved-to-intended and approved-to-saved event/parameter equality.
+8. Apply the fidelity chain in [tracking-plan conformance](tracking-plan-fidelity-and-conformance.md#prove-exact-conformance).
 9. Retain the current official-source manifest and approved locator for every outgoing field.
 
 When a source key is misspelled, verify that the approved source contract uses that exact key. Name the DLV for the actual source key, then map it to the correctly spelled official GA4 parameter. Do not propagate source typos into destination fields.
@@ -53,7 +53,7 @@ Treat `value` and `currency`, transaction identifiers, and `items` according to 
 Re-read the saved Google tag, event tags, variables, settings, normal and blocking triggers, folders,
 and all references. Confirm the exact approved event, timing, filter, field set, source/literal, item
 scope, DLV versions, `send_page_view`, consent route, firing option, connected destinations, and
-idempotent rerun. Re-run approved-to-saved conformance before `Configured`.
+idempotent rerun through the runtime, following the same fidelity chain.
 
 Keep custom definitions, key-event designation, Enhanced Measurement, data-stream, Google tag
 destination, and publication work separate from the GTM completion claim. Do not claim browser or

@@ -1,4 +1,4 @@
-"""Server-container object and Event Data validation for configuration-run@4.0."""
+"""Server-container object and Event Data validation for configuration-run@5.0."""
 
 from __future__ import annotations
 

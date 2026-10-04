@@ -1,4 +1,4 @@
-"""Target-scoped saved-state comparison helpers for configuration-run@4.0."""
+"""Target-scoped saved-state comparison helpers for configuration-run@5.0."""
 
 from __future__ import annotations
 

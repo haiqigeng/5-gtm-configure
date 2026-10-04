@@ -1,4 +1,4 @@
-"""Deterministic creation, checkpoints, inspection, and finalization for run@4.0."""
+"""Deterministic creation, checkpoints, inspection, and finalization for run@5.0."""
 
 from __future__ import annotations
 
@@ -259,7 +259,7 @@ def create_from_contract(
             for target in targets
         ],
         "dedup_contracts": deepcopy(contract["dedup_contracts"]),
-        "saved_readback": [],
+        "final_inventories": [],
         "target_results": [
             {
                 "target_id": target["target_id"],
@@ -466,7 +466,12 @@ def _operation(document: dict[str, Any], operation_id: str) -> dict[str, Any]:
     raise RunValidationError(f"unknown operation_id {operation_id!r}")
 
 
-def checkpoint_operation(
+def checkpoint_operation(document: dict[str, Any], **kwargs: Any) -> dict[str, Any]:
+    value = deepcopy(validate_document(document))
+    return validate_document(_checkpoint_operation(value, **kwargs))
+
+
+def _checkpoint_operation(
     document: dict[str, Any],
     *,
     operation_id: str,
@@ -480,7 +485,7 @@ def checkpoint_operation(
     saved: Any = None,
     error: str | None = None,
 ) -> dict[str, Any]:
-    value = deepcopy(validate_document(document))
+    value = document
     operation = _operation(value, operation_id)
     current = operation["state"]
     if state in {"in_progress", "saved", "verified"} and not any(
@@ -556,15 +561,9 @@ def checkpoint_operation(
             raise RunValidationError("verified comparison must pass")
         operation["comparison"] = deepcopy(comparison)
         operation["saved_readback"] = safe_saved
-        value["saved_readback"].append(
-            {
-                "target_id": operation["target_id"],
-                "operation_id": operation_id,
-                "object_key": operation["object_key"],
-                "saved": safe_saved,
-                "comparison": deepcopy(comparison),
-            }
-        )
+        next(
+            item for item in value["target_results"] if item["target_id"] == operation["target_id"]
+        )["last_verified_operation_id"] = operation_id
     elif state == "saved":
         operation["saved_readback"] = safe_saved
     operation["state"] = state
@@ -585,7 +584,7 @@ def checkpoint_operation(
     value["run"]["updated_at"] = timestamp or _utc_now()
     value["run"]["phase"] = "readback" if state in {"saved", "verified"} else "mutation"
     _derive_live_status(value)
-    return validate_document(value)
+    return value
 
 
 def reopen_failed_operation(
@@ -606,9 +605,6 @@ def reopen_failed_operation(
         "pre_write_comparison",
     ):
         operation.pop(field, None)
-    value["saved_readback"] = [
-        item for item in value["saved_readback"] if item.get("operation_id") != operation_id
-    ]
     operation["state"] = "planned"
     value["idempotency"] = {"checked": False, "remaining_actions": [], "observations": []}
     operation["journal"].append(
@@ -626,16 +622,12 @@ def _derive_live_status(document: dict[str, Any]) -> None:
         ]
         states = {item["state"] for item in operations}
         verified = [item for item in operations if item["state"] == "verified"]
-        # Readbacks are appended by successful checkpoints, unlike contract object order.
-        result["last_verified_operation_id"] = next(
-            (
-                item["operation_id"]
-                for item in reversed(document["saved_readback"])
-                if item["target_id"] == result["target_id"]
-            ),
-            None,
-        )
-        if states & {"uncertain"}:
+        latest = max(verified, key=lambda item: item["journal"][-1]["at"], default=None)
+        if result["last_verified_operation_id"] not in {item["operation_id"] for item in verified}:
+            result["last_verified_operation_id"] = latest["operation_id"] if latest else None
+        if result.get("baseline_error"):
+            result["status"] = "Partial" if verified else "Blocked"
+        elif states & {"uncertain"}:
             result["status"] = "Partial"
         elif states & {"failed"}:
             result["status"] = "Partial" if verified else "Blocked"
@@ -679,7 +671,10 @@ def _derive_live_status(document: dict[str, Any]) -> None:
 
 
 def inspect_document(document: dict[str, Any]) -> dict[str, Any]:
-    value = validate_document(document)
+    return _inspect_document(validate_document(document))
+
+
+def _inspect_document(value: dict[str, Any]) -> dict[str, Any]:
     states = {item["operation_id"]: item["state"] for item in value["object_changes"]}
     ready: list[str] = []
     waiting: dict[str, list[str]] = {}
@@ -833,12 +828,6 @@ def _record_adapter_idempotency_observations(
         "observations": records,
     }
     if remaining:
-        remaining_set = set(remaining)
-        value["saved_readback"] = [
-            item
-            for item in value["saved_readback"]
-            if item.get("operation_id") not in remaining_set
-        ]
         for operation_id in remaining:
             operation = operations[operation_id]
             for field in (

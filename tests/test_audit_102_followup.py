@@ -195,9 +195,14 @@ class Audit102Followup(unittest.TestCase):
                     self.assertEqual(len(backend.writes), 1)
                     self.assertEqual(calls["gtm_workspace", "get"], 1)
                     self.assertEqual(calls["gtm_container", "get"], 1)
-                    self.assertEqual(calls["gtm_tag", "list"], 2)
+                    self.assertEqual(calls["gtm_tag", "list"], 3)
                     # The fixture page size is two: a full page requires an empty terminal page.
-                    self.assertEqual(calls["gtm_trigger", "list"], 2)
+                    self.assertEqual(calls["gtm_trigger", "list"], 4)
+                elif mode == "create-collision":
+                    self.assertEqual(len(backend.writes), 1)
+                    with self.assertRaisesRegex(AdapterExecutionError, "exhaustion is unproved"):
+                        verify_idempotent_rerun(path, registry)
+                    self.assertNotEqual(load_document(path)["run"]["status"], "Configured")
                 else:
                     self.assertEqual(backend.writes, [])
                     self.assertNotEqual(load_document(path)["run"]["status"], "Configured")

@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-import random
+import re
 import time
 from collections.abc import Callable
 from copy import deepcopy
@@ -18,11 +18,11 @@ from configuration_run import (
     atomic_write,
     build_pre_write_comparison,
     build_verification_comparison,
-    checkpoint_operation,
     inspect_document,
     load_document,
     run_file_lock,
 )
+from diff_object_graph import semantic_references
 from native_configuration import variable_consumers
 from public_identifiers import public_identifier_paths
 from redaction import (
@@ -33,11 +33,14 @@ from redaction import (
     scrub_sensitive_text,
 )
 from resource_registry import (
+    ResourceRegistryError,
     capability_matrix,
+    native_inventory_identity,
     required_baseline_families,
     requires_variable_consumer_check,
     unsupported_operation_reason,
 )
+from verification import expected_graph
 
 AdapterExecutionError = adapter_support.AdapterExecutionError
 RateLimitError = adapter_support.RateLimitError
@@ -170,28 +173,71 @@ def _read(adapter: TargetAdapter, operation: dict[str, Any]) -> dict[str, Any] |
     return saved
 
 
+def _contains_only_observed_fields(expected: Any, actual: Any) -> bool:
+    """True when actual is an unchanged partial view of expected native fields."""
+    if type(expected) is not type(actual):
+        return False
+    if isinstance(expected, dict):
+        return set(actual) <= set(expected) and all(
+            _contains_only_observed_fields(expected[key], value) for key, value in actual.items()
+        )
+    if isinstance(expected, list):
+        remaining = iter(expected)
+        return all(
+            any(_contains_only_observed_fields(item, value) for item in remaining)
+            for value in actual
+        )
+    return expected == actual
+
+
+def _complete_observation(operation: dict, saved: Any) -> bool:
+    if not isinstance(saved, dict):
+        return False
+    try:
+        comparison, _ = build_verification_comparison(operation, saved)
+    except ValueError:
+        return False
+    if comparison["pass"]:
+        return True
+    report = comparison["report"]
+    if report["extra_objects"]:
+        return True
+    if report["missing_objects"]:
+        return False
+    differences = [
+        difference for item in report["object_differences"] for difference in item["differences"]
+    ]
+    # Native Parameter maps normalize to keyed dictionaries. Missing nested keys
+    # establish insufficient evidence. Present conflicting values remain mismatches.
+    conflicts = [
+        item
+        for item in differences
+        if item["kind"] != "missing"
+        and not (
+            item["kind"] == "array_mismatch"
+            and _contains_only_observed_fields(item["expected"], item["actual"])
+        )
+    ]
+    return bool(conflicts) or not differences
+
+
 def _call_with_rate_limit(
     callback: Callable[[], Any],
     *,
     max_retries: int,
-    base_delay_seconds: float,
     max_delay_seconds: float,
     sleep: Callable[[float], None],
-    random_value: Callable[[], float],
 ) -> Any:
     """Retry only a documented non-applied rate-limit response within a strict bound."""
-    for retry_index in range(max_retries + 1):
+    for retry_index in range(min(max_retries, 2) + 1):
         try:
             return callback()
         except RateLimitError as exc:
-            if retry_index >= max_retries:
+            if retry_index >= min(max_retries, 2):
                 raise
             delay = adapter_support._retry_delay(
                 exc,
-                retry_index,
-                base_delay_seconds=base_delay_seconds,
                 max_delay_seconds=max_delay_seconds,
-                random_value=random_value,
             )
             if delay is None:
                 raise
@@ -202,7 +248,7 @@ def _call_with_rate_limit(
 def _save(path: Path, document: dict[str, Any]) -> None:
     atomic_write(
         path,
-        redact_for_persistence(document, public_identifier_paths=public_identifier_paths(document)),
+        document,
     )
 
 
@@ -227,10 +273,8 @@ def _capture_one_authenticated_baseline(
     *,
     captured_at: Callable[[], str],
     max_rate_limit_retries: int,
-    base_delay_seconds: float,
     max_delay_seconds: float,
     sleep: Callable[[float], None],
-    random_value: Callable[[], float],
 ) -> dict[str, Any]:
     target_id = target["target_id"]
     target_operations = [
@@ -259,22 +303,21 @@ def _capture_one_authenticated_baseline(
         items, receipt = adapter_support.collect_paginated_with_receipt(
             lambda cursor, selected=family: binding.adapter.list_resource_page(selected, cursor),
             max_rate_limit_retries=max_rate_limit_retries,
-            base_retry_delay_seconds=base_delay_seconds,
             max_retry_delay_seconds=max_delay_seconds,
             sleep=sleep,
-            random_value=random_value,
         )
         resources[family] = items
         resource_receipts[family] = receipt
     workspace_changes, changes_receipt = adapter_support.collect_paginated_with_receipt(
         binding.adapter.list_workspace_changes_page,
         max_rate_limit_retries=max_rate_limit_retries,
-        base_retry_delay_seconds=base_delay_seconds,
         max_retry_delay_seconds=max_delay_seconds,
         sleep=sleep,
-        random_value=random_value,
     )
     value = deepcopy(document)
+    next(item for item in value["target_results"] if item["target_id"] == target_id).pop(
+        "baseline_error", None
+    )
     for index, baseline in enumerate(value["container_baselines"]):
         if baseline["target_id"] == target_id:
             value["container_baselines"][index] = {
@@ -322,19 +365,35 @@ def _capture_authenticated_baselines(
             binding = registry.binding(target["target_id"])
             _verified_adapter_identity(binding.identity, binding.adapter)
             value = _capture_one_authenticated_baseline(value, target, binding, **options)
+            next(
+                item for item in value["target_results"] if item["target_id"] == target["target_id"]
+            ).pop("baseline_error", None)
+            run_state._derive_live_status(value)
         except Exception as exc:
             error = "baseline_capture_failed: " + (
                 scrub_sensitive_text(str(exc), set()) or "authenticated baseline unavailable"
             )
-            for operation in target_operations:
-                value = checkpoint_operation(
-                    value,
-                    operation_id=operation["operation_id"],
-                    state="failed",
-                    note="Authenticated baseline capture failed; no write was attempted.",
-                    timestamp=options["captured_at"](),
-                    error=error,
-                )
+            baseline = next(
+                item
+                for item in value["container_baselines"]
+                if item["target_id"] == target["target_id"]
+            )
+            baseline.update(
+                captured_at=None,
+                complete=False,
+                resource_families=[],
+                family_counts={},
+                resource_identities={},
+                resources={},
+                preexisting_workspace_changes=None,
+                capture_evidence=None,
+                fingerprint=None,
+            )
+            result = next(
+                item for item in value["target_results"] if item["target_id"] == target["target_id"]
+            )
+            result["baseline_error"] = {"at": options["captured_at"](), "error": error}
+            run_state._derive_live_status(value)
     return value
 
 
@@ -344,10 +403,8 @@ def _execute_current_locked(
     *,
     timestamp: Callable[[], str],
     max_rate_limit_retries: int,
-    base_delay_seconds: float,
     max_delay_seconds: float,
     sleep: Callable[[float], None],
-    random_value: Callable[[], float],
 ) -> dict[str, Any]:
     document = load_document(run_path)
     capabilities_changed = False
@@ -364,30 +421,27 @@ def _execute_current_locked(
         registry,
         captured_at=timestamp,
         max_rate_limit_retries=max_rate_limit_retries,
-        base_delay_seconds=base_delay_seconds,
         max_delay_seconds=max_delay_seconds,
         sleep=sleep,
-        random_value=random_value,
     )
     _save(run_path, document)
 
     while True:
-        document = load_document(run_path)
-        inspection = inspect_document(document)
+        inspection = run_state._inspect_document(document)
         ready = inspection["ready_operations"]
         if not ready:
+            run_state.validate_document(document)
             return inspection
         progress = False
         for operation_id in ready:
-            document = load_document(run_path)
-            if operation_id not in inspect_document(document)["ready_operations"]:
+            if operation_id not in run_state._inspect_document(document)["ready_operations"]:
                 continue
             operation = _operation(document, operation_id)
             _target(document, operation["target_id"])
             try:
                 binding = registry.binding(operation["target_id"])
             except AdapterExecutionError as exc:
-                document = checkpoint_operation(
+                document = run_state._checkpoint_operation(
                     document,
                     operation_id=operation_id,
                     state="failed",
@@ -400,7 +454,7 @@ def _execute_current_locked(
                 continue
             reason = unsupported_operation_reason(operation, binding.capabilities)
             if reason:
-                document = checkpoint_operation(
+                document = run_state._checkpoint_operation(
                     document,
                     operation_id=operation_id,
                     state="failed",
@@ -427,18 +481,14 @@ def _execute_current_locked(
                     current_tags = collect_paginated(
                         lambda cursor: binding.adapter.list_resource_page("tag", cursor),
                         max_rate_limit_retries=max_rate_limit_retries,
-                        base_retry_delay_seconds=base_delay_seconds,
                         max_retry_delay_seconds=max_delay_seconds,
                         sleep=sleep,
-                        random_value=random_value,
                     )
                     current_variables = collect_paginated(
                         lambda cursor: binding.adapter.list_resource_page("variable", cursor),
                         max_rate_limit_retries=max_rate_limit_retries,
-                        base_retry_delay_seconds=base_delay_seconds,
                         max_retry_delay_seconds=max_delay_seconds,
                         sleep=sleep,
-                        random_value=random_value,
                     )
                     in_scope_names = {
                         item["name"]
@@ -458,15 +508,13 @@ def _execute_current_locked(
                 current = _call_with_rate_limit(
                     lambda: _read(binding.adapter, operation),
                     max_retries=max_rate_limit_retries,
-                    base_delay_seconds=base_delay_seconds,
                     max_delay_seconds=max_delay_seconds,
                     sleep=sleep,
-                    random_value=random_value,
                 )
                 if operation["action"] == "create" and current is not None:
                     comparison, safe_current = build_verification_comparison(operation, current)
                     if comparison["pass"]:
-                        document = checkpoint_operation(
+                        document = run_state._checkpoint_operation(
                             document,
                             operation_id=operation_id,
                             state="verified",
@@ -476,7 +524,7 @@ def _execute_current_locked(
                             saved=safe_current,
                         )
                     else:
-                        document = checkpoint_operation(
+                        document = run_state._checkpoint_operation(
                             document,
                             operation_id=operation_id,
                             state="failed",
@@ -490,7 +538,7 @@ def _execute_current_locked(
                     continue
                 if operation["action"] in {"reuse", "untouched"}:
                     if current is None:
-                        document = checkpoint_operation(
+                        document = run_state._checkpoint_operation(
                             document,
                             operation_id=operation_id,
                             state="failed",
@@ -501,7 +549,7 @@ def _execute_current_locked(
                     else:
                         comparison, safe_current = build_verification_comparison(operation, current)
                         if comparison["pass"]:
-                            document = checkpoint_operation(
+                            document = run_state._checkpoint_operation(
                                 document,
                                 operation_id=operation_id,
                                 state="verified",
@@ -511,7 +559,7 @@ def _execute_current_locked(
                                 saved=safe_current,
                             )
                         else:
-                            document = checkpoint_operation(
+                            document = run_state._checkpoint_operation(
                                 document,
                                 operation_id=operation_id,
                                 state="failed",
@@ -536,7 +584,7 @@ def _execute_current_locked(
                         operation, current
                     )
                     if not pre_write_comparison["pass"]:
-                        document = checkpoint_operation(
+                        document = run_state._checkpoint_operation(
                             document,
                             operation_id=operation_id,
                             state="failed",
@@ -557,7 +605,7 @@ def _execute_current_locked(
                         operation, binding.secret_provider
                     )
                 except SecretResolutionError as exc:
-                    document = checkpoint_operation(
+                    document = run_state._checkpoint_operation(
                         document,
                         operation_id=operation_id,
                         state="failed",
@@ -568,7 +616,7 @@ def _execute_current_locked(
                     _save(run_path, document)
                     progress = True
                     continue
-                document = checkpoint_operation(
+                document = run_state._checkpoint_operation(
                     document,
                     operation_id=operation_id,
                     state="in_progress",
@@ -602,13 +650,11 @@ def _execute_current_locked(
                         mutation_attempted = True
                         return binding.adapter.mutate(deepcopy(mutation_operation))
 
-                    _call_with_rate_limit(
+                    mutation_saved = _call_with_rate_limit(
                         mutate_with_fresh_retry,
                         max_retries=max_rate_limit_retries,
-                        base_delay_seconds=base_delay_seconds,
                         max_delay_seconds=max_delay_seconds,
                         sleep=sleep,
-                        random_value=random_value,
                     )
                     write_accepted_or_ambiguous = True
                 except AmbiguousWriteError as exc:
@@ -616,13 +662,11 @@ def _execute_current_locked(
                     saved = _call_with_rate_limit(
                         lambda: _read(binding.adapter, operation),
                         max_retries=max_rate_limit_retries,
-                        base_delay_seconds=base_delay_seconds,
                         max_delay_seconds=max_delay_seconds,
                         sleep=sleep,
-                        random_value=random_value,
                     )
                     if saved is None and operation["action"] != "remove":
-                        document = checkpoint_operation(
+                        document = run_state._checkpoint_operation(
                             document,
                             operation_id=operation_id,
                             state="uncertain",
@@ -634,7 +678,7 @@ def _execute_current_locked(
                     else:
                         comparison, safe_saved = build_verification_comparison(operation, saved)
                         if comparison["pass"]:
-                            document = checkpoint_operation(
+                            document = run_state._checkpoint_operation(
                                 document,
                                 operation_id=operation_id,
                                 state="verified",
@@ -644,7 +688,7 @@ def _execute_current_locked(
                                 saved=safe_saved,
                             )
                         else:
-                            document = checkpoint_operation(
+                            document = run_state._checkpoint_operation(
                                 document,
                                 operation_id=operation_id,
                                 state="uncertain",
@@ -656,16 +700,16 @@ def _execute_current_locked(
                     _save(run_path, document)
                     progress = True
                     continue
-                saved = _call_with_rate_limit(
-                    lambda: _read(binding.adapter, operation),
-                    max_retries=max_rate_limit_retries,
-                    base_delay_seconds=base_delay_seconds,
-                    max_delay_seconds=max_delay_seconds,
-                    sleep=sleep,
-                    random_value=random_value,
-                )
+                saved = mutation_saved
+                if operation["action"] == "remove" or not _complete_observation(operation, saved):
+                    saved = _call_with_rate_limit(
+                        lambda: _read(binding.adapter, operation),
+                        max_retries=max_rate_limit_retries,
+                        max_delay_seconds=max_delay_seconds,
+                        sleep=sleep,
+                    )
                 if saved is None and operation["action"] != "remove":
-                    document = checkpoint_operation(
+                    document = run_state._checkpoint_operation(
                         document,
                         operation_id=operation_id,
                         state="uncertain",
@@ -676,7 +720,7 @@ def _execute_current_locked(
                 else:
                     comparison, safe_saved = build_verification_comparison(operation, saved)
                     if comparison["pass"]:
-                        document = checkpoint_operation(
+                        document = run_state._checkpoint_operation(
                             document,
                             operation_id=operation_id,
                             state="verified",
@@ -686,7 +730,7 @@ def _execute_current_locked(
                             saved=safe_saved,
                         )
                     else:
-                        document = checkpoint_operation(
+                        document = run_state._checkpoint_operation(
                             document,
                             operation_id=operation_id,
                             state="uncertain",
@@ -698,10 +742,10 @@ def _execute_current_locked(
                 _save(run_path, document)
                 progress = True
             except AuthenticationError as exc:
-                latest = load_document(run_path)
+                latest = document
                 operation = _operation(latest, operation_id)
                 state = "failed" if operation["state"] == "planned" else "uncertain"
-                latest = checkpoint_operation(
+                latest = run_state._checkpoint_operation(
                     latest,
                     operation_id=operation_id,
                     state=state,
@@ -713,13 +757,14 @@ def _execute_current_locked(
                         or "target authorization unavailable"
                     ),
                 )
-                _save(run_path, latest)
+                document = latest
+                _save(run_path, document)
                 progress = True
             except ValueError as exc:
-                latest = load_document(run_path)
+                latest = document
                 operation = _operation(latest, operation_id)
                 state = "failed" if operation["state"] == "planned" else "uncertain"
-                latest = checkpoint_operation(
+                latest = run_state._checkpoint_operation(
                     latest,
                     operation_id=operation_id,
                     state=state,
@@ -728,11 +773,12 @@ def _execute_current_locked(
                     error="invalid_adapter_readback: "
                     + scrub_sensitive_text(str(exc), ephemeral_values),
                 )
-                _save(run_path, latest)
+                document = latest
+                _save(run_path, document)
                 progress = True
             except RateLimitError as exc:
-                latest = load_document(run_path)
-                latest = checkpoint_operation(
+                latest = document
+                latest = run_state._checkpoint_operation(
                     latest,
                     operation_id=operation_id,
                     state="uncertain" if write_accepted_or_ambiguous else "failed",
@@ -740,11 +786,12 @@ def _execute_current_locked(
                     timestamp=timestamp(),
                     error=scrub_sensitive_text(str(exc), ephemeral_values),
                 )
-                _save(run_path, latest)
+                document = latest
+                _save(run_path, document)
                 progress = True
             except AdapterExecutionError as exc:
-                latest = load_document(run_path)
-                latest = checkpoint_operation(
+                latest = document
+                latest = run_state._checkpoint_operation(
                     latest,
                     operation_id=operation_id,
                     state="uncertain" if write_accepted_or_ambiguous else "failed",
@@ -752,13 +799,14 @@ def _execute_current_locked(
                     timestamp=timestamp(),
                     error=scrub_sensitive_text(str(exc), ephemeral_values),
                 )
-                _save(run_path, latest)
+                document = latest
+                _save(run_path, document)
                 progress = True
             except Exception as exc:
-                latest = load_document(run_path)
+                latest = document
                 operation = _operation(latest, operation_id)
                 state = "failed" if operation["state"] == "planned" else "uncertain"
-                latest = checkpoint_operation(
+                latest = run_state._checkpoint_operation(
                     latest,
                     operation_id=operation_id,
                     state=state,
@@ -767,10 +815,11 @@ def _execute_current_locked(
                     error="unexpected_adapter_failure: "
                     + scrub_sensitive_text(str(exc), ephemeral_values),
                 )
-                _save(run_path, latest)
+                document = latest
+                _save(run_path, document)
                 progress = True
         if not progress:
-            return inspect_document(load_document(run_path))
+            return inspect_document(document)
 
 
 def execute_ready_operations(
@@ -780,16 +829,14 @@ def execute_ready_operations(
 ) -> dict[str, Any]:
     """Execute independent target subtrees for the current run schema."""
     if not isinstance(adapter, TargetAdapterRegistry):
-        raise AdapterExecutionError("configuration-run@4.0 requires a TargetAdapterRegistry")
+        raise AdapterExecutionError("configuration-run@5.0 requires a TargetAdapterRegistry")
     timestamp = kwargs.pop("timestamp", None) or _utc_now
     max_rate_limit_retries = kwargs.pop("max_rate_limit_retries", 2)
-    base_delay_seconds = kwargs.pop("base_delay_seconds", 0.25)
     max_delay_seconds = kwargs.pop("max_delay_seconds", 100.0)
     sleep = kwargs.pop("sleep", time.sleep)
-    random_value = kwargs.pop("random_value", random.random)
     if max_rate_limit_retries < 0:
         raise AdapterExecutionError("max_rate_limit_retries must be non-negative")
-    if base_delay_seconds < 0 or max_delay_seconds < 0:
+    if max_delay_seconds < 0:
         raise AdapterExecutionError("rate-limit delays must be non-negative")
     if kwargs:
         raise AdapterExecutionError(
@@ -802,10 +849,8 @@ def execute_ready_operations(
                 adapter,
                 timestamp=timestamp,
                 max_rate_limit_retries=max_rate_limit_retries,
-                base_delay_seconds=base_delay_seconds,
                 max_delay_seconds=max_delay_seconds,
                 sleep=sleep,
-                random_value=random_value,
             )
     except adapter_support.RunConflictError as exc:
         raise AdapterExecutionError(str(exc), code="run_conflict") from exc
@@ -828,14 +873,170 @@ def verify_idempotent_rerun(
                     code="run_not_verified",
                 )
             observations = []
-            verified_targets = set()
+            inventories = {}
+            document["final_inventories"] = []
+            for target in document["run"]["targets"]:
+                target_id = target["target_id"]
+                binding = registry.binding(target_id)
+                _verified_adapter_identity(binding.identity, binding.adapter)
+                operations = [
+                    op for op in document["object_changes"] if op["target_id"] == target_id
+                ]
+                relevant = {}
+                for op in operations:
+                    relevant.setdefault(op["resource_family"], set()).update(
+                        [op["name"], op.get("new_name", op["name"])]
+                    )
+                    for key in semantic_references(expected_graph(op)):
+                        parts = key.split("::", 2)
+                        if len(parts) == 3 and parts[0] == target_id:
+                            relevant.setdefault(parts[1], set()).add(parts[2])
+                    for context in (op.get("saved_readback") or {}).get("context_objects", []):
+                        relevant.setdefault(context["object_type"], set()).add(context["name"])
+                    for name in re.findall(r"\{\{([^{}]+)\}\}", str(op.get("intended", {}))):
+                        relevant.setdefault("variable", set()).add(name)
+                # Creates/renames and named references need an exhausted identity
+                # inventory. Stable-ID-only small updates keep targeted reads.
+                inventory_needed = (
+                    any(
+                        op["action"] in {"create", "rename"} or not op.get("object_id")
+                        for op in operations
+                    )
+                    or any(
+                        op.get("dependencies")
+                        or (op.get("saved_readback") or {}).get("context_objects")
+                        or semantic_references(expected_graph(op))
+                        for op in operations
+                    )
+                    or "variable" in relevant
+                    and any(op["resource_family"] != "variable" for op in operations)
+                )
+                if not inventory_needed:
+                    continue
+                resources = {}
+                receipts = {}
+                try:
+                    for family in sorted(relevant):
+                        resources[family], receipts[family] = (
+                            adapter_support.collect_paginated_with_receipt(
+                                lambda cursor, family=family: binding.adapter.list_resource_page(
+                                    family, cursor
+                                )
+                            )
+                        )
+                        identities = {}
+                        for raw in resources[family]:
+                            try:
+                                name, native_id = native_inventory_identity(family, raw, target)
+                            except ResourceRegistryError as exc:
+                                raise AdapterExecutionError(
+                                    str(exc), code="final_inventory_incomplete"
+                                ) from exc
+                            if name is not None:
+                                identities.setdefault(name, set()).add(native_id)
+                        if any(len(identities.get(name, set())) > 1 for name in relevant[family]):
+                            raise AdapterExecutionError(
+                                "Ambiguous GTM object identity in final inventory",
+                                code="final_identity_conflict",
+                            )
+                except Exception:
+                    document["idempotency"] = {
+                        "checked": False,
+                        "remaining_actions": [],
+                        "observations": [],
+                    }
+                    run_state._derive_live_status(document)
+                    _save(run_path, document)
+                    raise
+                inventories[target_id] = resources
+                document["final_inventories"].append(
+                    redact_for_persistence(
+                        {
+                            "target_id": target_id,
+                            "observed_at": now(),
+                            "source_identity": deepcopy(binding.identity),
+                            "resources": resources,
+                            "resource_pagination": receipts,
+                        },
+                        public_identifier_paths=public_identifier_paths(
+                            resources, records=operations
+                        ),
+                    )
+                )
             for operation in document["object_changes"]:
                 binding = registry.binding(operation["target_id"])
-                if operation["target_id"] not in verified_targets:
-                    _verified_adapter_identity(binding.identity, binding.adapter)
-                    verified_targets.add(operation["target_id"])
                 try:
-                    saved = _read(binding.adapter, operation)
+                    family = operation["resource_family"]
+                    listed = inventories.get(operation["target_id"], {}).get(family)
+                    saved = None
+                    use_listing = False
+                    if listed is not None:
+                        object_id = operation.get("object_id")
+                        if family == "google tag configuration" and not object_id:
+                            # This native resource has no name namespace. A create must
+                            # retain its actual returned ID in the verified observation.
+                            objects = (operation.get("saved_readback") or {}).get("objects", [])
+                            ids = {
+                                native_inventory_identity(family, raw, binding.identity)[1]
+                                for raw in objects
+                                if raw.get("object_type") == family
+                                and raw.get("name") == operation.get("new_name", operation["name"])
+                            }
+                            if len(ids) != 1:
+                                raise AdapterExecutionError(
+                                    "Google tag configuration lacks saved native identity"
+                                )
+                            object_id = ids.pop()
+                        matches = []
+                        for raw in listed:
+                            name, native_id = native_inventory_identity(
+                                family, raw, binding.identity
+                            )
+                            if (
+                                native_id == object_id
+                                if object_id
+                                else name == operation.get("new_name", operation["name"])
+                            ):
+                                matches.append(raw)
+                        if len(matches) > 1:
+                            raise AdapterExecutionError("Ambiguous GTM object identity")
+                        if not matches:
+                            saved = None if operation["action"] == "remove" else {"objects": []}
+                            use_listing = True
+                        else:
+                            raw = matches[0]
+                            if (
+                                family == "workspace"
+                                and raw["workspaceId"] != binding.identity["workspace_id"]
+                            ):
+                                raise AdapterExecutionError(
+                                    "Selected workspace differs from the authorized target"
+                                )
+                            saved = (
+                                binding.adapter.observation(operation, raw)
+                                if hasattr(binding.adapter, "observation")
+                                else {
+                                    "objects": [
+                                        {
+                                            **raw,
+                                            **(
+                                                {
+                                                    "name": operation.get(
+                                                        "new_name", operation["name"]
+                                                    )
+                                                }
+                                                if family == "google tag configuration"
+                                                else {}
+                                            ),
+                                            "target_id": operation["target_id"],
+                                            "object_type": family,
+                                        }
+                                    ]
+                                }
+                            )
+                            use_listing = _complete_observation(operation, saved)
+                    if not use_listing:
+                        saved = _read(binding.adapter, operation)
                 except Exception as exc:
                     raise AdapterExecutionError(
                         "target adapter convergence read failed; no result was persisted",

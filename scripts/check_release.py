@@ -17,7 +17,7 @@ from build_skill_package import INCLUDED, build, package_files
 from strict_json import StrictJsonError, loads_strict
 
 ROOT = Path(__file__).resolve().parents[1]
-CURRENT_RELEASE = "10.2.0"
+CURRENT_RELEASE = "10.3.0"
 SEMVER = re.compile(r"^v(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)$")
 LINK = re.compile(r"\]\(([^)]+)\)")
 WORD = re.compile(r"\b[\w-]+\b")
@@ -280,7 +280,7 @@ def check_versions_and_schemas() -> list[str]:
 
     model = read("scripts/run_model.py")
     expected = {
-        "SCHEMA_VERSION": "4.0",
+        "SCHEMA_VERSION": "5.0",
         "CONTRACT_SCHEMA_VERSION": "7.0",
     }
     for name, value in expected.items():

@@ -1,4 +1,4 @@
-"""Shared current web-domain enums for configuration-run@4.0."""
+"""Shared current web-domain enums for configuration-run@5.0."""
 
 SCHEMA_VERSION = "4.0"
 VERIFICATION_SCHEMA_VERSION = "1.0"

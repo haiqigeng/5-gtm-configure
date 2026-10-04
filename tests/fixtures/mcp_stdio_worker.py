@@ -4,7 +4,7 @@ import os
 import sys
 
 sys.path.insert(0, os.environ["RUNTIME_SCRIPTS"])
-from adapter_support import AdapterExecutionError
+from adapter_support import AdapterExecutionError, RateLimitError
 from mcp_adapter import unwrap
 from mcp_transport import StdioTransport, completion, configure_terminal
 from redaction import redact_for_persistence
@@ -29,4 +29,10 @@ for tool, action in (("gtm_workspace", "publish"), ("gtm_variable", "get")):
         raise AssertionError("Forbidden or failed request should fail closed")
 result = transport("synthetic__gtm_tag", {"action": "get", "tagId": "sensitive"})
 assert "SYNTHETIC_ONLY" not in str(redact_for_persistence(unwrap(result)))
+try:
+    transport("synthetic__gtm_tag", {"action": "get", "tagId": "quota"})
+except RateLimitError as exc:
+    assert exc.retry_after_seconds == 17
+else:
+    raise AssertionError("Typed thrown quota rejection lost")
 completion({"status": "Synthetic relay done", "calls": transport.calls})

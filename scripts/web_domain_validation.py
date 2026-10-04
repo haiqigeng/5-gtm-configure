@@ -1,4 +1,4 @@
-"""Client-container parity validation for contract@7.0 and run@4.0.
+"""Client-container parity validation for contract@7.0 and run@5.0.
 
 Validate one web target at a time after semantic keys are localized, then apply
 cross-target rules separately without duplicating GTM-specific rules.
@@ -15,7 +15,6 @@ from event_semantics import approved_event_name, trigger_accepts_event
 from native_configuration import (
     USER_DATA_VARIABLE_TYPES,
     FieldResolutionError,
-    effective_event_parameters,
     field_key,
     referenced_variable_closure,
     sensitive_fields,
@@ -134,7 +133,7 @@ def validate_native_mappings(mappings, operations, fail):
                 raise ValueError("native mapping owner is paused")
             if not supports_native_mapping(mapping, target):
                 continue
-            value = effective_event_parameters(target, variables)[field]
+            value = web._resolved_event_parameter(owner, operations, variables, field)
             if value != mapping["gtm_resolution"]:
                 raise ValueError("native mapping value differs from gtm_resolution")
             if mapping.get("mapping_method") == "direct-dlv":

@@ -1,6 +1,6 @@
-"""Shared enums and immutable policy constants for configuration-run@4.0."""
+"""Shared enums and immutable policy constants for configuration-run@5.0."""
 
-SCHEMA_VERSION = "4.0"
+SCHEMA_VERSION = "5.0"
 CONTRACT_SCHEMA_VERSION = "7.0"
 VERIFICATION_SCHEMA_VERSION = "1.0"
 
@@ -147,7 +147,7 @@ TOP_LEVEL_KEYS = {
     "inventory_dispositions",
     "container_baselines",
     "dedup_contracts",
-    "saved_readback",
+    "final_inventories",
     "target_results",
     "official_sources",
     "external_dependencies",

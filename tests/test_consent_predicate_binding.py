@@ -386,7 +386,7 @@ class ConsentPredicateBindingTest(unittest.TestCase):
         approve_mutations(contract)
         validate_document(contract)
         run = create_from_contract(contract, run_id="CONSENT-BINDING", source_locator="synthetic")
-        self.assertEqual(run["schema_version"], "4.0")
+        self.assertEqual(run["schema_version"], "5.0")
         normal["filter"].append(grant())
         approve_mutations(contract)
         with self.assertRaisesRegex(ContractValidationError, "duplicated consent predicate"):

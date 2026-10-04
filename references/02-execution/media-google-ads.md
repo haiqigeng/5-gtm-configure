@@ -207,6 +207,9 @@ consent triggers, shared consumers, firing settings, references, and an idempote
 external conversion action, imported-event choice, feed, enhanced-conversion account settings, and
 publication explicitly separate.
 
+When Google Ads attribution is in scope, identify in the existing handoff the actual route covering
+Ads landing pages or the remaining coverage gap.
+
 ## Official entry points
 
 - https://support.google.com/google-ads/answer/7521212

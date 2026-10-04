@@ -58,7 +58,7 @@ class CurrentContractAndRunTest(unittest.TestCase):
                     source_locator="approved input",
                     timestamp="2026-08-18T00:00:00Z",
                 )
-                self.assertEqual(run["schema_version"], "4.0")
+                self.assertEqual(run["schema_version"], "5.0")
                 self.assertEqual(run["run"]["mode"], contract["mode"])
                 self.assertEqual(len(run["object_changes"]), expected_operations)
                 self.assertEqual(

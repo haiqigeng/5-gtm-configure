@@ -135,7 +135,7 @@ rerun no-op. Otherwise use the narrowest accurate `Partial`, `Blocked`, or `Defe
 ## Core decisions
 
 - The named-target request authorizes routine in-scope changes in its dedicated workspace.
-  Preserve pre-existing edits; deletion, replacement, shared settings, template permissions and
+  Preserve pre-existing edits; deletion, replacement, effects on existing shared consumers, template permissions and
   pipeline cutover need applicable explicit authority. Existing authorization persists.
 - Preserve approved analytics semantics. Media briefs establish business intent; current official
   vendor documentation establishes the vendor schema. Existing container patterns are evidence,

@@ -218,11 +218,10 @@ class EffectiveConfigurationGuardrailsTest(unittest.TestCase):
             ):
                 validate_document(contract)
 
-    def test_shared_settings_cannot_claim_routine_risk(self):
+    def test_settings_type_alone_does_not_require_high_impact(self):
         contract = settings_contract()
         contract["implementation"]["objects"][0]["risk"] = "routine"
-        with self.assertRaisesRegex(ContractValidationError, "high-impact"):
-            validate_document(contract)
+        validate_document(contract)
 
     def test_missing_tag_inventory_prevents_variable_only_mutation(self):
         run = create_from_contract(
@@ -239,9 +238,9 @@ class EffectiveConfigurationGuardrailsTest(unittest.TestCase):
             execute_ready_operations(path, registry)
             result = load_document(path)
         self.assertEqual(adapter.mutations, [])
-        self.assertEqual(result["object_changes"][0]["state"], "failed")
+        self.assertEqual(result["object_changes"][0]["state"], "planned")
         self.assertIn(
-            "required resource families", result["object_changes"][0]["journal"][-1]["error"]
+            "required resource families", result["target_results"][0]["baseline_error"]["error"]
         )
 
     def test_initial_execution_replaces_fabricated_baseline_with_actual_consumers(self):
@@ -279,9 +278,10 @@ class EffectiveConfigurationGuardrailsTest(unittest.TestCase):
             execute_ready_operations(path, registry)
             result = load_document(path)
         self.assertEqual(adapter.mutations, [])
-        self.assertTrue(all(item["state"] == "failed" for item in result["object_changes"]))
+        self.assertTrue(all(item["state"] == "planned" for item in result["object_changes"]))
         self.assertIn(
-            "every authenticated baseline consumer", str(result["object_changes"][0]["journal"])
+            "every authenticated baseline consumer",
+            str(result["target_results"][0]["baseline_error"]),
         )
 
     def test_readback_failure_after_a_successful_write_remains_uncertain(self):
@@ -291,6 +291,10 @@ class EffectiveConfigurationGuardrailsTest(unittest.TestCase):
         ):
 
             class ReadbackFailure(FakeAdapter):
+                def mutate(self, operation):
+                    super().mutate(operation)
+                    return None  # Partial response still requires readback.
+
                 def read(self, operation):
                     if operation["name"] in self.saved:
                         raise failure

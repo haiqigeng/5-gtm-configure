@@ -40,7 +40,7 @@ affected shared consumer requires it. Do not treat all available families as rel
 
 Use [configuration-contract.md](configuration-contract.md) and its compact-input compiler to derive
 object keys, source-bound approval records and explicit reuse dependencies. Keep business and
-implementation authority separate. Supply full intended and pre-change snapshots; do not manufacture
+implementation authority separate. Supply full intended snapshots and pre-change snapshots for existing-object changes; do not manufacture
 consent, page-view or first-party-data decisions. Required active-tag topologies remain explicit.
 A pipeline additionally needs transport, claiming Client, Event Data fields, receiver consumers,
 consent and any overlapping-delivery dedup contract.
@@ -58,13 +58,14 @@ revocation and pre-CMP events, [google-field-ownership.md](google-field-ownershi
 settings, and the pipeline references only for connected transport. Resolve an existing advanced
 route against the approved policy before writing; do not silently inherit or replace it.
 
-Render a preflight preview for review without adding a new approval pause to already-authorized
-routine work. Give a concise update once discovery and validation are complete.
+A separate rendered preflight preview is optional for already-authorized routine work. Give a
+concise change summary once discovery and validation are complete; render when it helps review.
 
 ## 7. Mutate in dependency order
 
 Bind authenticated adapters using [tool-adapters.md](tool-adapters.md). The runtime captures the
-baseline, verifies pre-change state, journals the write boundary and reads back each save. Do not
+baseline, verifies pre-change state, journals the write boundary and compares each save using a
+complete native response or an authoritative read when the response is insufficient. Do not
 hand-edit active run state. Drift stops the affected operation. An ambiguous outcome requires
 readback before retry; independent safe dependencies may continue.
 

@@ -69,6 +69,43 @@ def public_contract():
 
 
 class RedactionShapeTests(unittest.TestCase):
+    def test_source_authority_descriptor_metadata_is_scanned_without_false_positive(self):
+        from copy import deepcopy
+
+        from requirement_validation import validate_requirement
+
+        descriptor = {
+            "source": "user_data.email",
+            "source_shape": "string",
+            "destination_shape": "string",
+            "provenance": {
+                "grade": "official-current",
+                "locator": "https://support.google.com/google-ads/answer/13262500",
+            },
+            "source_authority": {
+                "grade": "approved-input",
+                "locator": "synthetic-fixtures.json#user_data.email",
+            },
+        }
+        requirement = {
+            "id": "REQ-EMAIL",
+            "authority": {"grade": "approved-input", "locator": "approved source"},
+            "parameters": {"email": descriptor},
+        }
+        self.assertEqual(validate_requirement(requirement, index=0, route="media"), "REQ-EMAIL")
+        self.assertEqual(sensitive_paths(requirement), [])
+        for key, value in (("locator", "person@example.test"), ("access_token", "private-value")):
+            changed = deepcopy(requirement)
+            changed["parameters"]["email"]["source_authority"][key] = value
+            self.assertIn(f"$.parameters.email.source_authority.{key}", sensitive_paths(changed))
+        for key in ("literal", "value", "type"):
+            changed = deepcopy(requirement)
+            changed["parameters"]["email"][key] = "person@example.test"
+            self.assertIn(f"$.parameters.email.{key}", sensitive_paths(changed))
+        changed = deepcopy(requirement)
+        changed["parameters"]["email"]["type"] = "string"
+        self.assertIn("$.parameters.email.type", sensitive_paths(changed))
+
     def test_reported_native_shapes_and_control_families(self):
         fixture = json.loads(
             (ROOT / "tests/fixtures/redaction-shapes.json").read_text(encoding="utf-8")

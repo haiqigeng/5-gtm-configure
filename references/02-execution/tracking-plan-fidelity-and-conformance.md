@@ -120,8 +120,8 @@ required.
 
 ## Prove exact conformance
 
-Before mutation, compare the approved analytics semantics with the intended event tags. After
-mutation, compare them with authoritative saved workspace fields. Require:
+At intake, compare the approved analytics semantics with intended requirements once. Use importer
+output (`approved-semantics.json`) directly when available. Require:
 
 - identical included requirement IDs;
 - identical destination and source event names;
@@ -136,11 +136,11 @@ enrichment.
 
 A zero-difference intended result may proceed. Any non-zero semantic difference must be corrected,
 classified as a blocking discrepancy, or supported by an explicit amended analytics decision. A
-zero-difference saved result is required for `Configured`.
+passing saved-native comparison with intent is required for `Configured`.
 
 ## Use the deterministic comparator
 
-Use `scripts/validate_contract_conformance.py` when the approved, intended, or saved contracts can be
+Use `scripts/validate_contract_conformance.py` when the approved and intended contracts can be
 represented as normalized JSON. The agent interprets the client artifact; the script verifies exact
 equality and never guesses workbook semantics.
 
@@ -155,12 +155,17 @@ Requirement and scope-list order is non-semantic. Nested arrays within a require
 order-sensitive. Adapter and repository metadata may remain outside `scope` and `requirements` and
 is ignored deliberately.
 
-Run before and after mutation:
+Run once at intake:
 
 ~~~powershell
 python "<skill-dir>/scripts/validate_contract_conformance.py" --approved approved.json --candidate intended.json
-python "<skill-dir>/scripts/validate_contract_conformance.py" --approved approved.json --candidate saved.json
 ~~~
 
 Exit code `0` means exact conformance, `1` means a deterministic difference, and `2` means invalid
 input or invocation. Preserve the concise JSON result with the implementation evidence.
+
+Do not author a saved semantic projection or repeat approved-versus-saved conformance. The fidelity
+chain is approved requirements -> intended requirements -> intended native configuration -> saved
+native configuration. The validator checks supported topologies and scalar GA4 bindings; the agent
+must review other supported scopes. The runtime compares saved native fields with reviewed intent.
+Removing the projection does not automate the middle link.

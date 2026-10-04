@@ -45,6 +45,7 @@ const tools = {
   write_stdin: async ({chars}) => {if (chars) worker.stdin.write(chars); return pull();},
   synthetic__gtm_tag: async args => {
     calls.push(args.action);
+    if (args.tagId === 'quota') { const error = new Error('private diagnostic'); error.status = 429; error.headers = {'Retry-After':'17'}; throw error; }
     if (args.tagId === 'sensitive') return {content:[{type:'text',text:JSON.stringify({access_token:'SYNTHETIC_ONLY'})}]};
     if (args.action === 'create') {
       assert.equal(args.createOrUpdateConfig.name, nativeName);
@@ -85,7 +86,7 @@ const fn = new AsyncFunction('pythonPath','scriptPath','runPath','profilesPath',
       return;
     }
     assert.equal(outputs.at(-1).status,'Synthetic relay done');
-    assert.equal(calls.length,4);
+    assert.equal(calls.length,5);
     assert.equal(commands.length,1, 'A persistent worker should be launched exactly once');
     assert(commands.every(command => !command.includes(nativeName) && !command.includes('SYNTHETIC_ONLY')));
     assert(!JSON.stringify(outputs).includes('SYNTHETIC_ONLY'));

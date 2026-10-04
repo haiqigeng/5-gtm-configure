@@ -1,5 +1,44 @@
 # Changelog
 
+## 10.3.0
+
+Released 2026-10-04.
+
+### Why This Release Matters
+
+Reduce repeated remote reads and local processing while preserving native-field verification.
+
+### What Changed
+
+- Validate native identities for every declared adapter family, including nameless Google tag configurations.
+- Recognize source-authority descriptor metadata while continuing to scan its contents for sensitive literals.
+- Compare complete write responses and final paginated listings; explicitly detect relevant name conflicts.
+- Keep locked runs in memory, validate boundaries and changed evidence, remove duplicate readbacks (run schema 5.0).
+- Recover target-local baseline failures and recognized quota rejections with bounded waits.
+- Derive exact mechanical declarations; remove type-only settings escalation and routine saved projections.
+- Resolve native built-in All Pages, Consent Initialization and Initialization triggers from the existing registry.
+- Resolve scalar GA4 event mappings inherited from one active, same-target Google tag with a proven destination.
+  Preserve event-level overrides and source checks; consult base settings only when the event field is absent.
+- Clarify paused-create behavior, Didomi no-regulation handling and conditional Ads landing-coverage handoff.
+
+### What Users Should Do
+
+Use the current package and materialize new run artifacts with schema 5.0. No older-schema migration is supplied.
+
+### Validation
+
+401 tests pass with relay tests required and none skipped. An independent 31-case before/after check
+verifies the resolver corrections, including full request compilation and run initialization. Lint,
+release structure and package/source identity checks pass. The runtime archive matches the independently
+reviewed candidate at SHA-256 `9c703e3185e1d395fe923422c0a2c1bf83eed792f4e0591ea1d06f3b34313380`.
+These static and transport tests do not establish completion of a particular live configuration.
+
+### Known Limits
+
+Concurrent name conflicts can be detected after partial unpublished changes. Native-to-intended comparison
+does not automate semantic review outside supported topologies and scalar GA4 bindings. No runtime certification.
+
+
 ## 10.2.0
 
 Released 2026-10-03.
@@ -332,7 +371,7 @@ Estimated single-event instruction load fell from 48,462 to 34,825 tokens; the a
   authorized server containers and connected web-to-server pipelines, while preserving v8.1 web
   behavior as the compatibility baseline.
 - Makes the useful unit of work the complete authorized pipeline: sender, claiming Client, Event
-  Data, server consumers, consent, data shape, and overlap strategy—without absorbing cloud
+  Data, server consumers, consent, data shape, and overlap strategyâ€”without absorbing cloud
   provisioning, runtime recette, publication, or external API development.
 
 ### What Changed

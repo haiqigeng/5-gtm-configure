@@ -86,7 +86,16 @@ try {
       } catch (error) {
         // Forward only a typed HTTP rejection, never infer application status from prose.
         const status = error?.statusCode ?? error?.status;
-        reply = {id: request.id, error: Number.isInteger(status) ? {code: status} : {}};
+        const rejection = Number.isInteger(status) ? {code: status} : {};
+        if (status === 429 || status === 403) {
+          const headers = error?.headers ?? error?.response?.headers;
+          const hint = headers?.get?.("retry-after") ?? headers?.["retry-after"] ?? headers?.["Retry-After"];
+          const seconds = typeof hint === "number" || typeof hint === "string" && hint.trim() !== ""
+            ? (/^\d+(?:\.\d+)?$/.test(String(hint)) ? Number(hint) : (Date.parse(String(hint)) - Date.now()) / 1000)
+            : NaN;
+          if (Number.isFinite(seconds) && seconds >= 0) rejection.retry_after_seconds = seconds;
+        }
+        reply = {id: request.id, error: rejection};
       }
       const payload = encode(JSON.stringify(reply));
       if (payload.length > maxHexSize) throw new Error("MCP response exceeds the documented in-memory transport limit");

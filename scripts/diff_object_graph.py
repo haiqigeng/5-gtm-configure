@@ -26,6 +26,8 @@ ROOT_METADATA_KEYS = {
     "templateId",
     "zoneId",
     "environmentId",
+    "destinationLinkId",
+    "gtagConfigId",
     "created_at",
     "updated_at",
     "createdAt",

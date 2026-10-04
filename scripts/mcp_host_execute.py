@@ -221,12 +221,30 @@ class SdkTransport:
             if code == "access_denied":
                 raise AdapterExecutionError(message, code=code) from None
             if code.startswith("http_rejection_"):
-                from mcp_adapter import unwrap
+                import httpx
+                from mcp_adapter import _retry_after, unwrap
 
+                pending_errors, seen_errors, hint = [exc], set(), None
+                while pending_errors:
+                    item = pending_errors.pop()
+                    if id(item) in seen_errors:
+                        continue
+                    seen_errors.add(id(item))
+                    if isinstance(item, httpx.HTTPStatusError):
+                        hint = _retry_after({"headers": dict(item.response.headers)}, None, None)
+                        break
+                    pending_errors.extend(getattr(item, "exceptions", ()))
+                    if item.__cause__ is not None:
+                        pending_errors.append(item.__cause__)
                 unwrap(
                     {
                         "isError": True,
-                        "structuredContent": {"error": {"code": int(code.rsplit("_", 1)[1])}},
+                        "structuredContent": {
+                            "error": {
+                                "code": int(code.rsplit("_", 1)[1]),
+                                "retry_after_seconds": hint,
+                            }
+                        },
                     },
                     mutation=mutation,
                 )

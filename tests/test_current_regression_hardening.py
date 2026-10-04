@@ -76,7 +76,7 @@ class CurrentRegressionHardeningTest(unittest.TestCase):
                 "capture_evidence": baseline["capture_evidence"],
             }
         )
-        self.assertEqual(validate_run(run)["schema_version"], "4.0")
+        self.assertEqual(validate_run(run)["schema_version"], "5.0")
 
     def test_web_contract_cannot_drop_topology_or_page_view_ownership(self) -> None:
         contract = valid_web_contract()

@@ -50,11 +50,14 @@ ownership as approved CMP inputs.
 
 ## Didomi
 
-Signal card checked 2026-09-29: `didomi-ready` occurs once at page load and can carry unknown state;
+Signal card checked 2026-10-04: `didomi-ready` occurs once at page load and can carry unknown state;
 `didomi-consent-changed` follows a user change; `didomi-consent` covers initial state and changes.
 `didomiVendorsEnabled`, `didomiVendorsDisabled` and `didomiVendorsUnknown` contain comma-separated
-vendor IDs with a trailing comma. Enabled vendors incorporate their required purposes. Match full
-tokens and verify the actual API ID and deployed value format; readiness alone is not a grant.
+vendor IDs with a trailing comma. Enabled vendors incorporate their required purposes. When no
+regulation applies, all notice vendors are enabled; vendors with only essential purposes can also
+be enabled. Enabled therefore means CMP eligibility, not necessarily explicit user opt-in; interpret
+it using the approved regional and collection policy. Match full tokens and verify the actual API ID
+and deployed value format; readiness alone is not a grant.
 Source: https://developers.didomi.io/cmp/web-sdk/third-parties/tags-management/events-and-variables
 
 Inspect the current Didomi web SDK, direct-site versus GTM deployment, documented readiness/change

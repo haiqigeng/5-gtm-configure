@@ -67,6 +67,7 @@ _DESCRIPTOR_METADATA_KEYS = {
     "source",
     "source_path",
     "provenance",
+    "source_authority",
     "source_shape",
     "destination_shape",
     "variable_reference",

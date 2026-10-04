@@ -105,6 +105,12 @@ settings, including a documented empty override. Duplicate fields, unresolved se
 cannot establish effective ownership. Trace variable indirection and affected existing consumers;
 checking only the field names directly visible on a tag is insufficient.
 
+For scalar GA4 event mappings, native destination identity (including a literal Constant) can
+establish one unpaused, same-target Google tag whose event settings supply defaults. Event-level
+settings and local rows override those defaults by exact parameter name. Ambiguous or unresolved
+base associations cannot prove inheritance. This static mapping check does not prove when shared
+variables are evaluated or that the Google tag initialized before the event.
+
 Before saving, expand every inherited Configuration Settings and Event Settings variable into each
 consumer's effective payload. Verify no event receives an unintended parameter, user property,
 ecommerce object, identifier, user-data field, destination, or consent behavior. Read back both the

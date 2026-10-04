@@ -161,15 +161,17 @@ class AuditRegressions(unittest.TestCase):
         class Source(FakeAdapter):
             def list_resource_page(self, family, cursor):
                 return {
-                    "items": [
+                    "items": super().list_resource_page(family, cursor)["items"]
+                    + [
                         {
                             "name": "Existing sensitive tag",
+                            "tagId": "sensitive-existing",
                             "type": "gaawe",
                             "parameter": [row("token_secret")],
                         }
                     ]
                     if family == "tag"
-                    else [],
+                    else super().list_resource_page(family, cursor)["items"],
                     "next_cursor": None,
                 }
 

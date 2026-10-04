@@ -204,7 +204,7 @@ class QuotaTest(unittest.TestCase):
             for mutation in (False, True):
                 with self.assertRaises(RateLimitError) as caught:
                     unwrap(response, mutation=mutation)
-                self.assertEqual(caught.exception.retry_after_seconds, 100)
+                self.assertIsNone(caught.exception.retry_after_seconds)
         for reasons in (
             [],
             [{"reason": "forbidden"}],
@@ -260,7 +260,8 @@ class QuotaTest(unittest.TestCase):
                     ):
                         self.refused = True
                         unwrap(quota(), mutation=True)
-                    return super().mutate(operation)
+                    result = super().mutate(operation)
+                    return result if phase == "mutation" else None
 
                 def read(self, operation):
                     if (

@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from diff_object_graph import ID_FIELDS
 from native_configuration import (
     CONFIGURATION_SETTINGS_TYPES,
     EVENT_SETTINGS_TYPES,
@@ -75,10 +76,44 @@ def required_baseline_families(operations: list[dict[str, Any]], container_type:
 
 
 def normalized_family(value: str) -> str:
-    family = _TOKEN.sub(" ", value.casefold()).strip()
+    family = value.casefold().strip()
     if family not in RESOURCE_FAMILIES:
         raise ResourceRegistryError(f"unsupported GTM resource family {value!r}")
     return family
+
+
+# Native inventory identity is separate from fields resolving semantic references.
+_SPECIAL_ID_FIELDS = {
+    "built-in variable": "type",
+    "container setting": "containerId",
+    "destination": "destinationLinkId",
+    "google tag configuration": "gtagConfigId",
+    "workspace": "workspaceId",
+}
+
+
+def native_inventory_identity(
+    family: str, resource: dict[str, Any], target: dict[str, Any]
+) -> tuple[str | None, str]:
+    """Read a native name/identity; Google tag configurations have no native name."""
+    field = _SPECIAL_ID_FIELDS.get(family)
+    if field is None:
+        field = next(key for key, value in ID_FIELDS.items() if value == family)
+    else:
+        scope = {"accountId": "account_id", "containerId": "container_id"}
+        if family in {"built-in variable", "google tag configuration"}:
+            scope["workspaceId"] = "workspace_id"
+        if any(resource.get(native) != target[authorized] for native, authorized in scope.items()):
+            raise ResourceRegistryError(
+                f"{family} inventory differs from the authorized native scope"
+            )
+    identity = resource.get(field)
+    if not isinstance(identity, str) or not identity.strip():
+        raise ResourceRegistryError(f"{family} inventory lacks native {field} evidence")
+    name = None if family == "google tag configuration" else resource.get("name")
+    if family != "google tag configuration" and (not isinstance(name, str) or not name.strip()):
+        raise ResourceRegistryError(f"{family} inventory lacks native name evidence")
+    return name, identity
 
 
 def semantic_object_key(target_id: str, resource_family: str, name: str) -> str:

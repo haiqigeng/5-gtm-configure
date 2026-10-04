@@ -3,8 +3,11 @@
 
 from __future__ import annotations
 
+import math
 import re
 from copy import deepcopy
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 from typing import Any, Callable
 
 from action_contract import validate_native_authoring
@@ -35,6 +38,33 @@ FAMILIES = {
     "template": ("gtm_template", "templateId"),
     "zone": ("gtm_zone", "zoneId"),
 }
+
+
+def _retry_after(response: dict, details: Any, error: Any) -> float | None:
+    for source in (error, details, response):
+        if not isinstance(source, dict):
+            continue
+        headers = source.get("headers", {})
+        values = [source.get("retry_after_seconds"), source.get("retryAfter")]
+        if isinstance(headers, dict):
+            values.extend(
+                value for key, value in headers.items() if key.casefold() == "retry-after"
+            )
+        for value in values:
+            if value is None or isinstance(value, bool):
+                continue
+            try:
+                seconds = float(value)
+            except (TypeError, ValueError):
+                try:
+                    seconds = (
+                        parsedate_to_datetime(str(value)) - datetime.now(timezone.utc)
+                    ).total_seconds()
+                except (TypeError, ValueError, OverflowError):
+                    continue
+            if math.isfinite(seconds) and seconds >= 0:
+                return seconds
+    return None
 
 
 def unwrap(response: Any, *, mutation: bool = False) -> Any:
@@ -73,10 +103,14 @@ def unwrap(response: Any, *, mutation: bool = False) -> Any:
         ):
             # A full GTM sliding window, through the existing bounded retry policy.
             raise RateLimitError(
-                "MCP endpoint rejected the request (403 quota)", retry_after_seconds=100
+                "MCP endpoint rejected the request (403 quota)",
+                retry_after_seconds=_retry_after(response, details, error),
             )
         if type(code) is int and code == 429:
-            raise RateLimitError("MCP endpoint rejected the request (429)")
+            raise RateLimitError(
+                "MCP endpoint rejected the request (429)",
+                retry_after_seconds=_retry_after(response, details, error),
+            )
         if type(code) is int and code in {400, 403, 404, 409, 422}:
             raise AdapterExecutionError("MCP endpoint rejected the request", code=f"http_{code}")
         if mutation:
@@ -338,7 +372,11 @@ class McpTargetAdapter:
         tool, id_field = FAMILIES[family]
         config = self.profile["families"][family]
         identifier = operation.get("object_id") or self.known_ids.get(operation["object_key"])
-        if not identifier and operation["action"] not in {"create", "remove"}:
+        if (
+            not identifier
+            and operation["action"] != "remove"
+            and not (operation["action"] == "create" and operation.get("state") != "planned")
+        ):
             # The complete baseline is only an ID hint; the following get still
             # verifies current contents and scope. Creates always prove absence.
             matches = [
@@ -348,6 +386,8 @@ class McpTargetAdapter:
                 raise AdapterExecutionError("Ambiguous GTM object identity")
             if matches:
                 identifier = str(matches[0][id_field])
+            elif operation["action"] == "create" and family in self.complete_families:
+                return None
         # Listing by exact identity also gives authoritative absence after removal.
         if not identifier or operation["action"] == "remove":
             items = collect_paginated(lambda cursor: self.list_resource_page(family, cursor))
@@ -377,6 +417,10 @@ class McpTargetAdapter:
         raw = self._find(operation)
         if raw is None:
             return None
+        return self.observation(operation, raw)
+
+    def observation(self, operation: dict, raw: dict) -> dict:
+        """Attach only the transitive native reference closure to one observation."""
         # A resumed process has no in-memory baseline cache. Load native reference
         # families before capturing this observation, even when the run is verified.
         referenced = {
@@ -394,12 +438,42 @@ class McpTargetAdapter:
         for family in sorted(referenced - self.complete_families):
             collect_paginated(lambda cursor, family=family: self.list_resource_page(family, cursor))
         context = []
-        for family, items in self.cache.items():
-            for item in items:
-                if item.get("name") != raw.get("name") or family != operation["resource_family"]:
-                    context.append(
-                        {**item, "target_id": operation["target_id"], "object_type": family}
+        pending = [raw]
+        seen = {
+            (operation["resource_family"], str(raw.get(FAMILIES[operation["resource_family"]][1])))
+        }
+        while pending:
+            body = pending.pop()
+            names = set(re.findall(r"\{\{([^{}]+)\}\}", str(body)))
+            ids = {}
+            for field, identifier in REFERENCE_FIELDS.items():
+                values = body.get(field, [])
+                ids.setdefault(ID_FIELDS[identifier], set()).update(
+                    str(v) for v in (values if isinstance(values, list) else [values])
+                )
+            sequencing = {
+                str(row.get("tagName")) for field in SEQUENCING_KEYS for row in body.get(field, [])
+            }
+            for family, items in self.cache.items():
+                identifier = FAMILIES[family][1]
+                for item in items:
+                    identity = (family, str(item.get(identifier)))
+                    relevant = (
+                        str(item.get(identifier)) in ids.get(family, set())
+                        or family == "variable"
+                        and item.get("name") in names
+                        or family == "tag"
+                        and (
+                            item.get("name") in sequencing
+                            or str(item.get(identifier)) in sequencing
+                        )
                     )
+                    if relevant and identity not in seen:
+                        seen.add(identity)
+                        context.append(
+                            {**item, "target_id": operation["target_id"], "object_type": family}
+                        )
+                        pending.append(item)
         return {
             "objects": [
                 {
@@ -539,4 +613,4 @@ class McpTargetAdapter:
                 for item in self.cache.get(family, [])
                 if str(item.get(id_field)) != str(raw[id_field])
             ] + [deepcopy(raw)]
-        return result
+        return self.observation(operation, raw) if action != "remove" else None

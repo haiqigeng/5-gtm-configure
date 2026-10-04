@@ -1,4 +1,4 @@
-"""Shared configuration-run@4.0 structure, state, and target validation."""
+"""Shared configuration-run@5.0 structure, state, and target validation."""
 
 from __future__ import annotations
 
@@ -10,6 +10,7 @@ from public_identifiers import public_identifier_paths, validate_public_identifi
 from redaction import sensitive_paths
 from resource_registry import (
     ResourceRegistryError,
+    native_inventory_identity,
     required_baseline_families,
     semantic_object_key,
     validate_target_family,
@@ -434,40 +435,66 @@ def _validate_target_records(document: dict[str, Any], target_types: dict[str, s
                     _fail(f"{path} refonte baseline does not cover the complete target surface")
         elif baseline.get("capture_evidence") is not None:
             _fail(f"{path}.capture_evidence must be null while incomplete")
+    inventory_targets = set()
+    for index, inventory in enumerate(document["final_inventories"]):
+        path = f"$.final_inventories[{index}]"
+        if not isinstance(inventory, dict) or set(inventory) != {
+            "target_id",
+            "observed_at",
+            "source_identity",
+            "resources",
+            "resource_pagination",
+        }:
+            _fail(f"{path} has missing or unexpected fields")
+        target_id = inventory["target_id"]
+        if target_id not in target_types or target_id in inventory_targets:
+            _fail(f"{path} has an unknown or duplicate target")
+        inventory_targets.add(target_id)
+        _timestamp(inventory["observed_at"], f"{path}.observed_at")
+        target = next(item for item in document["run"]["targets"] if item["target_id"] == target_id)
+        if inventory["source_identity"] != {
+            key: target[key]
+            for key in ("account_id", "container_id", "workspace_id", "container_type")
+        }:
+            _fail(f"{path}.source_identity differs from the authorized target")
+        resources = _object(inventory["resources"], f"{path}.resources")
+        pagination = _object(inventory["resource_pagination"], f"{path}.resource_pagination")
+        if not resources or set(resources) != set(pagination):
+            _fail(f"{path}.resource_pagination must cover captured families")
+        for family, values in resources.items():
+            validate_target_family(target_types[target_id], family)
+            for item in _array(values, f"{path}.resources.{family}"):
+                _object(item, f"{path}.resources.{family}[]")
+                try:
+                    native_inventory_identity(family, item, target)
+                except ResourceRegistryError as exc:
+                    _fail(f"{path}.resources.{family}: {exc}")
+            receipt = pagination[family]
+            if (
+                not isinstance(receipt, dict)
+                or set(receipt) != {"pages_read", "exhausted"}
+                or type(receipt["pages_read"]) is not int
+                or receipt["pages_read"] < 1
+                or receipt["exhausted"] is not True
+            ):
+                _fail(f"{path}.resource_pagination.{family} lacks exhaustion evidence")
     results = _array(document["target_results"], "$.target_results")
     result_ids = [item.get("target_id") for item in results if isinstance(item, dict)]
     if set(result_ids) != set(target_types) or len(result_ids) != len(target_types):
         _fail("$.target_results must contain exactly one record per target")
     for index, result in enumerate(results):
+        if "baseline_error" in result:
+            error = result["baseline_error"]
+            if not isinstance(error, dict) or set(error) != {"at", "error"}:
+                _fail(f"$.target_results[{index}].baseline_error has invalid fields")
+            _timestamp(error["at"], f"$.target_results[{index}].baseline_error.at")
+            _text(error["error"], f"$.target_results[{index}].baseline_error.error")
+            if any(
+                item["target_id"] == result["target_id"] and item["complete"] for item in baselines
+            ):
+                _fail("baseline_error requires an incomplete target baseline")
         if result.get("status") not in TARGET_STATUSES:
             _fail(f"$.target_results[{index}].status is unsupported")
-    operation_by_id = {item["operation_id"]: item for item in document["object_changes"]}
-    readback_by_operation: dict[str, dict[str, Any]] = {}
-    for index, readback in enumerate(_array(document["saved_readback"], "$.saved_readback")):
-        if not isinstance(readback, dict) or readback.get("target_id") not in target_types:
-            _fail(f"$.saved_readback[{index}] has an unknown target_id")
-        operation_id = readback.get("operation_id")
-        if operation_id not in operation_by_id:
-            _fail(f"$.saved_readback[{index}] has an unknown operation_id")
-        if operation_id in readback_by_operation:
-            _fail(f"$.saved_readback contains duplicate operation {operation_id!r}")
-        operation = operation_by_id[operation_id]
-        if readback.get("target_id") != operation["target_id"]:
-            _fail(f"$.saved_readback[{index}].target_id differs from its operation")
-        if readback.get("object_key") != operation["object_key"]:
-            _fail(f"$.saved_readback[{index}].object_key differs from its operation")
-        if readback.get("comparison") != operation.get("comparison"):
-            _fail(f"$.saved_readback[{index}].comparison differs from its operation")
-        if readback.get("saved") != operation.get("saved_readback"):
-            _fail(f"$.saved_readback[{index}].saved differs from its operation")
-        readback_by_operation[operation_id] = readback
-    verified_ids = {
-        operation_id
-        for operation_id, operation in operation_by_id.items()
-        if operation["state"] == "verified"
-    }
-    if set(readback_by_operation) != verified_ids:
-        _fail("$.saved_readback must contain exactly one record per verified operation")
 
 
 def validate_document(value: Any) -> dict[str, Any]:
@@ -485,7 +512,7 @@ def validate_document(value: Any) -> dict[str, Any]:
         "inventory_dispositions",
         "container_baselines",
         "dedup_contracts",
-        "saved_readback",
+        "final_inventories",
         "target_results",
         "official_sources",
         "external_dependencies",

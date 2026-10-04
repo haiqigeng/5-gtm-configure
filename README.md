@@ -7,15 +7,16 @@ object graphs. It never publishes and never substitutes configuration for runtim
 
 ## Current Release
 
-**v10.2.0** fixes native readback, scoped field mapping, independent-target recovery and
-credential detection, while reducing repeated identity requests. It replaces the disk queue with
-a bounded in-memory MCP relay and adds ChatGPT Ads playbooks, complete Meta matching bindings,
-and clearer Google user-data, consent and server ownership guidance.
+**v10.3.0** reduces repeated remote reads and local processing while preserving native-field
+verification and relevant name-conflict checks. It improves target-local recovery, derives exact
+mechanical declarations, and resolves native built-in triggers and Google-tag event-parameter
+inheritance without requiring repeated settings on each event tag.
 The packaged relay supports Codex on Windows with Python 3.11+ and PowerShell 7. Claude Code and
 Gemini CLI use the optional official MCP SDK runner with the same engine. Approved non-purchase
 pipelines can configure one reviewed template-generated shared event ID. This update changes only configure-gtm.
-The release passed 369 tests and an assisted live API configuration exercise with 870 independent
-saved-state assertions. These checks do not certify website or vendor runtime behavior.
+The release passed 401 tests, including required relay tests, and 31 independent static checks for
+the resolver corrections. Live acceptance remains specific to each implementation; these checks
+do not certify website or vendor runtime behavior.
 See CHANGELOG.md for validation and known limitations.
 
 Existing coverage includes GTM server Clients, Event Data variables, server triggers/tags/templates,
@@ -29,7 +30,7 @@ topology. Hold those requirements without inventing ordinary triggers; they are 
 this release's field-test acceptance.
 
 Mutation contracts use only `configuration-contract@7.0`; execution uses only
-`configuration-run@4.0`. Obsolete contract/run schemas and upgrade paths are intentionally absent.
+`configuration-run@5.0`. Obsolete contract/run schemas and upgrade paths are intentionally absent.
 
 ## North Star
 
@@ -189,7 +190,7 @@ extensions.
 - `references/02-execution/`: web playbooks plus conditional `pipeline/` and `server/`
   guidance.
 - `references/03-judgement/`: saved-state acceptance and configuration-result guidance.
-- `schemas/`: current contract 7.0 and run 4.0 schemas.
+- `schemas/`: current contract 7.0 and run 5.0 schemas.
 - `scripts/configuration_run.py`: current-only CLI over split validation/state/render modules.
 - `scripts/adapter_runtime.py`: target registry, capability-local execution, redaction, and
   dependency containment.
@@ -211,10 +212,10 @@ follow [host execution](references/02-execution/tool-adapters.md#claude-code-and
 python -m pip install -e ".[dev]"
 python -m ruff format --no-cache --check scripts tests
 python -m ruff check --no-cache scripts tests
-python scripts/check_release.py --tag v10.2.0 --release-notes CHANGELOG.md
+python scripts/check_release.py --tag v10.3.0 --release-notes CHANGELOG.md
 python -m unittest discover -s tests -v
 python -m compileall -q scripts
-python scripts/build_skill_package.py --output dist/configure-gtm-v10.2.0.zip
+python scripts/build_skill_package.py --output dist/configure-gtm-v10.3.0.zip
 git diff --check
 ~~~
 

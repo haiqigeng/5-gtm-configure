@@ -10,7 +10,7 @@ Before opening a pull request, run:
 python -m pip install -e ".[dev]"
 python -m ruff format --no-cache --check scripts tests
 python -m ruff check --no-cache scripts tests
-python scripts/check_release.py --tag v10.2.0 --release-notes CHANGELOG.md
+python scripts/check_release.py --tag v10.3.0 --release-notes CHANGELOG.md
 python -m unittest discover -s tests -v
 python -m compileall -q scripts
 python scripts/build_skill_package.py --output dist/configure-gtm-test.zip
@@ -26,7 +26,7 @@ Keep supported web behavior covered by current regression tests, keep platform-s
 rules in their conditional counterparts, and never add publication or runtime-certification behavior.
 
 The release reads and executes only current artifacts. New behavior belongs in contract 7.0/run
-4.0. Remove obsolete paths instead of adding compatibility formats, migrations, or fallbacks.
+5.0. Remove obsolete paths instead of adding compatibility formats, migrations, or fallbacks.
 `run_validation_web.py` is a focused shared authority for current web-domain semantics; it must not
 regain a second controller, state model, renderer, or CLI.
 

@@ -16,7 +16,7 @@
 
 For every server or pipeline run, and for a web refonte, destructive/replace action, shared
 consumer, template permission change, multi-product consent decision, multi-destination graph, or
-resumable multi-write operation, maintain one `configuration-run@4.0` JSON artifact from preflight
+resumable multi-write operation, maintain one `configuration-run@5.0` JSON artifact from preflight
 through final readback. Its schema is
 [`configuration-run.schema.json`](../../schemas/configuration-run.schema.json).
 The JSON Schemas provide structural/editor validation. The packaged contract and run validators
@@ -138,7 +138,7 @@ not a credential.
 
 ## Machine-readable run record
 
-The validated `configuration-run@4.0` artifact is the machine-readable configuration result. It
+The validated `configuration-run@5.0` artifact is the machine-readable configuration result. It
 exists for deterministic mutation, recovery, saved-state proof, and human result rendering. It is
 not a recette input or acceptance authority; runtime recette independently uses the tracking plan
 and live GTM/Preview evidence.
@@ -234,3 +234,27 @@ unverified flag cannot authorize an exemption. Metadata preserves evidence, not 
 Packaged MCP startup validates all profile structures before authenticated calls. Identity lookup
 failures are recorded per target and reach the same baseline/dependency failure handling: independent
 authorized targets continue, and operations depending on the failed target remain stopped.
+
+## Evidence reuse and recovery
+
+The locked runtime validates input/resumed state and final consistency, checks changed transitions and
+new observations, and durably journals each write boundary. Baseline failures are recorded once on
+`target_results[].baseline_error`; unattempted operations remain planned and normal resume retries
+the missing baseline. Other targets continue.
+
+Complete create/update responses are compared directly. Partial or ambiguous responses require an
+authoritative read; complete mismatching responses cannot verify writes. Create absence uses the
+exhausted baseline plus successful writes in the current cache. Final paginated inventories detect
+relevant names resolving to distinct IDs, including referenced names even when an ID is known.
+A conflict or incomplete final identity listing prevents Configured; preserve unrelated objects.
+Concurrent writers can therefore cause partial unpublished changes before a conflict is detected.
+
+Complete final listing bodies also supply field verification; trimmed bodies require targeted reads.
+Small stable-ID updates without a name/reference inventory requirement retain targeted reads. Native
+observations keep only their reference closure. Per-operation `saved_readback` and later final
+observations remain distinct; `final_inventories` retains broader final captures once. There is no
+duplicate top-level saved-readback array.
+
+Recognized non-applied quota rejections preserve usable Retry-After hints. Without a hint, wait 100
+seconds with at most two retries. Authentication, daily exhaustion and ambiguous writes remain
+separate. Hints exceeding the configured bound stop execution rather than cause an early retry.

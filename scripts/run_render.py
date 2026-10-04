@@ -1,4 +1,4 @@
-"""Human configuration-result rendering for configuration-run@4.0."""
+"""Human configuration-result rendering for configuration-run@5.0."""
 
 from __future__ import annotations
 
@@ -304,6 +304,11 @@ def render_markdown(document: dict[str, Any], *, embed_machine: bool = False) ->
             alerts.append(
                 f"- **{_cell(label)}: {_cell(name)}** in {_cell(baseline['target_id'])} at {_cell(finding['path'])} ({_cell(finding['detector'])}). {_cell(action)} Values are omitted; live publication and host-log exposure are not established by this report."
             )
+    for result in document["target_results"]:
+        if result.get("baseline_error"):
+            alerts.append(
+                f"- **Baseline unavailable: {_cell(result['target_id'])}** — {_cell(result['baseline_error']['error'])}. No write was attempted; resume retries the baseline."
+            )
     for operation in operations:
         if operation.get("error"):
             alerts.append(
@@ -588,7 +593,7 @@ def render_markdown(document: dict[str, Any], *, embed_machine: bool = False) ->
             "",
             "## Machine-readable run record",
             "",
-            "- Schema: configure-gtm/configuration-run@4.0",
+            "- Schema: configure-gtm/configuration-run@5.0",
             f"- Run ID: {_cell(run['id'])}",
             f"- Contract fingerprint: {_cell(run['contract']['fingerprint'])}",
         ]

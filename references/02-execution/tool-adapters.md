@@ -27,6 +27,16 @@ identity. Discover get/list/create/update/remove per family independently; unsup
 block only their dependency subtree. Client and Transformation support does not follow from tag
 support. Scope is governed by [utility-contract.md](../01-orientation/utility-contract.md).
 
+Native inventories retain each family's real identity: built-in variable `type`, destination
+`destinationLinkId`, Google tag configuration `gtagConfigId`, container `containerId`, and
+workspace `workspaceId`. Container settings expose only the authorized Container singleton;
+workspace listings may include siblings for name conflict detection, but the selected workspace
+must match the authorized target. These identities do not extend semantic-reference resolution.
+Google tag configurations have no native name: keep the approved operation label local to the
+comparison graph and retain the saved native ID and workspace scope for final identity lookup.
+Exhausted listings still establish named-family conflicts; missing identity evidence cannot be
+replaced by a targeted GET. A partial native body can use a targeted GET after identity proof.
+
 ## Packaged MCP adapter
 
 `scripts/mcp_adapter.py` supplies `McpTargetAdapter` and `scripts/mcp_transport.py` supplies `StdioTransport` for the callable GTM

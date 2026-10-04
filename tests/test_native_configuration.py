@@ -376,11 +376,18 @@ class NativeScopeExecutionTests(unittest.TestCase):
                 }
             result, adapters = self.execute(approve_mutations(contract), ConsumerAdapter)
             self.assertEqual(adapters[0].mutations, [])
-            self.assertEqual(result["object_changes"][0]["state"], "failed")
+            self.assertEqual(result["object_changes"][0]["state"], "failed" if late else "planned")
             expected = (
                 "unreviewed current consumers" if late else "every authenticated baseline consumer"
             )
-            self.assertIn(expected, str(result["object_changes"][0]["journal"]))
+            self.assertIn(
+                expected,
+                str(
+                    result["object_changes"][0]["journal"]
+                    if late
+                    else result["target_results"][0]["baseline_error"]
+                ),
+            )
 
 
 if __name__ == "__main__":

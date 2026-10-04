@@ -25,7 +25,6 @@ from mcp_adapter import McpTargetAdapter, unwrap  # noqa: E402
 from public_identifiers import public_identifier_paths, validate_public_identifiers  # noqa: E402
 from redaction import redact_for_persistence, sensitive_paths  # noqa: E402
 from resource_registry import requires_variable_consumer_check  # noqa: E402
-from run_state import reopen_failed_operation  # noqa: E402
 from run_validation_web import RunValidationError, _first_party_binding_value  # noqa: E402
 from test_current_adapter_runtime import FakeAdapter, capabilities  # noqa: E402
 from test_google_ads_enhanced_conversions import event_override_contract  # noqa: E402
@@ -266,21 +265,14 @@ class NativeAndRecoveryTests(unittest.TestCase):
             execute_ready_operations(path, registry)
             self.assertFalse(adapter.mutations)
             failed = load_document(path)
-            for operation in list(failed["object_changes"]):
-                failed = reopen_failed_operation(
-                    failed, operation_id=operation["operation_id"], note="Read-only outage resolved"
-                )
-            atomic_write(path, failed)
+            self.assertTrue(all(o["state"] == "planned" for o in failed["object_changes"]))
+            self.assertIn(
+                "read-only failure", failed["target_results"][0]["baseline_error"]["error"]
+            )
             execute_ready_operations(path, registry)
             result = load_document(path)
             self.assertTrue(all(o["state"] == "verified" for o in result["object_changes"]))
-            self.assertTrue(
-                any(
-                    "read-only failure" in (e.get("error") or "")
-                    for o in result["object_changes"]
-                    for e in o["journal"]
-                )
-            )
+            self.assertNotIn("baseline_error", result["target_results"][0])
 
     def test_only_complete_notes_delta_skips_consumer_scan(self):
         before = {"type": "c", "parameter": [{"key": "value", "type": "template", "value": "a"}]}

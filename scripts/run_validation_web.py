@@ -11,6 +11,7 @@ from urllib.parse import urlparse
 
 from native_configuration import (
     FieldResolutionError,
+    effective_event_parameters,
     effective_fields,
     field_key,
     local_fields,
@@ -379,6 +380,51 @@ def _configured_destinations(
     return candidates
 
 
+def _resolved_event_parameter(owner, operations, variables, field):
+    """Use associated Google-tag defaults only for an absent event-level field."""
+    event_fields = effective_event_parameters(_effective_target(owner, "native mapping"), variables)
+    if field in event_fields:
+        return event_fields[field]
+    base = _associated_google_tag(owner, operations)
+    return effective_event_parameters(base or {}, variables)[field]
+
+
+def _associated_google_tag(
+    owner: dict[str, Any], operations: list[dict[str, Any]]
+) -> dict[str, Any] | None:
+    """Resolve one active same-target Google tag from native destination identity.
+
+    Unresolved or ambiguous associations cannot contribute inherited parameters.
+    This is configuration proof only, not proof of initialization or evaluation time.
+    """
+    scoped = {
+        item["object_key"]: item
+        for item in operations
+        if item.get("target_id") == owner.get("target_id")
+        and item.get("action") not in NON_EXECUTING_TAG_ACTIONS
+    }
+    path = f"native mapping {owner.get('object_key')}"
+    try:
+        destinations = _configured_destinations(_effective_target(owner, path), scoped, path)
+    except ValueError:
+        return None
+    if len(destinations) != 1 or any("{{" in value or "}}" in value for value in destinations):
+        return None
+    bases = []
+    for item in scoped.values():
+        if (item.get("resource_family") or item.get("object_type")) != "tag":
+            continue
+        target = _effective_target(item, path)
+        if target.get("type") != "googtag" or target.get("paused") is True:
+            continue
+        try:
+            if destinations <= _configured_destinations(target, scoped, path):
+                bases.append(target)
+        except ValueError:
+            continue
+    return bases[0] if len(bases) == 1 else None
+
+
 def _configured_transport_endpoint(
     operation: dict[str, Any],
     operations: dict[str, dict[str, Any]],
@@ -557,7 +603,7 @@ def _resolved_trigger_types(
     operations: dict[str, dict[str, Any]],
     baseline_trigger_types: dict[str, str],
 ) -> dict[str, str]:
-    resolved = dict(baseline_trigger_types)
+    resolved = {**baseline_trigger_types, **BUILT_IN_TRIGGER_TYPES}
     for operation in operations.values():
         if (
             operation["object_type"] != "trigger"

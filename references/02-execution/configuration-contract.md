@@ -102,7 +102,7 @@ change detection, not independent proof of user approval. Follow the
 
 For typed resources (tags, triggers, variables, Clients, and Transformations), retain `type` in
 every applicable intended and pre-change snapshot. Use complete snapshots, even when the adapter
-accepts a patch. A shared Google Configuration Settings mutation is high impact and must account
+accepts a patch. A Google settings-variable change must account
 for consumers of its old and new type, including a type change or removal.
 
 Web resource families are the complete supported surface: tag, trigger, variable, built-in variable,
@@ -193,7 +193,7 @@ declared outgoing field set, and approved sources/literals. The scoped native ev
 connect supported implementation fields to that declaration; other structures and automatic
 product behavior remain inspected ownership decisions.
 
-The validated contract deterministically materializes active `configuration-run@4.0` sections.
+The validated contract deterministically materializes active `configuration-run@5.0` sections.
 Do not hand-edit requirements, pipelines, immutable operation intention/dependencies, payload maps,
 consent topologies, dedup contracts, or publication dependencies; section fingerprints detect
 drift. Adapters may populate baselines, journals, readbacks, comparisons, and results only.
@@ -274,3 +274,10 @@ For inventory-assisted preparation, add `--inventory inventory.json` to the firs
 
 Review the compiled delta against the user's approved scope, then execute with the same adapter
 runtime. Existing authorization covers routine mechanical materialization; a hash is not new consent.
+
+The compiler fills source-event trigger declarations only for a sole native `{{_event}} equals X`
+condition matching the linked approved source event. Direct scalar DLV binding fields require a unique
+approved source through an explicit V2 DLV without formatValue transformations, matching shapes,
+and explicit missing behavior. Ambiguous, transformed, consent,
+lifecycle, destination and cross-target decisions remain explicit. New Google settings variables are
+not high-impact solely by type; current consumer analysis still applies.

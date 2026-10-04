@@ -19,7 +19,6 @@ from public_identifiers import public_identifier_paths, validate_public_identifi
 from redaction import sensitive_paths
 from resource_registry import (
     ResourceRegistryError,
-    is_google_settings_mutation,
     semantic_object_key,
     validate_target_family,
 )
@@ -232,8 +231,6 @@ def _validate_targets(raw: Any, mode: str) -> dict[str, dict[str, Any]]:
 
 def _object_is_high_impact(item: dict[str, Any]) -> bool:
     family = item["resource_family"]
-    if is_google_settings_mutation(item):
-        return True
     if item["action"] in {"remove", "replace", "pause", "unpause"}:
         return True
     if family not in HIGH_IMPACT_RESOURCE_FAMILIES:

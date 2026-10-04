@@ -84,8 +84,9 @@ sets must equal the tag target's `firingTriggerId` and `blockingTriggerId` array
 Element Visibility, Scroll Depth, YouTube, History Change, Timer, JavaScript Error, or Trigger Group
 must retain its real type; never relabel it as a Custom Event to satisfy the artifact.
 
-Do not assign a target execution topology to a removed or paused tag. Preserve its exact
-`pre_change` trigger/consent state and authorized disposition instead.
+Do not assign a target execution topology when the authorized action is `pause` or `remove`;
+preserve the exact `pre_change` trigger/consent state and disposition instead. Creating a fully
+configured tag with `intended.paused` set to `true` still requires the execution topology above.
 
 Classify Page View, DOM Ready, Window Loaded, Initialization, and Consent Initialization as
 page-load lifecycle triggers, never as event-driven source triggers. Under strict/basic consent,

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import os
-import random
 import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
@@ -45,16 +44,12 @@ class ConfigurationAdapter(Protocol):
 
 def _retry_delay(
     error: RateLimitError,
-    retry_index: int,
     *,
-    base_delay_seconds: float,
     max_delay_seconds: float,
-    random_value: Callable[[], float],
 ) -> float | None:
     if error.retry_after_seconds is not None:
         return error.retry_after_seconds if error.retry_after_seconds <= max_delay_seconds else None
-    cap = min(base_delay_seconds * (2**retry_index), max_delay_seconds)
-    return max(0.0, min(1.0, random_value())) * cap
+    return 100.0 if max_delay_seconds >= 100.0 else None
 
 
 def collect_paginated(
@@ -62,19 +57,15 @@ def collect_paginated(
     *,
     max_pages: int = 1000,
     max_rate_limit_retries: int = 2,
-    base_retry_delay_seconds: float = 0.5,
     max_retry_delay_seconds: float = 100.0,
     sleep: Callable[[float], None] = time.sleep,
-    random_value: Callable[[], float] = random.random,
 ) -> list[dict[str, Any]]:
     items, _ = collect_paginated_with_receipt(
         fetch_page,
         max_pages=max_pages,
         max_rate_limit_retries=max_rate_limit_retries,
-        base_retry_delay_seconds=base_retry_delay_seconds,
         max_retry_delay_seconds=max_retry_delay_seconds,
         sleep=sleep,
-        random_value=random_value,
     )
     return items
 
@@ -84,18 +75,11 @@ def collect_paginated_with_receipt(
     *,
     max_pages: int = 1000,
     max_rate_limit_retries: int = 2,
-    base_retry_delay_seconds: float = 0.5,
     max_retry_delay_seconds: float = 100.0,
     sleep: Callable[[float], None] = time.sleep,
-    random_value: Callable[[], float] = random.random,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     """Collect one authenticated listing and create the exhaustion receipt internally."""
-    if (
-        max_pages < 1
-        or max_rate_limit_retries < 0
-        or base_retry_delay_seconds < 0
-        or max_retry_delay_seconds < 0
-    ):
+    if max_pages < 1 or max_rate_limit_retries < 0 or max_retry_delay_seconds < 0:
         raise ValueError("page/retry limits and retry delays must be non-negative")
     cursor: str | None = None
     seen_cursors: set[str] = set()
@@ -108,14 +92,11 @@ def collect_paginated_with_receipt(
                 page = fetch_page(cursor)
                 break
             except RateLimitError as exc:
-                if retries >= max_rate_limit_retries:
+                if retries >= min(max_rate_limit_retries, 2):
                     raise
                 delay = _retry_delay(
                     exc,
-                    retries,
-                    base_delay_seconds=base_retry_delay_seconds,
                     max_delay_seconds=max_retry_delay_seconds,
-                    random_value=random_value,
                 )
                 if delay is None:
                     raise

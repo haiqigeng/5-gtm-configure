@@ -87,7 +87,12 @@ class FakeAdapter:
         if name in self.existing:
             if operation.get("pre_change") is not None:
                 return {"name": operation["name"], **deepcopy(operation["pre_change"])}
-            return deepcopy(expected_graph(operation))
+            self.saved[name] = expected_graph(operation)
+            if operation.get("object_id"):
+                self.saved[name]["objects"][0][operation["resource_family"] + "Id"] = operation[
+                    "object_id"
+                ]
+            return deepcopy(self.saved[name])
         return None
 
     def mutate(self, operation: dict) -> dict | None:
@@ -100,12 +105,24 @@ class FakeAdapter:
             raise AdapterExecutionError("documented target rejection", code="target_rejected")
         self.mutations.append(name)
         self.saved[name] = expected_graph(operation)
+        if operation.get("object_id"):
+            self.saved[name]["objects"][0][operation["resource_family"] + "Id"] = operation[
+                "object_id"
+            ]
         return deepcopy(self.saved[name])
 
     def list_resource_page(self, resource_family: str, cursor: str | None) -> dict:
         if cursor is not None:
             raise AssertionError("fake adapter has only one baseline page")
-        return {"items": [], "next_cursor": None}
+        from diff_object_graph import ID_FIELDS
+
+        id_field = next(key for key, value in ID_FIELDS.items() if value == resource_family)
+        items = []
+        for name, graph in {**self.saved, **self.read_overrides}.items():
+            for raw in graph.get("objects", []):
+                if raw.get("object_type") == resource_family:
+                    items.append({id_field: name, **deepcopy(raw)})
+        return {"items": items, "next_cursor": None}
 
     def list_workspace_changes_page(self, cursor: str | None) -> dict:
         if cursor is not None:
@@ -154,7 +171,7 @@ class CurrentAdapterRuntimeTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / "run.json"
             atomic_write(path, run)
-            execute_ready_operations(path, registry, sleep=lambda _: None, random_value=lambda: 0)
+            execute_ready_operations(path, registry, sleep=lambda _: None)
             result = load_document(path)
         baseline = result["container_baselines"][0]
         self.assertEqual(
@@ -183,7 +200,6 @@ class CurrentAdapterRuntimeTest(unittest.TestCase):
                 registry,
                 max_rate_limit_retries=0,
                 sleep=lambda _: None,
-                random_value=lambda: 0,
             )
             persisted = path.read_text(encoding="utf-8")
         self.assertIn("documented rate limit", persisted)
@@ -207,7 +223,7 @@ class CurrentAdapterRuntimeTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / "run.json"
             atomic_write(path, run)
-            execute_ready_operations(path, registry, sleep=lambda _: None, random_value=lambda: 0)
+            execute_ready_operations(path, registry, sleep=lambda _: None)
             persisted = path.read_text(encoding="utf-8")
         self.assertNotIn("TOPSECRET123", persisted)
         self.assertIn("unexpected_adapter_failure", persisted)
@@ -227,11 +243,11 @@ class CurrentAdapterRuntimeTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / "run.json"
             atomic_write(path, run)
-            execute_ready_operations(path, registry, sleep=lambda _: None, random_value=lambda: 0)
+            execute_ready_operations(path, registry, sleep=lambda _: None)
             result = load_document(path)
         self.assertEqual(adapter.mutations, [])
         errors = [
-            entry.get("error", "") for item in result["object_changes"] for entry in item["journal"]
+            item.get("baseline_error", {}).get("error", "") for item in result["target_results"]
         ]
         self.assertTrue(any("authenticated adapter identity differs" in value for value in errors))
 
@@ -257,7 +273,6 @@ class CurrentAdapterRuntimeTest(unittest.TestCase):
                 registry,
                 timestamp=lambda: "2026-08-18T00:00:01Z",
                 sleep=lambda _: None,
-                random_value=lambda: 0,
             )
             mutation_count = len(adapter.mutations)
             proof = verify_idempotent_rerun(
@@ -283,7 +298,7 @@ class CurrentAdapterRuntimeTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / "run.json"
             atomic_write(path, run)
-            execute_ready_operations(path, registry, sleep=lambda _: None, random_value=lambda: 0)
+            execute_ready_operations(path, registry, sleep=lambda _: None)
             drifted_operation = run["object_changes"][0]
             drifted_name = drifted_operation["name"]
             drifted = expected_graph(drifted_operation)
@@ -313,7 +328,6 @@ class CurrentAdapterRuntimeTest(unittest.TestCase):
                 registry,
                 timestamp=lambda: "2026-08-18T00:00:01Z",
                 sleep=lambda _: None,
-                random_value=lambda: 0,
             )
             with self.assertRaisesRegex(Exception, "newer than verification"):
                 verify_idempotent_rerun(path, registry, timestamp=lambda: "2026-08-18T00:00:01Z")
@@ -352,7 +366,6 @@ class CurrentAdapterRuntimeTest(unittest.TestCase):
                 registry,
                 timestamp=lambda: "2026-08-18T00:00:01Z",
                 sleep=kwargs.pop("sleep", lambda _: None),
-                random_value=lambda: 0,
                 **kwargs,
             )
             return load_document(path), adapters

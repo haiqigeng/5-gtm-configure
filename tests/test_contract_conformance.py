@@ -9,14 +9,10 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SCRIPT = ROOT / "scripts" / "validate_contract_conformance.py"
+SCRIPT = ROOT / "scripts/configure_gtm.py"
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from import_ga4_tracking_plan_handoff import (  # noqa: E402
-    HandoffError,
-    normalized_approved_semantics,
-    verify_delivery,
-)
+from gtm_configure.intake.ga4 import HandoffError, normalized_approved_semantics, verify_delivery
 
 
 def contract(*requirements: dict, scope: dict | None = None) -> dict:
@@ -59,6 +55,7 @@ class ContractConformanceTest(unittest.TestCase):
                 [
                     sys.executable,
                     str(SCRIPT),
+                    "conformance",
                     "--approved",
                     str(approved_path),
                     "--candidate",
@@ -256,12 +253,12 @@ class ContractConformanceTest(unittest.TestCase):
             self.assertEqual(requirement["source_order"], 1)
             self.assertNotIn("measurement_opportunity_ids", requirement)
             self.assertEqual(
-                requirement["parameters"]["event::form_name"]["source"],
+                requirement["parameters"]["form_name"]["source"],
                 "event_data.form_name",
             )
-            imported_field = requirement["parameters"]["event::form_name"]
-            self.assertEqual(imported_field["source_shape"], "string")
-            self.assertEqual(imported_field["destination_shape"], "string")
+            imported_field = requirement["parameters"]["form_name"]
+            self.assertEqual(imported_field["source_shape"], "scalar:string")
+            self.assertEqual(imported_field["destination_shape"], "scalar:string")
             self.assertEqual(imported_field["source_authority"]["grade"], "approved-input")
             plan_path.write_text(
                 plan_path.read_text(encoding="utf-8").replace(

@@ -7,14 +7,6 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "scripts"), str(ROOT / "tests")]
-from adapter_runtime import (  # noqa: E402
-    TargetAdapterRegistry,
-    execute_ready_operations,
-    verify_idempotent_rerun,
-)
-from compile_configuration_request import compile_request  # noqa: E402
-from configuration_run import atomic_write, create_from_contract, load_document  # noqa: E402
-from consent_conventions import validate_convention  # noqa: E402
 from fixtures.mcp_behavior_scenario import (  # noqa: E402
     PROFILE,
     FakeGtm,
@@ -22,10 +14,22 @@ from fixtures.mcp_behavior_scenario import (  # noqa: E402
     param,
     request,
 )
-from mcp_adapter import McpTargetAdapter  # noqa: E402
-from redaction import sensitive_findings  # noqa: E402
-from run_render import analyst_field_changes, render_markdown  # noqa: E402
-from validate_configuration_contract import validate_document  # noqa: E402
+from gtm_configure.adapters.mcp import McpTargetAdapter  # noqa: E402
+from gtm_configure.contract import validate_document  # noqa: E402
+from gtm_configure.core.privacy import sensitive_findings  # noqa: E402
+from gtm_configure.domain.consent import validate_convention  # noqa: E402
+from gtm_configure.intake.request import compile_request  # noqa: E402
+from gtm_configure.render import analyst_field_changes, render_markdown  # noqa: E402
+from gtm_configure.runtime.adapter_protocol import atomic_write
+from gtm_configure.runtime.engine import (
+    TargetAdapterRegistry,
+    execute_ready_operations,
+    verify_idempotent_rerun,
+)
+from gtm_configure.runtime.state import (
+    create_from_contract,
+    load_document,  # noqa: E402
+)
 
 
 def ungated_request():

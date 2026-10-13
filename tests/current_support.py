@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from copy import deepcopy
 
-from action_contract import build_mutation_approval
+from gtm_configure.core.validation import canonical_sha256
+from gtm_configure.domain.actions import build_mutation_approval
 
 _MUTATING_ACTIONS = {"create", "update", "replace", "rename", "pause", "unpause", "remove"}
 
@@ -14,6 +15,8 @@ def approve_mutations(contract: dict) -> dict:
         for requirement in contract["requirements"]
     }
     for item in contract["implementation"]["objects"]:
+        for assertion in item.get("assertions", {}).values():
+            assertion["native_sha256"] = canonical_sha256(item["intended"])
         if item["action"] in _MUTATING_ACTIONS:
             item["approval"] = build_mutation_approval(item, locators[item["requirement_ids"][0]])
         else:
@@ -147,7 +150,7 @@ def valid_pipeline_contract(*, cutover: bool = False) -> dict:
     pipeline["cutover_operation_key"] = web_key
     return approve_mutations(
         {
-            "schema_version": "7.0",
+            "schema_version": "8.0",
             "mode": "pipeline",
             "route": "analytics",
             "scope": {"included": ["REQ-PAGE"], "reference_only": [], "excluded": []},
@@ -223,9 +226,15 @@ def valid_pipeline_contract(*, cutover: bool = False) -> dict:
                         "justification": "Reuses the compatible default GA4 claiming Client",
                         "evidence": ["official-current", "container-confirmed"],
                         "risk": "routine",
+                        "assertions": {
+                            "client_claim": {
+                                "description": "Default GA4 Client claims GA4 collect requests",
+                                "evidence_locator": "Synthetic native Client inspection",
+                                "native_sha256": "pending",
+                            }
+                        },
                         "intended": {
                             "type": "ga4-client",
-                            "claim_criteria": "Default GA4 Client claims GA4 collect requests",
                             "priority": 10,
                         },
                     },
@@ -433,7 +442,7 @@ def valid_web_contract() -> dict:
 
 def with_complete_baselines(run: dict) -> dict:
     """Explicit synthetic baseline setup for offline controller tests."""
-    from run_state import _record_target_baseline
+    from gtm_configure.runtime.state import _record_target_baseline
 
     for target in run["run"]["targets"]:
         resources = {
@@ -807,6 +816,14 @@ def add_nonpurchase_dual_dedup(contract: dict) -> dict:
             "justification": "Read the exact transported occurrence identifier",
             "evidence": ["approved-input"],
             "risk": "routine",
+            "assertions": {
+                "event_data": {
+                    "key_path": "event_id",
+                    "claiming_client_proof": "Synthetic inspected GA4 Client event_id mapping",
+                    "evidence_locator": "Synthetic Event Data inspection",
+                    "native_sha256": "pending",
+                }
+            },
             "intended": {
                 "type": "ed",
                 "parameter": [{"type": "template", "key": "keyPath", "value": "event_id"}],

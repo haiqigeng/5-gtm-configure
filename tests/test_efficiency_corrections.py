@@ -11,28 +11,42 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "scripts"), str(ROOT / "tests")]
-from adapter_runtime import (  # noqa: E402
+from current_support import approve_mutations, valid_web_contract  # noqa: E402
+from fixtures.mcp_behavior_scenario import PROFILE, FakeGtm, bind, request  # noqa: E402
+from gtm_configure.adapters.mcp import McpTargetAdapter  # noqa: E402
+from gtm_configure.contract import ContractValidationError, validate_document  # noqa: E402
+from gtm_configure.core.privacy import (  # noqa: E402
+    contains_redacted,
+    redact_for_persistence,
+    sensitive_findings,
+)
+from gtm_configure.core.public_identifiers import (  # noqa: E402
+    canonical_template_source,
+    public_identifier_paths,
+)
+from gtm_configure.intake.request import compile_request  # noqa: E402
+from gtm_configure.runtime.adapter_protocol import (  # noqa: E402
+    AdapterExecutionError,
+    AuthenticationError,
+    atomic_write,
+)
+from gtm_configure.runtime.engine import (
     RateLimitError,
     TargetAdapterRegistry,
     execute_ready_operations,
     verify_idempotent_rerun,
 )
-from adapter_support import AdapterExecutionError, AuthenticationError  # noqa: E402
-from compile_configuration_request import compile_request  # noqa: E402
-from configuration_run import atomic_write, create_from_contract, load_document  # noqa: E402
-from current_support import approve_mutations, valid_web_contract  # noqa: E402
-from fixtures.mcp_behavior_scenario import PROFILE, FakeGtm, bind, request  # noqa: E402
-from mcp_adapter import McpTargetAdapter  # noqa: E402
-from public_identifiers import canonical_template_source, public_identifier_paths  # noqa: E402
-from redaction import contains_redacted, redact_for_persistence, sensitive_findings  # noqa: E402
-from test_current_adapter_runtime import FakeAdapter, capabilities  # noqa: E402
-from test_google_ads_enhanced_conversions import event_override_contract  # noqa: E402
-from validate_configuration_contract import ContractValidationError, validate_document  # noqa: E402
-from verification import (  # noqa: E402
+from gtm_configure.runtime.state import (
+    create_from_contract,
+    load_document,  # noqa: E402
+)
+from gtm_configure.runtime.verification import (
     build_pre_write_comparison,
     build_verification_comparison,
     expected_graph,
 )
+from test_current_adapter_runtime import FakeAdapter, capabilities  # noqa: E402
+from test_google_ads_enhanced_conversions import event_override_contract  # noqa: E402
 
 SOURCE = '\ufeff\ufeff___INFO___\n{"id":"original", "name":"Fixture"}\n\n___WEB_PERMISSIONS___\n[{"key":"read", "value":true}]\n\n___SANDBOXED_JS_FOR_WEB_TEMPLATE___\nconst x = 1;\n\n___TESTS___\nassertThat("test@example.org");\n'
 NATIVE = '___INFO___\n{\n "name": "Fixture", "id": "original"\n}\n___WEB_PERMISSIONS___\n[ { "value": true, "key": "read" } ]\n___SANDBOXED_JS_FOR_WEB_TEMPLATE___\nconst x = 1;\n___TESTS___\nassertThat("test@example.org");\n'
@@ -253,7 +267,8 @@ class RecoveryCorrectionsTests(unittest.TestCase):
                 result = subprocess.run(
                     [
                         sys.executable,
-                        str(ROOT / "scripts/configuration_run.py"),
+                        str(ROOT / "scripts/configure_gtm.py"),
+                        "run",
                         "render",
                         "--run",
                         str(path),
@@ -413,8 +428,8 @@ def meta_matching_contract(fields=("em", "ph")):
         req["parameters"][name] = {
             **original,
             "source": source,
-            "source_shape": "scalar",
-            "destination_shape": "scalar",
+            "source_shape": "scalar:string",
+            "destination_shape": "scalar:string",
         }
         rows.append(
             {

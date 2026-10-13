@@ -11,26 +11,40 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "scripts"), str(ROOT / "tests")]
 
-from action_contract import validate_native_authoring  # noqa: E402
-from adapter_runtime import TargetAdapterRegistry, execute_ready_operations  # noqa: E402
-from adapter_support import (  # noqa: E402
+from current_support import approve_mutations, valid_web_contract  # noqa: E402
+from gtm_configure.adapters.mcp import McpTargetAdapter, unwrap  # noqa: E402
+from gtm_configure.contract import ContractValidationError, validate_document  # noqa: E402
+from gtm_configure.core.privacy import redact_for_persistence, sensitive_paths  # noqa: E402
+from gtm_configure.core.public_identifiers import (  # noqa: E402
+    public_identifier_paths,
+    validate_public_identifiers,
+)
+from gtm_configure.core.validation import RunValidationError
+from gtm_configure.domain.actions import validate_native_authoring  # noqa: E402
+from gtm_configure.domain.first_party_data import _first_party_binding_value  # noqa: E402
+from gtm_configure.domain.resources import requires_variable_consumer_check  # noqa: E402
+from gtm_configure.runtime.adapter_protocol import (
     AdapterExecutionError,
     AmbiguousWriteError,
     AuthenticationError,
     RateLimitError,
+    atomic_write,
 )
-from configuration_run import atomic_write, create_from_contract, load_document  # noqa: E402
-from current_support import approve_mutations, valid_web_contract  # noqa: E402
-from mcp_adapter import McpTargetAdapter, unwrap  # noqa: E402
-from public_identifiers import public_identifier_paths, validate_public_identifiers  # noqa: E402
-from redaction import redact_for_persistence, sensitive_paths  # noqa: E402
-from resource_registry import requires_variable_consumer_check  # noqa: E402
-from run_validation_web import RunValidationError, _first_party_binding_value  # noqa: E402
+from gtm_configure.runtime.engine import (  # noqa: E402
+    TargetAdapterRegistry,
+    execute_ready_operations,
+)
+from gtm_configure.runtime.state import (
+    create_from_contract,
+    load_document,  # noqa: E402
+)
+from gtm_configure.runtime.verification import (  # noqa: E402
+    build_verification_comparison,
+    expected_graph,
+)
 from test_current_adapter_runtime import FakeAdapter, capabilities  # noqa: E402
 from test_google_ads_enhanced_conversions import event_override_contract  # noqa: E402
 from test_shared_event_id import generated_contract  # noqa: E402
-from validate_configuration_contract import ContractValidationError, validate_document  # noqa: E402
-from verification import build_verification_comparison, expected_graph  # noqa: E402
 
 
 def sender_generated_contract():

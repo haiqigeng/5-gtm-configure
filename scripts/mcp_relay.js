@@ -1,4 +1,4 @@
-// Run in Codex functions.exec with absolute pythonPath, scriptPath (mcp_execute.py),
+// Run in Codex functions.exec with absolute pythonPath, scriptPath (configure_gtm.py),
 // runPath and profilesPath. For read-only discovery supply discoveryPath and
 // discoveryOutputPath instead of runPath. Optional callTimeoutSeconds/runTimeoutSeconds.
 // The relay starts its worker. Responses stay in memory and never enter shell code.
@@ -24,7 +24,7 @@ if (typeof tools.exec_command !== "function" || typeof tools.write_stdin !== "fu
 const allowed = new Set(["gtm_tag", "gtm_trigger", "gtm_variable", "gtm_folder", "gtm_client", "gtm_transformation", "gtm_template", "gtm_zone"]);
 const maxHexSize = 64 * 1024 * 1024;
 const inputArgs = discoveryMode ? `--discover (${psPath(inputPath)}) --output (${psPath(discoveryOutputPath)})` : `--run (${psPath(inputPath)})`;
-const command = `$ErrorActionPreference='Stop'; if ($PSVersionTable.PSVersion.Major -lt 7) { throw 'PowerShell 7 or newer is required' }; & (${psPath(pythonPath)}) -B (${psPath(scriptPath)}) ${inputArgs} --profiles (${psPath(profilesPath)}) --call-timeout ${callTimeout}`;
+const command = `$ErrorActionPreference='Stop'; if ($PSVersionTable.PSVersion.Major -lt 7) { throw 'PowerShell 7 or newer is required' }; & (${psPath(pythonPath)}) -B (${psPath(scriptPath)}) mcp ${inputArgs} --profiles (${psPath(profilesPath)}) --call-timeout ${callTimeout}`;
 const started = Date.now();
 let lastUpdate = started;
 let calls = 0;

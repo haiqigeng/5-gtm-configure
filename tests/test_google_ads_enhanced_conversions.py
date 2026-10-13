@@ -8,20 +8,25 @@ from copy import deepcopy
 from pathlib import Path
 
 from jsonschema import Draft202012Validator
+from schema_support import schema_registry
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 sys.path.insert(0, str(ROOT / "tests"))
 
-from adapter_runtime import (  # noqa: E402
+from current_support import approve_mutations, valid_web_contract  # noqa: E402
+from gtm_configure.contract import ContractValidationError, validate_document  # noqa: E402
+from gtm_configure.runtime.adapter_protocol import atomic_write
+from gtm_configure.runtime.engine import (
     TargetAdapterRegistry,
     execute_ready_operations,
     verify_idempotent_rerun,
 )
-from configuration_run import atomic_write, create_from_contract, load_document  # noqa: E402
-from current_support import approve_mutations, valid_web_contract  # noqa: E402
+from gtm_configure.runtime.state import (
+    create_from_contract,
+    load_document,  # noqa: E402
+)
 from test_current_adapter_runtime import FakeAdapter, capabilities  # noqa: E402
-from validate_configuration_contract import ContractValidationError, validate_document  # noqa: E402
 
 
 def event_override_contract() -> dict:
@@ -283,7 +288,8 @@ class EnhancedConversionsTests(unittest.TestCase):
             (run, "configuration-run.schema.json"),
         ]:
             Draft202012Validator(
-                json.loads((ROOT / "schemas" / filename).read_text(encoding="utf-8"))
+                json.loads((ROOT / "schemas" / filename).read_text(encoding="utf-8")),
+                registry=schema_registry(),
             ).validate(value)
         adapter = FakeAdapter()
         adapter.bind_target(run["run"]["targets"][0])

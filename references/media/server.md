@@ -1,0 +1,56 @@
+# Shared server media destination framework
+
+## Contents
+
+- [Select the vendor guide](#select-the-vendor-guide)
+- [Identify the exact route](#identify-the-exact-route)
+- [Inspect the implementation surface](#inspect-the-implementation-surface)
+- [Map independently](#map-independently)
+- [Reconcile overlap](#reconcile-overlap)
+- [Fail closed](#fail-closed)
+
+## Select the vendor guide
+
+Load only the named product and delivery surface:
+
+[Affiliate](../vendors/affiliate/server.md), [Chatgpt Ads](../vendors/chatgpt-ads/server.md), [Criteo](../vendors/criteo/server.md), [Floodlight](../vendors/floodlight/server.md), [Google Ads](../vendors/google-ads/server.md), [Linkedin](../vendors/linkedin/server.md), [Meta](../vendors/meta/server.md), [Microsoft Ads](../vendors/microsoft-ads/server.md), [Pinterest](../vendors/pinterest/server.md), [Reddit](../vendors/reddit/server.md), [Snapchat](../vendors/snapchat/server.md), [Tiktok](../vendors/tiktok/server.md), [X](../vendors/x/server.md).
+
+
+## Identify the exact route
+
+Start from the media brief: platform, server product, business event, destination identity, use, and
+credentials owner. Classify the implementation as native GTM server tag, vendor-supported GTM
+route, inspected compatible community template, or no proved GTM route. An official CAPI endpoint
+does not imply an official GTM server template.
+
+## Inspect the implementation surface
+
+Record installed template publisher/version, fields, permissions, allowed network hosts, secret
+handling, automatic Event Data mapping, hashing, batching, responses, and dedup behavior. Import,
+upgrade, code edit, or permission expansion requires explicit authority.
+
+## Map independently
+
+Map each business event and field from the approved source through wire and Event Data into the
+exact current server schema. Keep event names, time/action source, asset IDs, click/cookie IDs,
+matching data, ecommerce/item projections, consent, and missing behavior product-specific. Never
+translate GA4 `items` to `contents` by label alone.
+
+## Reconcile overlap
+
+Choose browser-only, server-only/replacement, dual delivery with one shared vendor-documented ID,
+or template-native dedup. Preserve current companion fields, assets, event names, and windows. The
+browser and server tags must consume one occurrence source; the server never regenerates it.
+
+In a server-only authorization, a pre-existing browser route remains an external dependency: record
+its owner, exact occurrence source/field, asset and event match, and required browser disposition.
+Do not claim a verified dual-delivery dedup contract or browser replacement without an authorized
+web target. Field-test that overlap only after the external owner confirms the matching browser
+configuration; otherwise hold the overlapping destination while independent server-only routes may
+continue.
+
+## Fail closed
+
+Block the destination when the product, official server schema, supported GTM implementation,
+template permissions/hosts, credentials owner, source shape, consent signal, or dedup path cannot be
+proved. Continue independent destinations whose dependency subtrees remain safe.

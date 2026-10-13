@@ -4,16 +4,16 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "configure-gtm"
-version = "10.3.0"
+version = "11.0.0"
 description = "Operational web, server, and connected-pipeline GTM configuration skill"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.11"
-dependencies = []
+dependencies = ["jsonschema>=4.23,<5"]
 
 [project.optional-dependencies]
 mcp = ["mcp>=1.30,<2"]
-dev = ["jsonschema>=4.23,<5", "ruff>=0.12,<1", "mcp>=1.30,<2"]
+dev = ["pytest>=8,<10", "ruff>=0.12,<1", "mcp>=1.30,<2"]
 
 [tool.setuptools]
 packages = []
@@ -24,3 +24,7 @@ line-length = 100
 
 [tool.ruff.lint]
 select = ["E4", "E7", "E9", "F", "I"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["E402"]
+"tools/check_release.py" = ["E402"]

@@ -9,14 +9,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "scripts"), str(ROOT / "tests")]
 
-from adapter_runtime import (  # noqa: E402
-    TargetAdapterRegistry,
-    execute_ready_operations,
-    verify_idempotent_rerun,
-)
-from configuration_run import atomic_write, create_from_contract, load_document  # noqa: E402
 from current_support import approve_mutations  # noqa: E402
-from native_configuration import (  # noqa: E402
+from gtm_configure.contract import ContractValidationError, validate_document  # noqa: E402
+from gtm_configure.domain.native import (
     FieldResolutionError,
     effective_fields,
     local_fields,
@@ -24,15 +19,21 @@ from native_configuration import (  # noqa: E402
     sensitive_fields,
     variable_consumers,
 )
-from run_validation_web import (  # noqa: E402
-    _configured_destinations,
-    _effective_configuration_value,
+from gtm_configure.domain.web_native import _configured_destinations, _effective_configuration_value
+from gtm_configure.runtime.adapter_protocol import atomic_write
+from gtm_configure.runtime.engine import (
+    TargetAdapterRegistry,
+    execute_ready_operations,
+    verify_idempotent_rerun,
+)
+from gtm_configure.runtime.state import (
+    create_from_contract,
+    load_document,  # noqa: E402
 )
 from test_current_adapter_runtime import FakeAdapter, capabilities  # noqa: E402
 from test_effective_configuration_guardrails import settings_contract  # noqa: E402
 from test_google_ads_enhanced_conversions import event_override_contract  # noqa: E402
 from test_utility_evolution import ads_transport_contract  # noqa: E402
-from validate_configuration_contract import ContractValidationError, validate_document  # noqa: E402
 
 
 def table(key, name="user_data", value="{{UPD - Approved conversion}}"):

@@ -13,21 +13,23 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "scripts"), str(ROOT / "tests")]
-from adapter_runtime import TargetAdapterRegistry, execute_ready_operations, verify_idempotent_rerun
-from adapter_support import AdapterExecutionError
-from compile_configuration_request import compile_request
-from configuration_run import (
-    atomic_write,
-    checkpoint_operation,
-    create_from_contract,
-    load_document,
-)
-from diff_object_graph import GraphError
 from fixtures.mcp_behavior_scenario import PROFILE, FakeGtm, request
-from mcp_adapter import McpTargetAdapter
-from strict_json import validate_output_paths
+from gtm_configure.adapters.mcp import McpTargetAdapter
+from gtm_configure.comparison.native import GraphError
+from gtm_configure.core.json_io import validate_output_paths
+from gtm_configure.intake.request import compile_request
+from gtm_configure.runtime.adapter_protocol import AdapterExecutionError, atomic_write
+from gtm_configure.runtime.engine import (
+    TargetAdapterRegistry,
+    execute_ready_operations,
+    verify_idempotent_rerun,
+)
+from gtm_configure.runtime.state import checkpoint_operation, create_from_contract, load_document
+from gtm_configure.runtime.verification import (
+    build_pre_write_comparison,
+    build_verification_comparison,
+)
 from test_utility_audit_corrections import additional_request
-from verification import build_pre_write_comparison, build_verification_comparison
 
 
 class NativeBoundaryTests(unittest.TestCase):
@@ -375,11 +377,8 @@ class OutputAliasTests(unittest.TestCase):
                                 before = {p: p.read_bytes() for p in [input_path, *paths.values()]}
                                 args = [
                                     sys.executable,
-                                    str(
-                                        ROOT
-                                        / "scripts"
-                                        / ("mcp_host_execute.py" if host else "mcp_execute.py")
-                                    ),
+                                    str(ROOT / "scripts/configure_gtm.py"),
+                                    "mcp-host" if host else "mcp",
                                     "--" + mode,
                                     str(input_path),
                                     "--profiles",

@@ -14,16 +14,25 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "scripts"), str(ROOT / "tests")]
 
-from adapter_support import AdapterExecutionError  # noqa: E402
-from compile_configuration_request import compile_request  # noqa: E402
-from configuration_run import atomic_write, create_from_contract, load_document  # noqa: E402
-from diff_object_graph import GraphError, normalize_graph  # noqa: E402
 from fixtures.mcp_behavior_scenario import PROFILE, FakeGtm, param, request  # noqa: E402
-from mcp_adapter import McpTargetAdapter  # noqa: E402
-from mcp_discovery import discover  # noqa: E402
-from mcp_execute import execute  # noqa: E402
-from redaction import redact_for_persistence  # noqa: E402
-from verification import build_verification_comparison, expected_graph  # noqa: E402
+from gtm_configure.adapters.discovery import discover  # noqa: E402
+from gtm_configure.adapters.mcp import McpTargetAdapter  # noqa: E402
+from gtm_configure.cli.mcp import execute  # noqa: E402
+from gtm_configure.comparison.native import GraphError, normalize_graph  # noqa: E402
+from gtm_configure.core.privacy import redact_for_persistence  # noqa: E402
+from gtm_configure.intake.request import compile_request  # noqa: E402
+from gtm_configure.runtime.adapter_protocol import (
+    AdapterExecutionError,  # noqa: E402
+    atomic_write,
+)
+from gtm_configure.runtime.state import (
+    create_from_contract,
+    load_document,  # noqa: E402
+)
+from gtm_configure.runtime.verification import (  # noqa: E402
+    build_verification_comparison,
+    expected_graph,
+)
 
 
 class PreparationTests(unittest.TestCase):
@@ -119,7 +128,7 @@ class PreparationTests(unittest.TestCase):
         contract = compile_request(self.compact_request(), inventory=inventory)
         # The saved CMP signal no longer matches the inspected compatibility target.
         backend.data["variable"]["103"]["parameter"][0]["value"] = "changed.signal"
-        from adapter_runtime import TargetAdapterRegistry, execute_ready_operations
+        from gtm_configure.runtime.engine import TargetAdapterRegistry, execute_ready_operations
 
         registry = TargetAdapterRegistry()
         target = contract["targets"][0]
@@ -245,7 +254,8 @@ class PreparationTests(unittest.TestCase):
                     [
                         sys.executable,
                         "-B",
-                        str(ROOT / "scripts/mcp_host_execute.py"),
+                        str(ROOT / "scripts/configure_gtm.py"),
+                        "mcp-host",
                         "--host",
                         host,
                         "--config",

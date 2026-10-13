@@ -9,13 +9,6 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 sys.path.insert(0, str(ROOT / "tests"))
 
-from configuration_run import (  # noqa: E402
-    build_pre_write_comparison,
-    build_verification_comparison,
-    checkpoint_operation,
-    create_from_contract,
-    reopen_failed_operation,
-)
 from current_support import (  # noqa: E402
     add_nonpurchase_dual_dedup,
     approve_mutations,
@@ -24,20 +17,21 @@ from current_support import (  # noqa: E402
     valid_web_contract,
     with_complete_baselines,
 )
-from redaction import (  # noqa: E402
-    redact_for_persistence,
-    redacted_marker,
-    sensitive_paths,
+from gtm_configure.contract import ContractValidationError
+from gtm_configure.contract import validate_document as validate_contract  # noqa: E402
+from gtm_configure.core.privacy import redact_for_persistence, redacted_marker, sensitive_paths
+from gtm_configure.core.validation import RunValidationError  # noqa: E402
+from gtm_configure.render import render_markdown  # noqa: E402
+from gtm_configure.runtime.state import (
+    _finalize_adapter_verified_document,  # noqa: E402
+    checkpoint_operation,
+    create_from_contract,
+    reopen_failed_operation,
 )
-from run_render import render_markdown  # noqa: E402
-from run_state import _finalize_adapter_verified_document  # noqa: E402
-from run_validation_core import validate_document as validate_run  # noqa: E402
-from run_validation_web import RunValidationError  # noqa: E402
-from validate_configuration_contract import (  # noqa: E402
-    ContractValidationError,
-)
-from validate_configuration_contract import validate_document as validate_contract  # noqa: E402
-from verification import (  # noqa: E402
+from gtm_configure.runtime.validation import validate_document as validate_run  # noqa: E402
+from gtm_configure.runtime.verification import (
+    build_pre_write_comparison,
+    build_verification_comparison,
     canonical_sha256,
     expected_graph,
     materialization_fingerprints,
@@ -76,7 +70,7 @@ class CurrentRegressionHardeningTest(unittest.TestCase):
                 "capture_evidence": baseline["capture_evidence"],
             }
         )
-        self.assertEqual(validate_run(run)["schema_version"], "5.0")
+        self.assertEqual(validate_run(run)["schema_version"], "6.0")
 
     def test_web_contract_cannot_drop_topology_or_page_view_ownership(self) -> None:
         contract = valid_web_contract()

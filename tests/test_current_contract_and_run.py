@@ -9,15 +9,12 @@ from copy import deepcopy
 from pathlib import Path
 
 from jsonschema import Draft202012Validator
+from schema_support import schema_registry
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 sys.path.insert(0, str(ROOT / "tests"))
 
-from configuration_run import (  # noqa: E402
-    checkpoint_operation,
-    create_from_contract,
-)
 from current_support import (  # noqa: E402
     add_nonpurchase_dual_dedup,
     complete_capture_evidence,
@@ -25,22 +22,25 @@ from current_support import (  # noqa: E402
     valid_server_contract,
     valid_web_contract,
 )
-from redaction import (  # noqa: E402
+from gtm_configure.contract import ContractValidationError
+from gtm_configure.contract import validate_document as validate_contract
+from gtm_configure.core.privacy import (
     REDACTED_STATE,
     redact_for_persistence,
     redacted_marker,
     safe_equal,
     sensitive_paths,
 )
-from run_state import _record_target_baseline  # noqa: E402
-from run_validation_web import RunValidationError  # noqa: E402
-from validate_configuration_contract import (  # noqa: E402
-    ContractValidationError,
+from gtm_configure.core.validation import RunValidationError  # noqa: E402
+from gtm_configure.runtime.state import (
+    _record_target_baseline,  # noqa: E402
+    checkpoint_operation,
+    create_from_contract,
 )
-from validate_configuration_contract import (  # noqa: E402
-    validate_document as validate_contract,
+from gtm_configure.runtime.verification import (  # noqa: E402
+    build_verification_comparison,
+    expected_graph,
 )
-from verification import build_verification_comparison, expected_graph  # noqa: E402
 
 
 class CurrentContractAndRunTest(unittest.TestCase):
@@ -58,7 +58,7 @@ class CurrentContractAndRunTest(unittest.TestCase):
                     source_locator="approved input",
                     timestamp="2026-08-18T00:00:00Z",
                 )
-                self.assertEqual(run["schema_version"], "5.0")
+                self.assertEqual(run["schema_version"], "6.0")
                 self.assertEqual(run["run"]["mode"], contract["mode"])
                 self.assertEqual(len(run["object_changes"]), expected_operations)
                 self.assertEqual(
@@ -76,14 +76,23 @@ class CurrentContractAndRunTest(unittest.TestCase):
         Draft202012Validator.check_schema(contract_schema)
         Draft202012Validator.check_schema(run_schema)
         contract = valid_pipeline_contract()
-        self.assertEqual(list(Draft202012Validator(contract_schema).iter_errors(contract)), [])
+        self.assertEqual(
+            list(
+                Draft202012Validator(contract_schema, registry=schema_registry()).iter_errors(
+                    contract
+                )
+            ),
+            [],
+        )
         run = create_from_contract(
             contract,
             run_id="RUN-SCHEMA",
             source_locator="approved input",
             timestamp="2026-08-18T00:00:00Z",
         )
-        self.assertEqual(list(Draft202012Validator(run_schema).iter_errors(run)), [])
+        self.assertEqual(
+            list(Draft202012Validator(run_schema, registry=schema_registry()).iter_errors(run)), []
+        )
 
     def test_materialization_is_deterministic_and_contract_owned(self) -> None:
         contract = valid_pipeline_contract()
@@ -105,7 +114,7 @@ class CurrentContractAndRunTest(unittest.TestCase):
         with self.assertRaisesRegex(
             RunValidationError, "differ from deterministic materialization"
         ):
-            from run_validation_core import validate_document
+            from gtm_configure.runtime.validation import validate_document
 
             validate_document(tampered)
 
@@ -119,9 +128,7 @@ class CurrentContractAndRunTest(unittest.TestCase):
 
         contract = valid_pipeline_contract()
         contract["implementation"]["objects"][2]["resource_family"] = "client"
-        with self.assertRaisesRegex(
-            ContractValidationError, "duplicate object identity|object_key"
-        ):
+        with self.assertRaisesRegex(ContractValidationError, "priority.*required property"):
             validate_contract(contract)
 
     def test_receiver_dependencies_are_required_before_cutover(self) -> None:
@@ -158,10 +165,13 @@ class CurrentContractAndRunTest(unittest.TestCase):
             validate_contract(contract)
 
         contract = valid_pipeline_contract()
-        contract["implementation"]["objects"][1]["intended"]["claim_criteria"] = (
+        contract["implementation"]["objects"][1]["assertions"]["client_claim"]["description"] = (
             "Different request claim"
         )
-        with self.assertRaisesRegex(ContractValidationError, "claim criteria differs"):
+        with self.assertRaisesRegex(
+            ContractValidationError,
+            "claiming_client must bind the reviewed native Client assertion",
+        ):
             validate_contract(contract)
 
     def test_consent_rejects_accidental_double_gate_and_missing_event_coverage(self) -> None:
@@ -220,7 +230,7 @@ class CurrentContractAndRunTest(unittest.TestCase):
 
         internal_fallback = deepcopy(contract)
         internal_fallback["dedup_contracts"][0]["source_type"] = "gtm-event-scoped-fallback"
-        with self.assertRaisesRegex(ContractValidationError, "source_type is unsupported"):
+        with self.assertRaisesRegex(ContractValidationError, "source_type.*is not one of"):
             validate_contract(internal_fallback)
 
         separate = deepcopy(contract)
@@ -352,7 +362,8 @@ class CurrentContractAndRunTest(unittest.TestCase):
             baseline = subprocess.run(
                 [
                     sys.executable,
-                    str(ROOT / "scripts" / "configuration_run.py"),
+                    str(ROOT / "scripts/configure_gtm.py"),
+                    "run",
                     "baseline",
                 ],
                 cwd=ROOT,
@@ -380,7 +391,8 @@ class CurrentContractAndRunTest(unittest.TestCase):
             checkpoint = subprocess.run(
                 [
                     sys.executable,
-                    str(ROOT / "scripts" / "configuration_run.py"),
+                    str(ROOT / "scripts/configure_gtm.py"),
+                    "run",
                     "checkpoint",
                     "--run",
                     str(run_path),

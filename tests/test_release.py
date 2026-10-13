@@ -1,221 +1,423 @@
-from __future__ import annotations
+"""Offline release regression suite. No credentials, network, or live GTM writes."""
 
-import subprocess
+import json
 import sys
-import tempfile
-import unittest
+from copy import deepcopy
+from datetime import date
 from pathlib import Path
-from zipfile import ZipFile
 
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "scripts"))
+import pytest
 
-from check_release import assigned_string_constant  # noqa: E402
+ROOT = Path(__file__).resolve().parent
+SKILL = ROOT.parent
+FIXTURES = ROOT / "fixtures"
+sys.path.insert(0, str(SKILL / "scripts"))
+from gtm_configure.comparison.conformance import compare
+from gtm_configure.comparison.native import differences
+from gtm_configure.contract import validate_document as validate_contract
+from gtm_configure.core.json_io import loads_strict
+from gtm_configure.core.validation import canonical_sha256
+from gtm_configure.domain.fields import _field_mappings
+from gtm_configure.domain.native import supports_native_mapping
+from gtm_configure.intake.ga4 import normalized_approved_semantics
+from gtm_configure.intake.request import compile_request
+from gtm_configure.runtime.engine import (
+    TargetAdapterRegistry,
+    execute_ready_operations,
+    verify_idempotent_rerun,
+)
+from gtm_configure.runtime.state import create_from_contract, load_document
+from gtm_configure.runtime.validation import validate_document as validate_run
+from gtm_configure.runtime.verification import materialization_fingerprints
 
 
-class ReleaseChecksTest(unittest.TestCase):
-    def test_release_check_passes_for_current_release(self) -> None:
-        result = subprocess.run(
-            [
-                sys.executable,
-                str(ROOT / "scripts" / "check_release.py"),
-                "--tag",
-                "v10.3.0",
-                "--release-notes",
-                str(ROOT / "CHANGELOG.md"),
-            ],
-            cwd=ROOT,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+@pytest.fixture
+def compact_request():
+    value = json.loads((FIXTURES / "folder-request.json").read_text())
+    for row in value["evidence"]:
+        if row["grade"] == "official-current":
+            row["accessed_on"] = date.today().isoformat()
+    return value
 
-        wrong_tag = subprocess.run(
-            [
-                sys.executable,
-                str(ROOT / "scripts" / "check_release.py"),
-                "--tag",
-                "v2.1.0",
-            ],
-            cwd=ROOT,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        self.assertNotEqual(wrong_tag.returncode, 0)
-        self.assertIn("does not match current release", wrong_tag.stderr)
 
-        invalid_tag = subprocess.run(
-            [
-                sys.executable,
-                str(ROOT / "scripts" / "check_release.py"),
-                "--tag",
-                "v2026.7.20.1",
-            ],
-            cwd=ROOT,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        self.assertNotEqual(invalid_tag.returncode, 0)
-        self.assertIn("invalid Semantic Version release tag", invalid_tag.stderr)
+@pytest.fixture
+def contract(compact_request):
+    return compile_request(compact_request)
 
-        with tempfile.TemporaryDirectory() as temporary:
-            notes = Path(temporary) / "CHANGELOG.md"
-            notes.write_text(
-                "# Changelog\n\n"
-                "## 10.3.0\n\n"
-                "### Why This Release Matters\n\n"
-                "### What Changed\n\n"
-                "### What Users Should Do\n\n"
-                "### Known Limits\n\n"
-                "## 2026.7.20\n\n"
-                "### Validation\n",
-                encoding="utf-8",
-            )
-            stale_heading = subprocess.run(
-                [
-                    sys.executable,
-                    str(ROOT / "scripts" / "check_release.py"),
-                    "--release-notes",
-                    str(notes),
+
+def test_structural_parity(contract):
+    validate_contract(contract)
+    mutations = [
+        lambda c: c["targets"][0].update(surprise=True),
+        lambda c: c["scope"].update(surprise=True),
+        lambda c: c["implementation"]["objects"][0].update(surprise=True),
+        lambda c: c["implementation"]["objects"][0].pop("risk"),
+    ]
+    for mutate in mutations:
+        value = deepcopy(contract)
+        mutate(value)
+        with pytest.raises(ValueError):
+            validate_contract(value)
+
+
+def test_materialized_run(contract):
+    value = create_from_contract(contract, run_id="OFFLINE", source_locator="synthetic fixture")
+    validate_run(value)
+    value["object_changes"][0]["surprise"] = True
+    with pytest.raises(ValueError):
+        validate_run(value)
+
+
+def test_scoped_intake():
+    params = [
+        ("event", "lead_type", "lead_type", "ga4_event_parameter"),
+        ("item", "item_id", "ecommerce.items[].item_id", "ga4_item_parameter"),
+        ("user", "customer_type", "customer_type", "ga4_user_property"),
+        ("implementation", "event_id", "event_id", "implementation_only"),
+    ]
+    plan = {
+        "schema_version": "6.0.0",
+        "events": [
+            {
+                "event_name": "generate_lead",
+                "classification": "official",
+                "trigger": "Confirmed success",
+                "journey_ids": ["lead"],
+                "data_layer": {"push": {"event": "generate_lead"}},
+                "parameters": [
+                    {
+                        "scope": s,
+                        "name": n,
+                        "type": "string",
+                        "data_layer_path": p,
+                        "requirement": "required",
+                        "destination": d,
+                    }
+                    for s, n, p, d in params
                 ],
-                cwd=ROOT,
-                capture_output=True,
-                text=True,
-                check=False,
-            )
-            self.assertNotEqual(stale_heading.returncode, 0)
-            self.assertIn("release notes missing heading: Validation", stale_heading.stderr)
+            }
+        ],
+    }
+    semantic = normalized_approved_semantics({"skill": {}, "plan": {}}, plan)
+    requirement = semantic["requirements"][0]
+    mappings = _field_mappings(requirement)
+    assert {(m["field_scope"], m["destination_field"]) for m in mappings} == {
+        ("event-parameter", "lead_type"),
+        ("item-parameter", "item_id"),
+        ("user-property", "customer_type"),
+    }
+    assert requirement["implementation_fields"]["event_id"]["source"] == "event_id"
+    assert all(m["destination_shape"] == "scalar:string" for m in mappings)
+    assert supports_native_mapping(mappings[0], {"type": "gaawe"})
 
-        missing_tag = subprocess.run(
-            [
-                sys.executable,
-                str(ROOT / "scripts" / "check_release.py"),
-                "--require-git-tag",
-            ],
-            cwd=ROOT,
-            capture_output=True,
-            text=True,
-            check=False,
+
+@pytest.mark.parametrize("shape", ["string", "scalar", "number", "scalar:unknown", ""])
+def test_shape_cannot_bypass_native_proof(shape):
+    with pytest.raises(ValueError):
+        supports_native_mapping(
+            {"field_scope": "event-parameter", "destination_shape": shape},
+            {"type": "gaawe"},
         )
-        self.assertNotEqual(missing_tag.returncode, 0)
-        self.assertIn("--require-git-tag requires --tag", missing_tag.stderr)
 
-    def test_release_version_checks_use_exact_top_level_assignments(self) -> None:
-        source = 'SCHEMA_VERSION = "9.9"\nVERIFICATION_SCHEMA_VERSION = "1.1"\n'
-        self.assertEqual(assigned_string_constant(source, "SCHEMA_VERSION"), "9.9")
-        self.assertEqual(
-            assigned_string_constant(source, "VERIFICATION_SCHEMA_VERSION"),
-            "1.1",
-        )
-        self.assertIsNone(assigned_string_constant(source, "MISSING"))
 
-    def test_runtime_package_contains_only_runtime_files(self) -> None:
-        expected_sources = [
-            ROOT / "VERSION",
-            ROOT / "SKILL.md",
-            ROOT / "agents" / "openai.yaml",
-            ROOT / "LICENSE",
-            ROOT / "scripts" / "action_contract.py",
-            ROOT / "scripts" / "compile_configuration_request.py",
-            ROOT / "scripts" / "mcp_adapter.py",
-            ROOT / "scripts" / "mcp_transport.py",
-            ROOT / "scripts" / "native_configuration.py",
-            ROOT / "scripts" / "public_identifiers.py",
-            ROOT / "scripts" / "mcp_execute.py",
-            ROOT / "scripts" / "mcp_host_execute.py",
-            ROOT / "scripts" / "requirements-mcp.txt",
-            ROOT / "scripts" / "shared_event_id.py",
-            ROOT / "scripts" / "mcp_relay.js",
-            ROOT / "scripts" / "adapter_runtime.py",
-            ROOT / "scripts" / "adapter_support.py",
-            ROOT / "scripts" / "configuration_run.py",
-            ROOT / "scripts" / "diff_object_graph.py",
-            ROOT / "scripts" / "event_semantics.py",
-            ROOT / "scripts" / "import_ga4_tracking_plan_handoff.py",
-            ROOT / "scripts" / "redaction.py",
-            ROOT / "scripts" / "requirement_validation.py",
-            ROOT / "scripts" / "resource_registry.py",
-            ROOT / "scripts" / "run_model.py",
-            ROOT / "scripts" / "run_model_web.py",
-            ROOT / "scripts" / "run_render.py",
-            ROOT / "scripts" / "consent_conventions.py",
-            ROOT / "scripts" / "mcp_discovery.py",
-            ROOT / "scripts" / "run_state.py",
-            ROOT / "scripts" / "run_validation_core.py",
-            ROOT / "scripts" / "run_validation_pipeline.py",
-            ROOT / "scripts" / "run_validation_server.py",
-            ROOT / "scripts" / "run_validation_web.py",
-            ROOT / "scripts" / "strict_json.py",
-            ROOT / "scripts" / "validate_configuration_contract.py",
-            ROOT / "scripts" / "validate_contract_conformance.py",
-            ROOT / "scripts" / "verification.py",
-            ROOT / "scripts" / "web_domain_validation.py",
-        ]
-        expected_sources.extend(sorted((ROOT / "references").rglob("*.md")))
-        expected_sources.extend(sorted((ROOT / "references").rglob("*.json")))
-        expected_sources.extend(sorted((ROOT / "schemas").rglob("*.json")))
-        expected_names = {
-            (Path("configure-gtm") / source.relative_to(ROOT)).as_posix()
-            for source in expected_sources
+@pytest.mark.parametrize("a,b", [(True, 1), (False, 0), (1, 1.0)])
+def test_type_strict_conformance(a, b):
+    approved = {
+        "scope": {"included": ["R"], "reference_only": [], "excluded": []},
+        "requirements": [{"id": "R", "business_filters": [{"value": a}]}],
+    }
+    candidate = deepcopy(approved)
+    candidate["requirements"][0]["business_filters"][0]["value"] = b
+    assert differences(approved, candidate)
+    assert not compare(approved, candidate)["pass"]
+
+
+def test_organization_has_bounded_scope(compact_request):
+    compact_request["route"] = "organization"
+    compact_request["evidence"] = [
+        e for e in compact_request["evidence"] if e["grade"] != "official-current"
+    ]
+    compile_request(compact_request)
+    compact_request["objects"][0]["resource_family"] = "tag"
+    with pytest.raises(ValueError):
+        compile_request(compact_request)
+
+
+def server_request():
+    value = json.loads((FIXTURES / "client-request.json").read_text())
+    for e in value["evidence"]:
+        if e["grade"] == "official-current":
+            e["accessed_on"] = date.today().isoformat()
+    for item in value["objects"]:
+        native = item["intended"]
+        native.pop("claim_criteria", None)
+        item["assertions"] = {
+            "client_claim": {
+                "description": "Native GA4 Client claims supported GA4 collection requests",
+                "evidence_locator": "SYNTHETIC reviewed template fixture",
+                "native_sha256": canonical_sha256(native),
+            }
+        }
+    return value
+
+
+def test_native_client_review_and_readback():
+    compact_request = server_request()
+    contract = compile_request(compact_request)
+    run = create_from_contract(contract, run_id="NATIVE", source_locator="synthetic fixture")
+    assert run["object_changes"][0]["assertions"] == compact_request["objects"][0]["assertions"]
+    assert not differences(
+        compact_request["objects"][0]["intended"], run["object_changes"][0]["intended"]
+    )
+    run["object_changes"][0]["intended"]["priority"] = 7
+    run["run"]["materialization"]["section_fingerprints"] = materialization_fingerprints(run)
+    with pytest.raises(ValueError, match="stale"):
+        validate_run(run)
+
+
+def test_client_metadata_rejected():
+    compact_request = server_request()
+    compact_request["objects"][0]["intended"]["claim_criteria"] = "invented root field"
+    with pytest.raises(ValueError):
+        compile_request(compact_request)
+
+
+def test_save_readback_convergence(contract, tmp_path):
+    run = create_from_contract(contract, run_id="OFFLINE", source_locator="synthetic fixture")
+    path = tmp_path / "run.json"
+    path.write_text(json.dumps(run))
+    adapter = folder_adapter()
+    registry = TargetAdapterRegistry()
+    registry.register(
+        run["run"]["targets"][0],
+        adapter,
+        {"folder": {"list": True, "get": True, "update": True}},
+    )
+    execute_ready_operations(path, registry)
+    verify_idempotent_rerun(path, registry)
+    assert load_document(path)["run"]["status"] == "Configured"
+    assert len(adapter.calls) == 10
+    execute_ready_operations(path, registry)
+    assert len([c for c in adapter.calls if c["call"] == "mutate"]) == 1
+
+
+def runtime_fixture(contract, tmp_path, adapter):
+    run = create_from_contract(contract, run_id="RECOVERY", source_locator="synthetic fixture")
+    path = tmp_path / "run.json"
+    path.write_text(json.dumps(run))
+    registry = TargetAdapterRegistry()
+    registry.register(
+        run["run"]["targets"][0],
+        adapter,
+        {"folder": {"list": True, "get": True, "update": True}},
+    )
+    return path, registry
+
+
+def test_prewrite_drift_prevents_mutation(contract, tmp_path):
+    adapter = folder_adapter()
+    adapter.folder["name"] = "Concurrent edit"
+    path, registry = runtime_fixture(contract, tmp_path, adapter)
+    execute_ready_operations(path, registry)
+    document = load_document(path)
+    assert document["object_changes"][0]["state"] == "failed"
+    assert not any(c["call"] == "mutate" for c in adapter.calls)
+
+
+def test_ambiguous_write_resolved_without_repeat(contract, tmp_path):
+    from gtm_configure.runtime.adapter_protocol import AmbiguousWriteError
+
+    adapter = folder_adapter()
+    native_mutate = adapter.mutate
+
+    def uncertain(operation):
+        native_mutate(operation)
+        raise AmbiguousWriteError("Synthetic lost response")
+
+    adapter.mutate = uncertain
+    path, registry = runtime_fixture(contract, tmp_path, adapter)
+    execute_ready_operations(path, registry)
+    assert load_document(path)["object_changes"][0]["state"] == "verified"
+    verify_idempotent_rerun(path, registry)
+    execute_ready_operations(path, registry)
+    assert load_document(path)["run"]["status"] == "Configured"
+    assert sum(c["call"] == "mutate" for c in adapter.calls) == 1
+
+
+def test_uncertain_mismatch_never_replays(contract, tmp_path):
+    from gtm_configure.runtime.adapter_protocol import AmbiguousWriteError
+
+    adapter = folder_adapter()
+
+    def uncertain(operation):
+        adapter.calls.append({"call": "mutate"})
+        adapter.folder["name"] = "Unexpected saved name"
+        raise AmbiguousWriteError("Synthetic lost response")
+
+    adapter.mutate = uncertain
+    path, registry = runtime_fixture(contract, tmp_path, adapter)
+    execute_ready_operations(path, registry)
+    assert load_document(path)["object_changes"][0]["state"] == "uncertain"
+    execute_ready_operations(path, registry)
+    assert sum(c["call"] == "mutate" for c in adapter.calls) == 1
+    assert load_document(path)["run"]["status"] != "Configured"
+
+
+def test_native_assertions_approval_bound(contract):
+    from gtm_configure.domain.actions import mutation_approval_projection
+
+    item = contract["implementation"]["objects"][0]
+    before = canonical_sha256(mutation_approval_projection(item))
+    item["assertions"] = {"client_claim": {"description": "test"}}
+    assert canonical_sha256(mutation_approval_projection(item)) != before
+
+
+def test_render_has_no_encoding_damage(contract):
+    from gtm_configure.render import render_markdown
+
+    text = render_markdown(
+        create_from_contract(contract, run_id="RENDER", source_locator="synthetic fixture")
+    )
+    assert "â" not in text and "\ufffd" not in text
+
+
+@pytest.mark.parametrize("raw", ['{"x":1,"x":2}', '{"x":NaN}', '{"x":Infinity}'])
+def test_strict_json(raw):
+    with pytest.raises(ValueError):
+        loads_strict(raw)
+
+
+class FakeFolderAdapter:
+    def __init__(self):
+        self.folder = {
+            "folderId": "7",
+            "name": "Analytics old",
+            "accountId": "101",
+            "containerId": "202",
+            "workspaceId": "303",
+        }
+        self.calls = []
+
+    def identity(self):
+        self.calls.append({"call": "identity"})
+        return {
+            "account_id": "101",
+            "container_id": "202",
+            "workspace_id": "303",
+            "container_type": "web",
         }
 
-        with tempfile.TemporaryDirectory() as temporary:
-            archives = [Path(temporary) / "first.zip", Path(temporary) / "second.zip"]
-            for archive in archives:
-                result = subprocess.run(
-                    [
-                        sys.executable,
-                        str(ROOT / "scripts" / "build_skill_package.py"),
-                        "--output",
-                        str(archive),
-                    ],
-                    cwd=ROOT,
-                    capture_output=True,
-                    text=True,
-                    check=False,
-                )
-                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-                self.assertTrue(archive.exists())
+    def read(self, operation):
+        self.calls.append(
+            {
+                "call": "read",
+                "folder_id": operation.get("object_id"),
+                "name": self.folder["name"],
+            }
+        )
+        assert operation["object_id"] == "7"
+        return {"objects": [{**deepcopy(self.folder), "target_id": "web", "object_type": "folder"}]}
 
-                with ZipFile(archive) as package:
-                    self.assertEqual(set(package.namelist()), expected_names)
-                    for info in package.infolist():
-                        self.assertEqual(info.date_time, (2026, 1, 1, 0, 0, 0))
-                        self.assertEqual(info.create_system, 3)
-                        self.assertEqual(info.external_attr >> 16, 0o644)
+    def mutate(self, operation):
+        self.calls.append(
+            {
+                "call": "mutate",
+                "action": operation["action"],
+                "folder_id": operation["object_id"],
+            }
+        )
+        assert operation["action"] == "rename" and operation["object_id"] == "7"
+        assert self.folder["name"] == "Analytics old"
+        assert operation["new_name"] == "Analytics"
+        self.folder["name"] = operation["new_name"]
+        return None  # Force a separate authoritative readback.
 
-            self.assertEqual(archives[0].read_bytes(), archives[1].read_bytes())
-            extracted = Path(temporary) / "extracted"
-            with ZipFile(archives[0]) as package:
-                package.extractall(extracted)
-            scripts_path = extracted / "configure-gtm" / "scripts"
-            modules = sorted(
-                source.stem
-                for source in expected_sources
-                if source.parent == ROOT / "scripts" and source.suffix == ".py"
-            )
-            smoke = subprocess.run(
-                [
-                    sys.executable,
-                    "-I",
-                    "-c",
-                    (
-                        "import importlib,sys;sys.path.insert(0,sys.argv[1]);"
-                        "[importlib.import_module(name) for name in sys.argv[2:]]"
-                    ),
-                    str(scripts_path),
-                    *modules,
-                ],
-                cwd=extracted,
-                capture_output=True,
-                text=True,
-                check=False,
-            )
-            self.assertEqual(smoke.returncode, 0, smoke.stdout + smoke.stderr)
+    def list_resource_page(self, resource_family, cursor):
+        self.calls.append(
+            {"call": "list_resource_page", "family": resource_family, "cursor": cursor}
+        )
+        assert resource_family == "folder" and cursor is None
+        return {"items": [deepcopy(self.folder)], "next_cursor": None}
+
+    def list_workspace_changes_page(self, cursor):
+        self.calls.append({"call": "list_workspace_changes_page", "cursor": cursor})
+        assert cursor is None
+        return {"items": [], "next_cursor": None}
 
 
-if __name__ == "__main__":
-    unittest.main()
+def folder_adapter():
+    return FakeFolderAdapter()
+
+
+@pytest.mark.parametrize("fixture", ["web-request.json", "pipeline-request.json"])
+def test_independent_native_scenarios(fixture):
+    value = json.loads((FIXTURES / fixture).read_text(encoding="utf-8"))
+    for e in value["evidence"]:
+        if e["grade"] == "official-current":
+            e["accessed_on"] = date.today().isoformat()
+    contract = compile_request(value)
+    run = create_from_contract(
+        contract, run_id="INDEPENDENT", source_locator="Synthetic inspected fixture"
+    )
+    validate_run(run)
+    assert len(run["object_changes"]) == len(value["objects"])
+
+
+def test_pipeline_event_rewrite_rejected_in_both_phases():
+    value = json.loads((FIXTURES / "pipeline-request.json").read_text(encoding="utf-8"))
+    for e in value["evidence"]:
+        if e["grade"] == "official-current":
+            e["accessed_on"] = date.today().isoformat()
+    contract = compile_request(value)
+    run = create_from_contract(
+        contract, run_id="EVENT", source_locator="Synthetic inspected fixture"
+    )
+    for document in (contract, run):
+        document["pipelines"][0]["event_flows"][0]["transported_event"] = "purchase"
+        objects = document.get(
+            "object_changes", document.get("implementation", {}).get("objects", [])
+        )
+        trigger = next(item for item in objects if item["resource_family"] == "trigger")
+        for cell in trigger["intended"]["customEventFilter"][0]["parameter"]:
+            if cell["key"] == "arg1":
+                cell["value"] = "purchase"
+        for topology in document["consent_topologies"]:
+            topology["event_coverage"] = ["purchase"]
+    with pytest.raises(ValueError, match="transported_event"):
+        validate_contract(contract)
+    run["run"]["materialization"]["section_fingerprints"] = materialization_fingerprints(run)
+    with pytest.raises(ValueError):
+        validate_run(run)
+
+
+def test_pipeline_native_client_binding_required():
+    value = json.loads((FIXTURES / "pipeline-request.json").read_text(encoding="utf-8"))
+    for e in value["evidence"]:
+        if e["grade"] == "official-current":
+            e["accessed_on"] = date.today().isoformat()
+    value["pipelines"][0]["claiming_client"]["claim_criteria"] = (
+        "Unreviewed alternate request class"
+    )
+    with pytest.raises(ValueError, match="Client assertion"):
+        compile_request(value)
+
+
+def test_field_proof_rejects_wrong_native_source():
+    value = json.loads((FIXTURES / "web-request.json").read_text(encoding="utf-8"))
+    for e in value["evidence"]:
+        if e["grade"] == "official-current":
+            e["accessed_on"] = date.today().isoformat()
+    variable = next(
+        item
+        for item in value["objects"]
+        if item["resource_family"] == "variable"
+        and item["intended"]["type"] == "v"
+        and any(
+            row.get("key") == "name" and row.get("value") == "lead_type"
+            for row in item["intended"].get("parameter", [])
+        )
+    )
+    parameter = next(row for row in variable["intended"]["parameter"] if row["key"] == "name")
+    parameter["value"] = "unapproved_source"
+    with pytest.raises(ValueError):
+        compile_request(value)

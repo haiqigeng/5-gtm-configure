@@ -1,0 +1,413 @@
+{
+  "mode": "pipeline",
+  "route": "analytics",
+  "targets": [
+    {
+      "target_id": "web-main",
+      "container_type": "web",
+      "account_id": "101",
+      "container_id": "202",
+      "workspace_id": "303",
+      "authority": {
+        "grade": "approved-input",
+        "locator": "synthetic://approved/pipeline: authorize existing web sender and server receiver graph, initial page_view only, advanced Google native consent, server-only GA4 delivery, receiver-first endpoint cutover."
+      }
+    },
+    {
+      "target_id": "server-main",
+      "container_type": "server",
+      "account_id": "101",
+      "container_id": "404",
+      "workspace_id": "505",
+      "authority": {
+        "grade": "approved-input",
+        "locator": "synthetic://approved/pipeline: authorize existing web sender and server receiver graph, initial page_view only, advanced Google native consent, server-only GA4 delivery, receiver-first endpoint cutover."
+      }
+    }
+  ],
+  "requirements": [
+    {
+      "id": "GA4::page_view",
+      "kind": "analytics",
+      "authority": {
+        "grade": "approved-input",
+        "locator": "synthetic://approved/pipeline: authorize existing web sender and server receiver graph, initial page_view only, advanced Google native consent, server-only GA4 delivery, receiver-first endpoint cutover."
+      },
+      "event_name": "page_view",
+      "source_event": "gtm.js",
+      "destination": "G-PIPE123456",
+      "business_timing": "Initial page load after externally owned Google consent defaults.",
+      "repeatability": "Once per initial page load.",
+      "parameters": {}
+    }
+  ],
+  "objects": [
+    {
+      "target_id": "server-main",
+      "resource_family": "client",
+      "name": "GA4 Client",
+      "action": "reuse",
+      "object_id": "9",
+      "intended": {
+        "name": "GA4 Client",
+        "type": "gaaw_client",
+        "priority": 0,
+        "parameter": []
+      },
+      "depends_on": [],
+      "requirement_ids": [
+        "GA4::page_view"
+      ],
+      "justification": "Synthetic inspected compatible existing object, reused unchanged for the approved pipeline.",
+      "evidence": [
+        "approved-input",
+        "container-confirmed"
+      ],
+      "risk": "routine",
+      "assertions": {
+        "client_claim": {
+          "description": "Synthetic inspected default Google Analytics Client: claim supported GA4 collect requests at default paths with priority 0; retain native consent signals and event_name, no custom request activation.",
+          "evidence_locator": "synthetic://inspection/client9-defaults",
+          "native_sha256": "sha256:db6fdda8bd709cdf2aa9dc4dfb297db155faf0102def1e2a5df40eef13326e38"
+        }
+      }
+    },
+    {
+      "target_id": "server-main",
+      "resource_family": "trigger",
+      "name": "CE - page_view",
+      "action": "reuse",
+      "object_id": "10",
+      "intended": {
+        "name": "CE - page_view",
+        "type": "customEvent",
+        "customEventFilter": [
+          {
+            "type": "equals",
+            "parameter": [
+              {
+                "type": "template",
+                "key": "arg0",
+                "value": "{{_event}}"
+              },
+              {
+                "type": "template",
+                "key": "arg1",
+                "value": "page_view"
+              }
+            ]
+          }
+        ]
+      },
+      "depends_on": [
+        "server-main::client::GA4 Client"
+      ],
+      "requirement_ids": [
+        "GA4::page_view"
+      ],
+      "justification": "Synthetic inspected compatible existing object, reused unchanged for the approved pipeline.",
+      "evidence": [
+        "approved-input",
+        "container-confirmed"
+      ],
+      "risk": "routine"
+    },
+    {
+      "target_id": "server-main",
+      "resource_family": "tag",
+      "name": "GA4 - Server",
+      "action": "reuse",
+      "object_id": "11",
+      "intended": {
+        "name": "GA4 - Server",
+        "type": "gaaw",
+        "parameter": [],
+        "firingTriggerId": [
+          "server-main::trigger::CE - page_view"
+        ],
+        "blockingTriggerId": [],
+        "tagFiringOption": "oncePerEvent"
+      },
+      "depends_on": [
+        "server-main::client::GA4 Client",
+        "server-main::trigger::CE - page_view"
+      ],
+      "requirement_ids": [
+        "GA4::page_view"
+      ],
+      "justification": "Synthetic inspected compatible existing object, reused unchanged for the approved pipeline.",
+      "evidence": [
+        "approved-input",
+        "container-confirmed"
+      ],
+      "risk": "routine"
+    },
+    {
+      "target_id": "web-main",
+      "resource_family": "tag",
+      "name": "GA4 - Config",
+      "action": "reuse",
+      "object_id": "8",
+      "intended": {
+        "name": "GA4 - Config",
+        "type": "googtag",
+        "parameter": [
+          {
+            "type": "template",
+            "key": "tagId",
+            "value": "G-PIPE123456"
+          },
+          {
+            "type": "list",
+            "key": "configSettingsTable",
+            "list": [
+              {
+                "type": "map",
+                "map": [
+                  {
+                    "type": "template",
+                    "key": "parameter",
+                    "value": "server_container_url"
+                  },
+                  {
+                    "type": "template",
+                    "key": "parameterValue",
+                    "value": "https://metrics.example.test"
+                  }
+                ]
+              },
+              {
+                "type": "map",
+                "map": [
+                  {
+                    "type": "template",
+                    "key": "parameter",
+                    "value": "send_page_view"
+                  },
+                  {
+                    "type": "template",
+                    "key": "parameterValue",
+                    "value": "true"
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "firingTriggerId": [
+          "2147479553"
+        ],
+        "blockingTriggerId": [],
+        "tagFiringOption": "oncePerEvent",
+        "consentSettings": {
+          "consentStatus": "notSet"
+        }
+      },
+      "depends_on": [
+        "server-main::client::GA4 Client",
+        "server-main::trigger::CE - page_view",
+        "server-main::tag::GA4 - Server"
+      ],
+      "requirement_ids": [
+        "GA4::page_view"
+      ],
+      "justification": "Synthetic inspected compatible existing object, reused unchanged for the approved pipeline.",
+      "evidence": [
+        "approved-input",
+        "container-confirmed"
+      ],
+      "risk": "high-impact"
+    }
+  ],
+  "pipelines": [
+    {
+      "pipeline_id": "P-GA4",
+      "sending_target_ids": [
+        "web-main"
+      ],
+      "receiving_target_id": "server-main",
+      "request_class": "GA4 collect",
+      "transport_owner": "web-main::tag::GA4 - Config",
+      "endpoint_reference": "https://metrics.example.test",
+      "claiming_client": {
+        "object_key": "server-main::client::GA4 Client",
+        "claim_criteria": "Synthetic inspected default Google Analytics Client: claim supported GA4 collect requests at default paths with priority 0; retain native consent signals and event_name, no custom request activation."
+      },
+      "page_view_ownership": {
+        "owner": "web-main::tag::GA4 - Config",
+        "occurrence": "initial-page-load",
+        "send_page_view": true
+      },
+      "event_flows": [
+        {
+          "requirement_id": "GA4::page_view",
+          "source_event": "gtm.js",
+          "transported_event": "page_view",
+          "server_consumer_keys": [
+            "server-main::tag::GA4 - Server"
+          ]
+        }
+      ],
+      "field_flows": [],
+      "consent_topology_ids": [
+        "CONSENT-GA4"
+      ],
+      "dedup_contract_ids": [],
+      "operation_dependencies": [
+        "server-main::client::GA4 Client",
+        "server-main::trigger::CE - page_view",
+        "server-main::tag::GA4 - Server"
+      ],
+      "cutover_operation_key": "web-main::tag::GA4 - Config"
+    }
+  ],
+  "consent_topologies": [
+    {
+      "consent_topology_id": "CONSENT-GA4",
+      "destination": "G-PIPE123456",
+      "requirement_ids": [
+        "GA4::page_view"
+      ],
+      "consent_mode": "advanced-native",
+      "transport_behavior": "always-transported",
+      "web_enforcement": {
+        "mechanism": "transport-trigger-only"
+      },
+      "server_enforcement": {
+        "mechanism": "incoming-google-consent-native"
+      },
+      "signal_authority": "google-consent-mode",
+      "signal_source": "Synthetic inspected website-owned consent defaults before GTM and synchronous choice/revocation updates; native Google signals transported by Google tag.",
+      "unknown_state_behavior": "native-product-behavior",
+      "event_coverage": [
+        "page_view"
+      ],
+      "intentional_double_gate": false,
+      "server_tag_keys": [
+        "server-main::tag::GA4 - Server"
+      ],
+      "transporter_tag_keys": [
+        "web-main::tag::GA4 - Config"
+      ],
+      "transporter_destination_vendor_block": false
+    }
+  ],
+  "execution_topologies": [
+    {
+      "consent_topology_ids": [
+        "CONSENT-GA4"
+      ],
+      "tag_object_key": "web-main::tag::GA4 - Config",
+      "requirement_ids": [
+        "GA4::page_view"
+      ],
+      "lifecycle_role": "baseline-page-load",
+      "normal_triggers": [
+        {
+          "trigger_object_key": "web-main::trigger::builtin::2147479553",
+          "role": "initialization-page-load",
+          "type": "page-view"
+        }
+      ],
+      "consent_mode": "advanced-native",
+      "blocking_trigger_keys": [],
+      "blocking_event_scope": null,
+      "built_in_consent_checks": [
+        "analytics_storage",
+        "ad_storage",
+        "ad_user_data",
+        "ad_personalization"
+      ],
+      "additional_consent_checks": [],
+      "firing_option": "once-per-event",
+      "may_precede_cmp": false,
+      "pre_cmp_policy": "not-applicable",
+      "page_view_capable": true,
+      "page_view_destinations": [
+        "G-PIPE123456"
+      ],
+      "page_view_occurrences": [
+        "initial-page-load"
+      ],
+      "ecommerce_route": "not-applicable",
+      "manual_ecommerce_fields": [],
+      "evidence": [
+        "approved-input",
+        "container-confirmed"
+      ]
+    }
+  ],
+  "page_view_decisions": [
+    {
+      "target_id": "web-main",
+      "destination": "G-PIPE123456",
+      "occurrence": "initial-page-load",
+      "requirement_ids": [
+        "GA4::page_view"
+      ],
+      "owner": "google-tag-automatic",
+      "owner_object_key": "web-main::tag::GA4 - Config",
+      "google_tag_object_key": "web-main::tag::GA4 - Config",
+      "send_page_view": true,
+      "external_dependency_ids": [
+        "EXT-CONSENT",
+        "EXT-COLLECTION"
+      ],
+      "reason": "Synthetic inspection confirms one automatic initial-page-load owner routed to server and no overlapping direct-browser GA4, manual page view, or SPA history owner.",
+      "evidence": [
+        "approved-input",
+        "container-confirmed"
+      ]
+    }
+  ],
+  "external_dependencies": [
+    {
+      "id": "EXT-CONSENT",
+      "requirement_ids": [
+        "GA4::page_view"
+      ],
+      "owner": "Website CMP owner",
+      "action": "Synthetic confirmed site defaults precede GTM; native updates reflect choice and revocation.",
+      "status": "resolved"
+    },
+    {
+      "id": "EXT-COLLECTION",
+      "requirement_ids": [
+        "GA4::page_view"
+      ],
+      "owner": "GA4 and website owners",
+      "action": "Synthetic inspected no overlapping browser destination delivery or history collection; endpoint exists. Runtime verification and publication remain outside this test.",
+      "status": "resolved"
+    }
+  ],
+  "evidence": [
+    {
+      "grade": "approved-input",
+      "locator": "synthetic://approved/pipeline: authorize existing web sender and server receiver graph, initial page_view only, advanced Google native consent, server-only GA4 delivery, receiver-first endpoint cutover."
+    },
+    {
+      "grade": "container-confirmed",
+      "locator": "synthetic://inspection/full-relevant-inventory-no-duplicates"
+    },
+    {
+      "grade": "official-current",
+      "locator": "https://developers.google.com/tag-platform/tag-manager/server-side/send-data",
+      "title": "Synthetic documentation fixture: Send data to server-side Tag Manager",
+      "accessed_on": "2026-10-13",
+      "supports": [
+        "GA4::page_view"
+      ],
+      "decision": "OFFLINE synthetic reviewed evidence: Google tag endpoint routes GA4 requests to the existing Client, native server GA4 inherits event data and stream identity; no network documentation inspection performed."
+    },
+    {
+      "grade": "official-current",
+      "locator": "https://developers.google.com/tag-platform/tag-manager/server-side/consent-mode",
+      "title": "Synthetic documentation fixture: Consent mode with server-side tagging",
+      "accessed_on": "2026-10-13",
+      "supports": [
+        "GA4::page_view"
+      ],
+      "decision": "OFFLINE synthetic reviewed evidence: Google native consent propagates from explicitly approved advanced sender to native server consumer."
+    }
+  ]
+}

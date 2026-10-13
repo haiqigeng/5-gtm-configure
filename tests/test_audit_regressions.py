@@ -14,29 +14,27 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 sys.path.insert(0, str(ROOT / "tests"))
 
-from adapter_runtime import (  # noqa: E402
+from current_support import approve_mutations, valid_web_contract  # noqa: E402
+from gtm_configure.adapters.mcp import unwrap  # noqa: E402
+from gtm_configure.adapters.transport import StdioTransport  # noqa: E402
+from gtm_configure.contract import validate_document as validate_contract  # noqa: E402
+from gtm_configure.core.privacy import (  # noqa: E402
+    is_redacted,
+    redact_for_persistence,
+    sensitive_paths,
+)
+from gtm_configure.intake.ga4 import normalized_approved_semantics, verify_delivery
+from gtm_configure.intake.request import compile_request  # noqa: E402
+from gtm_configure.render import render_markdown  # noqa: E402
+from gtm_configure.runtime.adapter_protocol import atomic_write
+from gtm_configure.runtime.engine import (
     TargetAdapterRegistry,
     execute_ready_operations,
     verify_idempotent_rerun,
 )
-from compile_configuration_request import compile_request  # noqa: E402
-from configuration_run import (  # noqa: E402
-    atomic_write,
-    create_from_contract,
-    load_document,
-    validate_document,
-)
-from current_support import approve_mutations, valid_web_contract  # noqa: E402
-from import_ga4_tracking_plan_handoff import (  # noqa: E402
-    normalized_approved_semantics,
-    verify_delivery,
-)
-from mcp_adapter import unwrap  # noqa: E402
-from mcp_transport import StdioTransport  # noqa: E402
-from redaction import is_redacted, redact_for_persistence, sensitive_paths  # noqa: E402
-from run_render import render_markdown  # noqa: E402
+from gtm_configure.runtime.state import create_from_contract, load_document
+from gtm_configure.runtime.validation import validate_document
 from test_current_adapter_runtime import FakeAdapter, capabilities  # noqa: E402
-from validate_configuration_contract import validate_document as validate_contract  # noqa: E402
 
 CANARY = "CANARYsecretVALUE_7f3a9c1e5b2d8f4a6c0e"
 
@@ -135,7 +133,7 @@ class AuditRegressions(unittest.TestCase):
             self.assertEqual(sensitive_paths(value), [])
 
     def test_custom_code_and_error_redaction(self):
-        from redaction import scrub_sensitive_text
+        from gtm_configure.core.privacy import scrub_sensitive_text
 
         for code in (
             f'var consumer_secret = "{CANARY}";',
@@ -248,7 +246,7 @@ class AuditRegressions(unittest.TestCase):
         }
         # Isolate closure attribution; full contract validity is exercised separately.
         with patch(
-            "compile_configuration_request.validate_document", side_effect=lambda value: value
+            "gtm_configure.intake.request.validate_document", side_effect=lambda value: value
         ):
             result = compile_request(request)
         objects = {item["name"]: item for item in result["implementation"]["objects"]}
@@ -279,6 +277,7 @@ class AuditRegressions(unittest.TestCase):
                 {"tag", "trigger"},
             )
 
+    @patch("gtm_configure.runtime.validation.validate_document", new=lambda value: value)
     def test_delta_report_summarizes_unchanged_objects(self):
         run = create_from_contract(
             valid_web_contract(), run_id="render", source_locator="Synthetic request"

@@ -1,37 +1,25 @@
 # Contributing
 
-Keep the runtime skill agent-neutral and focused on GTM configuration for expert
-web analysts. Do not commit client containers, tracking plans, screenshots,
-domains, credentials, personal data, browser traces, or generated reports.
+Keep the skill agent-neutral and focused on authorized GTM configuration. Never commit client
+containers, plans, domains, credentials, personal data, screenshots, traces or generated run reports.
+Use synthetic fixtures and local fake transports.
 
-Before opening a pull request, run:
+Use Python 3.11+, Node.js 22 and PowerShell 7. Install development dependencies with
+`python -m pip install -e ".[dev]"`, then run the checks listed in [README.md](README.md#development-and-release).
+Set `REQUIRE_RELAY_TESTS=1` to require local relay execution, as CI does. SDK tests use the optional
+official MCP package against local stdio, HTTP and SSE servers, without account credentials.
 
-~~~powershell
-python -m pip install -e ".[dev]"
-python -m ruff format --no-cache --check scripts tests
-python -m ruff check --no-cache scripts tests
-python scripts/check_release.py --tag v10.3.0 --release-notes CHANGELOG.md
-python -m unittest discover -s tests -v
-python -m compileall -q scripts
-python scripts/build_skill_package.py --output dist/configure-gtm-test.zip
-~~~
+Use only contract 8.0/run 6.0. Update fixtures to current semantics; do not add legacy parsers,
+aliases, migrations or compatibility layers. Read [maintenance](references/maintenance.md) for
+ownership. Shared domain rules serve preparation and execution; adapters handle transport rather
+than owning a competing validator. Keep repository release tooling in `tools/`.
 
-Changes to consent, transport, Client/Event Data shape, deduplication, schema mapping, platform
-playbooks, template governance, reuse, adapter behavior, evidence grades, or acceptance rules should include a
-focused contract test and, when a deterministic configuration decision changes,
-an explicit configuration scenario. Scenarios validate the packaged contract;
-they must not claim to test model reasoning or browser runtime behavior. Keep
-live event catalogues in official vendor documentation rather than copying them into the skill.
-Keep supported web behavior covered by current regression tests, keep platform-specific server
-rules in their conditional counterparts, and never add publication or runtime-certification behavior.
+Behavior changes need focused positive and negative scenarios. Preserve approval binding, consent,
+native field/shape proof, uncertainty after interrupted writes, dependency containment and repeat-run
+no-op convergence. Test assertions separately from native saved payloads. Static and fake-transport
+tests must never claim browser or vendor runtime certification.
 
-The release reads and executes only current artifacts. New behavior belongs in contract 7.0/run
-5.0. Remove obsolete paths instead of adding compatibility formats, migrations, or fallbacks.
-`run_validation_web.py` is a focused shared authority for current web-domain semantics; it must not
-regain a second controller, state model, renderer, or CLI.
-
-Host transport tests use the optional official MCP SDK against local stdio/HTTP/SSE servers.
-Keep those tests credential-free and preserve uncertainty after an interrupted write. Host
-configuration support is separate from claims about actual Claude/Gemini model sessions.
-Shared-ID tests must verify native consumer bindings, template readback, repeat-run no-op and
-rejection of different-event or sequenced generation. Runtime/browser deduplication remains external.
+Update VERSION, pyproject.toml, README and the current changelog section together. CI derives its tag
+from VERSION. Release notes must explain the problem, change, required user action, validation and
+known limits. Preserve past changelog entries as historical records. The package builder uses fixed
+ZIP metadata and an explicit runtime boundary; verify extracted contents before tagging.

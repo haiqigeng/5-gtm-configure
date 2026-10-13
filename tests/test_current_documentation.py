@@ -31,22 +31,18 @@ def read(relative: str) -> str:
 class CurrentDocumentationTest(unittest.TestCase):
     def test_route_classification_keeps_server_detail_conditional(self) -> None:
         skill = read("SKILL.md")
-        pipeline_heading = skill.index("### Pipeline route")
-        server_heading = skill.index("### Server route")
-        judgement_heading = skill.index("## 03 - Judgement")
-        self.assertLess(pipeline_heading, server_heading)
-        self.assertLess(server_heading, judgement_heading)
-        web_table = skill[skill.index("### Shared and web routes") : pipeline_heading]
-        self.assertNotIn("references/02-execution/server/", web_table)
-        server_section = skill[server_heading:judgement_heading]
+        self.assertIn("references/media/common.md", skill)
+        self.assertIn("references/media/server.md", skill)
+        self.assertNotIn("references/vendors/", skill)
         for name in MEDIA:
-            self.assertIn(f"server/media-{name}.md", server_section)
+            self.assertIn(f"../vendors/{name}/web.md", read("references/media/common.md"))
+            self.assertIn(f"../vendors/{name}/server.md", read("references/media/server.md"))
 
     def test_all_browser_media_routes_have_concise_server_counterparts(self) -> None:
         for name in MEDIA:
             with self.subTest(platform=name):
-                browser = read(f"references/02-execution/media-{name}.md")
-                server = read(f"references/02-execution/server/media-{name}.md")
+                browser = read(f"references/vendors/{name}/web.md")
+                server = read(f"references/vendors/{name}/server.md")
                 self.assertIn("## Server route", browser)
                 pointer = browser.rsplit("## Server route", 1)[-1]
                 self.assertLessEqual(len(WORD.findall(pointer)), 90)
@@ -56,7 +52,7 @@ class CurrentDocumentationTest(unittest.TestCase):
     def test_server_media_files_do_not_copy_shared_boilerplate_paragraphs(self) -> None:
         owners: dict[str, list[str]] = {}
         for name in MEDIA:
-            text = read(f"references/02-execution/server/media-{name}.md")
+            text = read(f"references/vendors/{name}/server.md")
             for paragraph in re.split(r"\n\s*\n", text):
                 normalized = " ".join(paragraph.split()).casefold()
                 if len(WORD.findall(normalized)) >= 35:
@@ -83,41 +79,22 @@ class CurrentDocumentationTest(unittest.TestCase):
 
         current = sum(len(WORD.findall(read(relative))) for relative in MANDATORY_CORE)
         self.assertGreater(current, 0)
-        checker = read("scripts/check_release.py")
+        checker = read("tools/check_release.py")
         self.assertNotIn("MAX_FILE_LINES", checker)
         self.assertNotIn("MAX_REFERENCE_WORDS", checker)
 
     def test_controller_is_a_dispatcher_over_focused_modules(self) -> None:
-        tree = ast.parse(read("scripts/configuration_run.py"))
-        imported_modules = {
-            node.module
-            for node in ast.walk(tree)
-            if isinstance(node, ast.ImportFrom) and node.module
-        }
-        imported_modules.update(
-            alias.name
-            for node in ast.walk(tree)
-            if isinstance(node, ast.Import)
-            for alias in node.names
-        )
-        self.assertTrue(
-            {
-                "run_model",
-                "run_render",
-                "run_state",
-                "run_validation_core",
-                "verification",
-            }
-            <= imported_modules
-        )
+        tree = ast.parse(read("scripts/configure_gtm.py"))
+        functions = {n.name for n in tree.body if isinstance(n, ast.FunctionDef)}
+        self.assertEqual(functions, {"main"})
         for module in (
-            "redaction.py",
-            "resource_registry.py",
-            "run_validation_server.py",
-            "run_validation_pipeline.py",
-            "web_domain_validation.py",
+            "core/privacy",
+            "domain/resources",
+            "domain/server",
+            "domain/pipeline",
+            "domain/web",
         ):
-            self.assertTrue((ROOT / "scripts" / module).is_file())
+            self.assertTrue((ROOT / "scripts/gtm_configure" / (module + ".py")).is_file())
 
 
 if __name__ == "__main__":

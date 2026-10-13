@@ -15,14 +15,20 @@ from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "scripts"), str(ROOT / "tests")]
-from adapter_support import AdapterExecutionError  # noqa: E402
-from compile_configuration_request import compile_request  # noqa: E402
-from configuration_run import atomic_write, create_from_contract, load_document  # noqa: E402
 from fixtures.mcp_behavior_scenario import PROFILE, request  # noqa: E402
-from mcp_host_execute import HostSetupError, SdkTransport, load_connection  # noqa: E402
+from gtm_configure.cli.mcp_host import HostSetupError, SdkTransport, load_connection  # noqa: E402
+from gtm_configure.intake.request import compile_request  # noqa: E402
+from gtm_configure.runtime.adapter_protocol import (
+    AdapterExecutionError,  # noqa: E402
+    atomic_write,
+)
+from gtm_configure.runtime.state import (
+    create_from_contract,
+    load_document,  # noqa: E402
+)
 
 SERVER = ROOT / "tests/fixtures/mcp_sdk_server.py"
-RUNNER = ROOT / "scripts/mcp_host_execute.py"
+RUNNER = ROOT / "scripts/configure_gtm.py"
 
 
 class McpHostTests(unittest.TestCase):
@@ -181,6 +187,7 @@ class McpHostTests(unittest.TestCase):
                     sys.executable,
                     "-B",
                     str(RUNNER),
+                    "mcp-host",
                     "--host",
                     host,
                     "--config",

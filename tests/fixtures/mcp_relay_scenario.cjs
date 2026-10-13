@@ -8,7 +8,7 @@ const discoveryMode = process.env.RELAY_DISCOVERY === '1';
 const shellPath = process.env.TEST_PWSH;
 assert(pythonPath && shellPath, 'Set TEST_PYTHON and TEST_PWSH to discovered runtimes');
 const quoted = fs.mkdtempSync(path.join(process.argv[2], "l’agent ‘test’ “double” "));
-const scriptPath = discoveryMode ? path.join(root, 'scripts/mcp_execute.py') : path.join(quoted, 'worker.py');
+const scriptPath = discoveryMode ? path.join(root, 'scripts/configure_gtm.py') : path.join(quoted, 'worker.py');
 if (!discoveryMode) fs.copyFileSync(path.join(__dirname, 'mcp_stdio_worker.py'), scriptPath);
 const runPath = path.join(quoted, 'run.json'), profilesPath = path.join(quoted, 'profiles.json');
 const discoveryPath = path.join(quoted, 'input.json'), discoveryOutputPath = path.join(quoted, 'inventory.json');

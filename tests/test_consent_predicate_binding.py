@@ -9,16 +9,11 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 sys.path.insert(0, str(ROOT / "tests"))
 
-from configuration_run import create_from_contract  # noqa: E402
 from current_support import approve_mutations, valid_web_contract  # noqa: E402
-from run_validation_web import (  # noqa: E402
-    RunValidationError,
-    _validate_execution_topologies,
-)
-from validate_configuration_contract import (  # noqa: E402
-    ContractValidationError,
-    validate_document,
-)
+from gtm_configure.contract import ContractValidationError, validate_document
+from gtm_configure.core.validation import RunValidationError
+from gtm_configure.domain.execution import _validate_execution_topologies
+from gtm_configure.runtime.state import create_from_contract  # noqa: E402
 
 
 def condition(operator: str, source: str, value: object, **flags: object) -> dict:
@@ -386,7 +381,7 @@ class ConsentPredicateBindingTest(unittest.TestCase):
         approve_mutations(contract)
         validate_document(contract)
         run = create_from_contract(contract, run_id="CONSENT-BINDING", source_locator="synthetic")
-        self.assertEqual(run["schema_version"], "5.0")
+        self.assertEqual(run["schema_version"], "6.0")
         normal["filter"].append(grant())
         approve_mutations(contract)
         with self.assertRaisesRegex(ContractValidationError, "duplicated consent predicate"):

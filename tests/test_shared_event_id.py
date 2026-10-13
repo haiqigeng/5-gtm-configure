@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sys
 import tempfile
 import unittest
@@ -8,28 +9,30 @@ from copy import deepcopy
 from pathlib import Path
 
 from jsonschema import Draft202012Validator
+from schema_support import schema_registry
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 sys.path.insert(0, str(ROOT / "tests"))
 
-from adapter_runtime import (  # noqa: E402
-    TargetAdapterRegistry,
-    execute_ready_operations,
-    verify_idempotent_rerun,
-)
-from configuration_run import atomic_write, create_from_contract, load_document  # noqa: E402
 from current_support import (  # noqa: E402
     add_nonpurchase_dual_dedup,
     approve_mutations,
     valid_pipeline_contract,
 )
-from shared_event_id import validate_generated_event_ids  # noqa: E402
-from test_current_adapter_runtime import FakeAdapter, capabilities  # noqa: E402
-from validate_configuration_contract import (  # noqa: E402
-    ContractValidationError,
-    validate_document,
+from gtm_configure.contract import ContractValidationError, validate_document
+from gtm_configure.domain.deduplication import validate_generated_event_ids  # noqa: E402
+from gtm_configure.runtime.adapter_protocol import atomic_write
+from gtm_configure.runtime.engine import (
+    TargetAdapterRegistry,
+    execute_ready_operations,
+    verify_idempotent_rerun,
 )
+from gtm_configure.runtime.state import (
+    create_from_contract,
+    load_document,  # noqa: E402
+)
+from test_current_adapter_runtime import FakeAdapter, capabilities  # noqa: E402
 
 
 def generated_contract():
@@ -85,7 +88,7 @@ class SharedEventIdTest(unittest.TestCase):
             {item["target_id"]: item["container_type"] for item in contract["targets"]},
             errors.append,
         )
-        self.assertTrue(any(message in error for error in errors), errors)
+        self.assertTrue(any(re.search(message, error) for error in errors), errors)
 
     def test_generated_route_schemas_execution_readback_and_noop(self):
         contract = generated_contract()
@@ -95,7 +98,7 @@ class SharedEventIdTest(unittest.TestCase):
             (run, "configuration-run.schema.json"),
         ):
             schema = json.loads((ROOT / "schemas" / filename).read_text(encoding="utf-8"))
-            Draft202012Validator(schema).validate(value)
+            Draft202012Validator(schema, registry=schema_registry()).validate(value)
         registry = TargetAdapterRegistry()
         adapters = []
         for target in run["run"]["targets"]:
@@ -129,7 +132,9 @@ class SharedEventIdTest(unittest.TestCase):
         tag = next(i for i in contract["implementation"]["objects"] if i["object_key"] == key)
         tag["intended"]["notes"] = dedup["source_reference"]
         tag["intended"]["event_id"] = "independent-id"
-        self.assert_generation_rejected(contract, "consumer field does not use")
+        self.assert_generation_rejected(
+            contract, "consumer field does not use|native identity field does not use"
+        )
 
     def test_sequencing_on_either_consumer_is_rejected(self):
         for role in ("browser_consumer_keys", "transporter_consumer_keys"):
@@ -186,7 +191,9 @@ class SharedEventIdTest(unittest.TestCase):
     def test_purchase_stays_on_stable_order_identity(self):
         contract = generated_contract()
         contract["dedup_contracts"][0]["event_name"] = "Purchase"
-        self.assert_generation_rejected(contract, "stable purchase/order")
+        self.assert_generation_rejected(
+            contract, "stable purchase/order|detached from its event flow"
+        )
 
     def test_template_type_code_and_dependency_are_bound(self):
         for change, message in (

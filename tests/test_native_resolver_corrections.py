@@ -9,19 +9,19 @@ from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "scripts"), str(ROOT / "tests"), str(ROOT / "tests/fixtures")]
-from compile_configuration_request import _derive_exact_declarations, compile_request
-from configuration_run import create_from_contract
 from current_support import approve_mutations, valid_pipeline_contract
-from mcp_behavior_scenario import param
-from run_model_web import BUILT_IN_TRIGGER_TYPES
-from run_validation_web import (
+from gtm_configure.domain.execution import _validate_normal_trigger_bindings
+from gtm_configure.domain.fields import validate_native_mappings
+from gtm_configure.domain.web_model import BUILT_IN_TRIGGER_TYPES
+from gtm_configure.domain.web_native import (
     _associated_google_tag,
     _resolved_event_parameter,
     _resolved_trigger_types,
-    _validate_normal_trigger_bindings,
 )
+from gtm_configure.intake.request import _derive_exact_declarations, compile_request
+from gtm_configure.runtime.state import create_from_contract
+from mcp_behavior_scenario import param
 from test_mapping_startup_corrections import lead_request
-from web_domain_validation import validate_native_mappings
 
 
 def inherited_mapping():
@@ -199,7 +199,7 @@ class GoogleTagInheritanceTest(unittest.TestCase):
                     "omit when absent"
                 )
                 with patch(
-                    "run_validation_web._associated_google_tag",
+                    "gtm_configure.domain.web_native._associated_google_tag",
                     side_effect=AssertionError("unused base lookup"),
                 ):
                     self.assertEqual(self.check_mapping(operations, mapping), [])

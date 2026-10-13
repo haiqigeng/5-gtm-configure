@@ -14,14 +14,8 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 sys.path.insert(0, str(ROOT / "tests"))
 
-import run_state  # noqa: E402
+import gtm_configure.runtime.state as run_state  # noqa: E402
 from check_release import check_git_state  # noqa: E402
-from configuration_run import (  # noqa: E402
-    RunValidationError,
-    checkpoint_operation,
-    create_from_contract,
-    inspect_document,
-)
 from current_support import (  # noqa: E402
     approve_mutations,
     complete_capture_evidence,
@@ -30,12 +24,14 @@ from current_support import (  # noqa: E402
     valid_web_contract,
     with_complete_baselines,
 )
-from diff_object_graph import differences  # noqa: E402
-from event_semantics import trigger_accepts_event  # noqa: E402
-from import_ga4_tracking_plan_handoff import HandoffError, verify_delivery  # noqa: E402
-from run_validation_core import validate_document as validate_run  # noqa: E402
-from validate_configuration_contract import ContractValidationError, validate_document  # noqa: E402
-from verification import build_pre_write_comparison  # noqa: E402
+from gtm_configure.cli.run import RunValidationError
+from gtm_configure.comparison.native import differences  # noqa: E402
+from gtm_configure.contract import ContractValidationError, validate_document  # noqa: E402
+from gtm_configure.domain.events import trigger_accepts_event  # noqa: E402
+from gtm_configure.intake.ga4 import HandoffError, verify_delivery  # noqa: E402
+from gtm_configure.runtime.state import checkpoint_operation, create_from_contract, inspect_document
+from gtm_configure.runtime.validation import validate_document as validate_run  # noqa: E402
+from gtm_configure.runtime.verification import build_pre_write_comparison  # noqa: E402
 
 
 def condition(operator: str, value: str, **flags: object) -> dict:
@@ -706,7 +702,7 @@ class UtilityEvolutionTest(unittest.TestCase):
             command.return_value = subprocess.CompletedProcess(
                 ["git"], 128, "", "synthetic failure"
             )
-            errors = check_git_state(tag="v10.3.0", require_tag=True, require_clean=True)
+            errors = check_git_state(tag="v11.0.0", require_tag=True, require_clean=True)
         self.assertEqual(len(errors), 2)
         self.assertTrue(all("git exited 128" in error for error in errors))
 

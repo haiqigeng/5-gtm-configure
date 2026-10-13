@@ -11,19 +11,24 @@ from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "scripts"), str(ROOT / "tests")]
-from adapter_runtime import (
+from fixtures.mcp_behavior_scenario import PROFILE, FakeGtm, request
+from gtm_configure.adapters.mcp import McpTargetAdapter, unwrap
+from gtm_configure.intake.request import compile_request
+from gtm_configure.runtime.adapter_protocol import (
+    AdapterExecutionError,
+    RateLimitError,
+    atomic_write,
+    collect_paginated,
+)
+from gtm_configure.runtime.engine import (
     TargetAdapterRegistry,
     _complete_observation,
     execute_ready_operations,
     verify_idempotent_rerun,
 )
-from adapter_support import AdapterExecutionError, RateLimitError, collect_paginated
-from compile_configuration_request import compile_request
-from configuration_run import atomic_write, create_from_contract, load_document
-from fixtures.mcp_behavior_scenario import PROFILE, FakeGtm, request
-from mcp_adapter import McpTargetAdapter, unwrap
+from gtm_configure.runtime.state import create_from_contract, load_document
+from gtm_configure.runtime.verification import expected_graph
 from test_mapping_startup_corrections import lead_request
-from verification import expected_graph
 
 
 class MachineryAdoption(unittest.TestCase):
@@ -250,7 +255,7 @@ class MachineryAdoption(unittest.TestCase):
             self.assertEqual(load_document(path)["run"]["status"], "Configured")
 
     def test_final_inventory_boundaries_reject_bad_metadata(self):
-        from run_state import validate_document
+        from gtm_configure.runtime.state import validate_document
 
         _, _, _, registry, path = self.run_native()
         verify_idempotent_rerun(path, registry)
@@ -272,9 +277,11 @@ class MachineryAdoption(unittest.TestCase):
                 validate_document(changed)
 
     def test_locked_execution_does_not_revalidate_every_checkpoint(self):
-        import run_state
+        import gtm_configure.runtime.state as run_state
 
-        with patch("run_state.validate_document", wraps=run_state.validate_document) as validate:
+        with patch(
+            "gtm_configure.runtime.state.validate_document", wraps=run_state.validate_document
+        ) as validate:
             _, _, _, _, path = self.run_native()
         self.assertLessEqual(validate.call_count, 8)
         self.assertTrue(

@@ -11,18 +11,6 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 sys.path.insert(0, str(ROOT / "tests"))
 
-from adapter_runtime import (  # noqa: E402
-    AdapterExecutionError,
-    RateLimitError,
-    TargetAdapterRegistry,
-    execute_ready_operations,
-    verify_idempotent_rerun,
-)
-from configuration_run import (  # noqa: E402
-    atomic_write,
-    create_from_contract,
-    load_document,
-)
 from current_support import (  # noqa: E402
     approve_mutations,
     valid_pipeline_contract,
@@ -30,9 +18,18 @@ from current_support import (  # noqa: E402
     valid_web_contract,
     with_complete_baselines,
 )
-from redaction import redacted_marker  # noqa: E402
-from resource_registry import required_baseline_families  # noqa: E402
-from verification import expected_graph  # noqa: E402
+from gtm_configure.core.privacy import redacted_marker  # noqa: E402
+from gtm_configure.domain.resources import required_baseline_families  # noqa: E402
+from gtm_configure.runtime.adapter_protocol import atomic_write
+from gtm_configure.runtime.engine import (
+    AdapterExecutionError,
+    RateLimitError,
+    TargetAdapterRegistry,
+    execute_ready_operations,
+    verify_idempotent_rerun,
+)
+from gtm_configure.runtime.state import create_from_contract, load_document
+from gtm_configure.runtime.verification import expected_graph  # noqa: E402
 
 
 def capabilities(*families: str) -> dict:
@@ -114,7 +111,7 @@ class FakeAdapter:
     def list_resource_page(self, resource_family: str, cursor: str | None) -> dict:
         if cursor is not None:
             raise AssertionError("fake adapter has only one baseline page")
-        from diff_object_graph import ID_FIELDS
+        from gtm_configure.comparison.native import ID_FIELDS
 
         id_field = next(key for key, value in ID_FIELDS.items() if value == resource_family)
         items = []
@@ -390,7 +387,6 @@ class CurrentAdapterRuntimeTest(unittest.TestCase):
                 "action": "create",
                 "intended": {
                     "type": "ga4-client",
-                    "claim_criteria": "Default GA4 Client claims GA4 collect requests",
                     "priority": 10,
                 },
                 "evidence": ["approved-input", "official-current"],
@@ -639,7 +635,6 @@ class CurrentAdapterRuntimeTest(unittest.TestCase):
     def test_secret_is_resolved_only_for_mutation_and_never_persisted(self) -> None:
         contract = valid_server_contract()
         server_tag = contract["implementation"]["objects"][1]
-        server_tag["intended"]["secret_fields"] = ["apiAccessToken"]
         server_tag["intended"]["apiAccessToken"] = redacted_marker(reference="vault://meta/token")
         adapter = FakeAdapter(existing={"GA4 Client - Web transport"})
         provider = StaticSecretProvider({"vault://meta/token": "runtime-secret-token"})
@@ -655,7 +650,7 @@ class CurrentAdapterRuntimeTest(unittest.TestCase):
         )
         self.assertEqual(run["object_changes"][1]["state"], "verified")
         self.assertEqual(adapter.received[-1]["intended"]["apiAccessToken"], "runtime-secret-token")
-        self.assertEqual(adapter.received[-1]["intended"]["secret_fields"], ["apiAccessToken"])
+        self.assertNotIn("secret_fields", adapter.received[-1]["intended"])
         serialized = json.dumps(run)
         self.assertNotIn("runtime-secret-token", serialized)
         comparison = run["object_changes"][1]["comparison"]

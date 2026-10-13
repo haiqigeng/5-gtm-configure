@@ -10,25 +10,22 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 sys.path.insert(0, str(ROOT / "tests"))
 
-from adapter_runtime import (  # noqa: E402
-    AdapterExecutionError,
-    RateLimitError,
-    TargetAdapterRegistry,
-    execute_ready_operations,
-)
-from configuration_run import (  # noqa: E402
-    atomic_write,
-    create_from_contract,
-    load_document,
-    render_markdown,
-)
 from current_support import (  # noqa: E402
     approve_mutations,
     valid_web_contract,
     with_complete_baselines,
 )
+from gtm_configure.contract import ContractValidationError, validate_document  # noqa: E402
+from gtm_configure.render import render_markdown
+from gtm_configure.runtime.adapter_protocol import atomic_write
+from gtm_configure.runtime.engine import (
+    AdapterExecutionError,
+    RateLimitError,
+    TargetAdapterRegistry,
+    execute_ready_operations,
+)
+from gtm_configure.runtime.state import create_from_contract, load_document
 from test_current_adapter_runtime import FakeAdapter, capabilities  # noqa: E402
-from validate_configuration_contract import ContractValidationError, validate_document  # noqa: E402
 
 
 def settings_contract(*, action="update"):

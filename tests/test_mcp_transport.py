@@ -14,11 +14,16 @@ from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "scripts"), str(ROOT / "tests")]
-from adapter_support import AdapterExecutionError, AmbiguousWriteError, collect_paginated
-from configuration_run import atomic_write, create_from_contract
 from current_support import valid_web_contract
-from mcp_adapter import FAMILIES, McpTargetAdapter
-from mcp_transport import StdioTransport
+from gtm_configure.adapters.mcp import FAMILIES, McpTargetAdapter
+from gtm_configure.adapters.transport import StdioTransport
+from gtm_configure.runtime.adapter_protocol import (
+    AdapterExecutionError,
+    AmbiguousWriteError,
+    atomic_write,
+    collect_paginated,
+)
+from gtm_configure.runtime.state import create_from_contract
 
 
 def profile(*families):
@@ -178,7 +183,9 @@ class McpTransportTests(unittest.TestCase):
             )
             stream = io.BytesIO((reply + "\n.\n").encode())
             output = io.StringIO()
-            with patch("mcp_transport.uuid4", return_value=SimpleNamespace(hex="a" * 32)):
+            with patch(
+                "gtm_configure.adapters.transport.uuid4", return_value=SimpleNamespace(hex="a" * 32)
+            ):
                 transport = StdioTransport(input_stream=stream, output_stream=output)
                 if identifier.startswith("a"):
                     self.assertEqual(
@@ -196,7 +203,9 @@ class McpTransportTests(unittest.TestCase):
         transport = StdioTransport(
             input_stream=io.BytesIO((reply + "\n.\n").encode()), output_stream=io.StringIO()
         )
-        with patch("mcp_transport.uuid4", return_value=SimpleNamespace(hex="a" * 32)):
+        with patch(
+            "gtm_configure.adapters.transport.uuid4", return_value=SimpleNamespace(hex="a" * 32)
+        ):
             with self.assertRaisesRegex(AmbiguousWriteError, "identity mismatch"):
                 transport("synthetic__gtm_tag", {"action": "create"})
 
@@ -215,7 +224,8 @@ class McpTransportTests(unittest.TestCase):
                 [
                     sys.executable,
                     "-B",
-                    str(ROOT / "scripts/mcp_execute.py"),
+                    str(ROOT / "scripts/configure_gtm.py"),
+                    "mcp",
                     "--run",
                     str(path),
                     "--profiles",

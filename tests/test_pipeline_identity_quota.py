@@ -9,24 +9,24 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "scripts"), str(ROOT / "tests")]
 
 import test_current_adapter_runtime as runtime_tests  # noqa: E402
-from adapter_support import (  # noqa: E402
-    AdapterExecutionError,
-    AmbiguousWriteError,
-    RateLimitError,
-    collect_paginated,
-)
-from configuration_run import create_from_contract  # noqa: E402
 from current_support import (  # noqa: E402
     add_nonpurchase_dual_dedup,
     approve_mutations,
     valid_pipeline_contract,
     valid_web_contract,
 )
-from mcp_adapter import unwrap  # noqa: E402
-from shared_event_id import validate_pipeline_dedup  # noqa: E402
+from gtm_configure.adapters.mcp import unwrap  # noqa: E402
+from gtm_configure.contract import ContractValidationError, validate_document  # noqa: E402
+from gtm_configure.domain.deduplication import validate_pipeline_dedup  # noqa: E402
+from gtm_configure.runtime.adapter_protocol import (
+    AdapterExecutionError,
+    AmbiguousWriteError,
+    RateLimitError,
+    collect_paginated,
+)
+from gtm_configure.runtime.state import create_from_contract  # noqa: E402
 from test_current_adapter_runtime import FakeAdapter, capabilities  # noqa: E402
 from test_shared_event_id import generated_contract  # noqa: E402
-from validate_configuration_contract import ContractValidationError, validate_document  # noqa: E402
 
 
 def quota():

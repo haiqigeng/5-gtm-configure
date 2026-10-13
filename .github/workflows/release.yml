@@ -8,6 +8,10 @@ on:
 permissions:
   contents: write
 
+env:
+  PYTHONUTF8: "1"
+  PYTHONDONTWRITEBYTECODE: "1"
+
 jobs:
   release:
     runs-on: ubuntu-latest
@@ -26,15 +30,18 @@ jobs:
           node --version
           "REQUIRE_RELAY_TESTS=1" | Out-File -FilePath $env:GITHUB_ENV -Append
       - name: Install development dependencies
-        run: python -m pip install "jsonschema>=4.23,<5" "ruff>=0.12,<1" -r scripts/requirements-mcp.txt
+        run: python -m pip install -e ".[dev]"
       - name: Validate release tag and package
         run: |
-          python -m ruff format --no-cache --check scripts tests
-          python -m ruff check --no-cache scripts tests
-          python scripts/check_release.py --tag "$GITHUB_REF_NAME" --release-notes CHANGELOG.md --require-git-tag --require-clean-tree
-          python -m unittest discover -s tests -v
+          python -m ruff format --no-cache --check scripts tests tools
+          python -m ruff check --no-cache scripts tests tools
+          python tools/check_release.py --tag "$GITHUB_REF_NAME" --release-notes CHANGELOG.md --require-git-tag --require-clean-tree
+          python -B -m pytest tests -q -p no:cacheprovider
       - name: Build runtime package
-        run: python scripts/build_skill_package.py --output "dist/configure-gtm-$GITHUB_REF_NAME.zip"
+        run: python tools/build_skill_package.py --output "dist/configure-gtm-$GITHUB_REF_NAME.zip"
+      - name: Checksum archive
+        working-directory: dist
+        run: sha256sum configure-gtm-*.zip > SHA256SUMS.txt
       - name: Prepare current release notes
         env:
           RELEASE_VERSION: ${{ github.ref_name }}
@@ -64,4 +71,6 @@ jobs:
         with:
           generate_release_notes: false
           body_path: dist/release-notes.md
-          files: dist/configure-gtm-*.zip
+          files: |
+            dist/configure-gtm-*.zip
+            dist/SHA256SUMS.txt

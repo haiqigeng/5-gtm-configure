@@ -8,7 +8,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from diff_object_graph import (  # noqa: E402
+from gtm_configure.comparison.native import (
     BUILT_IN_TRIGGER_IDS,
     STANDALONE_PARAMETER_FIELDS,
     GraphError,

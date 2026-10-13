@@ -1,0 +1,73 @@
+{
+  "mode": "server",
+  "route": "analytics",
+  "targets": [
+    {
+      "target_id": "server-main",
+      "container_type": "server",
+      "account_id": "101",
+      "container_id": "404",
+      "workspace_id": "505",
+      "authority": {
+        "grade": "approved-input",
+        "locator": "Offline scenario: reuse existing Client 9 in dedicated server workspace 101/404/505 as infrastructure for approved server analytics."
+      }
+    }
+  ],
+  "requirements": [
+    {
+      "id": "R-CLIENT",
+      "kind": "analytics",
+      "authority": {
+        "grade": "approved-input",
+        "locator": "Offline scenario: reuse existing Client 9 in dedicated server workspace 101/404/505 as infrastructure for approved server analytics."
+      },
+      "destination": "Approved server analytics infrastructure"
+    }
+  ],
+  "objects": [
+    {
+      "resource_family": "client",
+      "name": "GA4 Client",
+      "action": "reuse",
+      "object_id": "9",
+      "intended": {
+        "accountId": "101",
+        "containerId": "404",
+        "workspaceId": "505",
+        "clientId": "9",
+        "name": "GA4 Client",
+        "type": "gaaw_client",
+        "priority": 0,
+        "parameter": [],
+        "fingerprint": "test-fingerprint"
+      },
+      "justification": "Preserve and reuse the authorized existing GA4 Client without changing its claim behavior.",
+      "evidence": [
+        "approved-input",
+        "container-confirmed"
+      ],
+      "risk": "routine"
+    }
+  ],
+  "evidence": [
+    {
+      "grade": "approved-input",
+      "locator": "Offline scenario: reuse existing Client 9 in dedicated server workspace 101/404/505 as infrastructure for approved server analytics."
+    },
+    {
+      "grade": "container-confirmed",
+      "locator": "Offline supplied native Client fixture; not a live read"
+    },
+    {
+      "grade": "official-current",
+      "locator": "https://developers.google.com/tag-platform/tag-manager/api/reference/rest/v2/accounts.containers.workspaces.clients",
+      "title": "REST Resource: accounts.containers.workspaces.clients",
+      "accessed_on": "2026-10-13",
+      "supports": [
+        "R-CLIENT"
+      ],
+      "decision": "Client native representation exposes type, priority and parameter, with no claim_criteria field. This is structural documentation, not live claim verification."
+    }
+  ]
+}

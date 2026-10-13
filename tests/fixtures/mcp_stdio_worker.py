@@ -4,10 +4,10 @@ import os
 import sys
 
 sys.path.insert(0, os.environ["RUNTIME_SCRIPTS"])
-from adapter_support import AdapterExecutionError, RateLimitError
-from mcp_adapter import unwrap
-from mcp_transport import StdioTransport, completion, configure_terminal
-from redaction import redact_for_persistence
+from gtm_configure.adapters.mcp import unwrap
+from gtm_configure.adapters.transport import StdioTransport, completion, configure_terminal
+from gtm_configure.core.privacy import redact_for_persistence
+from gtm_configure.runtime.adapter_protocol import AdapterExecutionError, RateLimitError
 
 configure_terminal()
 transport = StdioTransport(timeout=300)

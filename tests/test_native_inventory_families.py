@@ -9,15 +9,20 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "scripts"), str(ROOT / "tests")]
-from adapter_runtime import (
+from current_support import approve_mutations
+from gtm_configure.domain.resources import (
+    ResourceRegistryError,
+    native_inventory_identity,
+    normalized_family,
+)
+from gtm_configure.runtime.adapter_protocol import atomic_write
+from gtm_configure.runtime.engine import (
     AdapterExecutionError,
     TargetAdapterRegistry,
     execute_ready_operations,
     verify_idempotent_rerun,
 )
-from configuration_run import atomic_write, create_from_contract, load_document
-from current_support import approve_mutations
-from resource_registry import ResourceRegistryError, native_inventory_identity, normalized_family
+from gtm_configure.runtime.state import create_from_contract, load_document
 from test_current_adapter_runtime import FakeAdapter, capabilities
 from test_effective_configuration_guardrails import settings_contract
 
@@ -198,7 +203,7 @@ class NativeInventoryFamilies(unittest.TestCase):
         self.assertFalse(load_document(path)["idempotency"]["checked"])
 
     def test_canonical_spelling_and_native_identity_are_separate_from_reference_fields(self):
-        from diff_object_graph import ID_FIELDS
+        from gtm_configure.comparison.native import ID_FIELDS
 
         self.assertEqual(normalized_family("built-in variable"), "built-in variable")
         with self.assertRaises(ResourceRegistryError):

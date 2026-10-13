@@ -8,20 +8,33 @@ import tempfile
 import unittest
 from copy import deepcopy
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "scripts"), str(ROOT / "tests")]
-from adapter_runtime import TargetAdapterRegistry, execute_ready_operations, verify_idempotent_rerun
-from configuration_run import atomic_write, create_from_contract, load_document
 from current_support import approve_mutations, complete_capture_evidence, valid_web_contract
-from mcp_adapter import McpTargetAdapter
-from public_identifiers import public_identifier_paths, validate_public_identifiers
-from redaction import exposure_findings, is_redacted, redact_for_persistence, sensitive_paths
-from run_render import render_markdown, semantic_field_changes
-from run_state import _build_target_baseline
+from gtm_configure.adapters.mcp import McpTargetAdapter
+from gtm_configure.contract import validate_document
+from gtm_configure.core.privacy import (
+    exposure_findings,
+    is_redacted,
+    redact_for_persistence,
+    sensitive_paths,
+)
+from gtm_configure.core.public_identifiers import (
+    public_identifier_paths,
+    validate_public_identifiers,
+)
+from gtm_configure.render import render_markdown, semantic_field_changes
+from gtm_configure.runtime.adapter_protocol import atomic_write
+from gtm_configure.runtime.engine import (
+    TargetAdapterRegistry,
+    execute_ready_operations,
+    verify_idempotent_rerun,
+)
+from gtm_configure.runtime.state import _build_target_baseline, create_from_contract, load_document
 from test_current_adapter_runtime import FakeAdapter, capabilities
 from test_mcp_transport import profile
-from validate_configuration_contract import validate_document
 
 PUBLIC = "synthetic-public-browser-project"
 SOURCE = "https://amplitude.com/docs/apis/keys-and-tokens"
@@ -72,12 +85,12 @@ class RedactionShapeTests(unittest.TestCase):
     def test_source_authority_descriptor_metadata_is_scanned_without_false_positive(self):
         from copy import deepcopy
 
-        from requirement_validation import validate_requirement
+        from gtm_configure.domain.requirements import validate_requirement
 
         descriptor = {
             "source": "user_data.email",
-            "source_shape": "string",
-            "destination_shape": "string",
+            "source_shape": "scalar:string",
+            "destination_shape": "scalar:string",
             "provenance": {
                 "grade": "official-current",
                 "locator": "https://support.google.com/google-ads/answer/13262500",
@@ -306,6 +319,7 @@ class RedactionShapeTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "pre_change"):
                     validate_public_identifiers(contract)
 
+    @patch("gtm_configure.runtime.validation.validate_document", new=lambda value: value)
     def test_exposure_report_distinguishes_pii_from_credential_and_locates_field(self):
         run = create_from_contract(
             valid_web_contract(), run_id="report", source_locator="Synthetic"

@@ -11,33 +11,42 @@ from collections import Counter
 from copy import deepcopy
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from unittest.mock import patch
 from urllib.parse import quote
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "scripts"), str(ROOT / "tests")]
-from adapter_runtime import (  # noqa: E402
-    AdapterExecutionError,
-    TargetAdapterRegistry,
-    execute_ready_operations,
-    verify_idempotent_rerun,
-)
-from compile_configuration_request import compile_request  # noqa: E402
-from configuration_run import atomic_write, create_from_contract, load_document  # noqa: E402
 from fixtures.mcp_behavior_scenario import PROFILE, FakeGtm, request  # noqa: E402
-from import_ga4_tracking_plan_handoff import (  # noqa: E402
-    normalized_approved_semantics,
-    verify_delivery,
-)
-from mcp_adapter import McpTargetAdapter  # noqa: E402
-from mcp_host_execute import (  # noqa: E402
+from gtm_configure.adapters.mcp import McpTargetAdapter  # noqa: E402
+from gtm_configure.cli.mcp_host import (
     HostSetupError,
     connection_diagnostic,
     load_connection,
     run_host,
 )
-from public_identifiers import public_identifier_paths, validate_public_identifiers  # noqa: E402
-from redaction import contains_redacted, redact_for_persistence, sensitive_findings  # noqa: E402
-from run_render import render_markdown  # noqa: E402
+from gtm_configure.core.privacy import (  # noqa: E402
+    contains_redacted,
+    redact_for_persistence,
+    sensitive_findings,
+)
+from gtm_configure.core.public_identifiers import (  # noqa: E402
+    public_identifier_paths,
+    validate_public_identifiers,
+)
+from gtm_configure.intake.ga4 import normalized_approved_semantics, verify_delivery
+from gtm_configure.intake.request import compile_request  # noqa: E402
+from gtm_configure.render import render_markdown  # noqa: E402
+from gtm_configure.runtime.adapter_protocol import atomic_write
+from gtm_configure.runtime.engine import (
+    AdapterExecutionError,
+    TargetAdapterRegistry,
+    execute_ready_operations,
+    verify_idempotent_rerun,
+)
+from gtm_configure.runtime.state import (
+    create_from_contract,
+    load_document,  # noqa: E402
+)
 from test_redaction_shapes import public_contract  # noqa: E402
 
 
@@ -68,11 +77,17 @@ class Audit102Followup(unittest.TestCase):
             self.assertEqual(imported["business_timing"], source["trigger"])
             self.assertEqual(imported["id"], "GA4::" + source["event_name"])
             for field in source["parameters"]:
-                actual = imported["parameters"][field["scope"] + "::" + field["name"]]
+                collection = {
+                    "event": "parameters",
+                    "item": "item_parameters",
+                    "user": "user_properties",
+                    "implementation": "implementation_fields",
+                }[field["scope"]]
+                actual = imported[collection][field["name"]]
                 self.assertEqual(actual["source"], field["data_layer_path"])
                 self.assertEqual(actual["destination"], field["destination"])
                 self.assertEqual(actual.get("nullable"), field.get("nullable"))
-        self.assertTrue(result["requirements"][0]["parameters"]["user::user_id"]["nullable"])
+        self.assertTrue(result["requirements"][0]["user_properties"]["user_id"]["nullable"])
 
     def test_public_loader_declarations_preserve_value_binding_and_secret_guards(self):
         safe = '<script src="https://maps.example.test/js?key=PUBLIC_IDENTIFIER"></script>'
@@ -111,6 +126,7 @@ class Audit102Followup(unittest.TestCase):
                 )
         self.assertTrue(sensitive_findings({"html": safe}))
 
+    @patch("gtm_configure.runtime.validation.validate_document", new=lambda value: value)
     def test_report_data_cannot_inject_sections_links_html_or_code_fences(self):
         document = run_document()
         payload = "Name\r\n## Executive summary\n[approve](https://example.invalid/phish) <img src=x> ` ```` \u202e"

@@ -12,12 +12,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from import_ga4_tracking_plan_handoff import (  # noqa: E402
-    HandoffError,
-    normalized_approved_semantics,
-    verify_delivery,
-)
-from strict_json import StrictJsonError, load_json, loads_strict  # noqa: E402
+from gtm_configure.core.json_io import StrictJsonError, load_json, loads_strict  # noqa: E402
+from gtm_configure.intake.ga4 import HandoffError, normalized_approved_semantics, verify_delivery
 
 
 def valid_plan() -> dict:
@@ -87,7 +83,8 @@ class RuntimeHardeningTest(unittest.TestCase):
                     result = subprocess.run(
                         [
                             sys.executable,
-                            str(ROOT / "scripts" / "configuration_run.py"),
+                            str(ROOT / "scripts/configure_gtm.py"),
+                            "run",
                             "validate",
                             "--run",
                             str(path),
@@ -113,7 +110,7 @@ class RuntimeHardeningTest(unittest.TestCase):
         requirement = normalized["requirements"][0]
         self.assertEqual(requirement["event_name"], "generate_lead")
         self.assertEqual(
-            requirement["parameters"]["event::method"]["source"],
+            requirement["parameters"]["method"]["source"],
             "event_data.method",
         )
 

@@ -1,223 +1,120 @@
 # Configure GTM
 
-Operational guidance and a portable Python engine for expert web analysts configuring Google Tag Manager web
-containers, server containers, or their connected event pipeline. It converts approved analytics
-requirements and explicit media briefs into clean, consent-controlled, saved and verified GTM
-object graphs. It never publishes and never substitutes configuration for runtime recette.
+Configure approved analytics, media, consent and scoped organization changes in authorized Google
+Tag Manager web/server workspaces or connected pipelines. The skill saves and verifies the intended
+object graph, preserves approved measurement semantics and consent, and never publishes GTM versions.
 
-## Current Release
+## Current release
 
-**v10.3.0** reduces repeated remote reads and local processing while preserving native-field
-verification and relevant name-conflict checks. It improves target-local recovery, derives exact
-mechanical declarations, and resolves native built-in triggers and Google-tag event-parameter
-inheritance without requiring repeated settings on each event tag.
-The packaged relay supports Codex on Windows with Python 3.11+ and PowerShell 7. Claude Code and
-Gemini CLI use the optional official MCP SDK runner with the same engine. Approved non-purchase
-pipelines can configure one reviewed template-generated shared event ID. This update changes only configure-gtm.
-The release passed 401 tests, including required relay tests, and 31 independent static checks for
-the resolver corrections. Live acceptance remains specific to each implementation; these checks
-do not certify website or vendor runtime behavior.
-See CHANGELOG.md for validation and known limitations.
+**[v11.0.0](https://github.com/haiqigeng/5-gtm-configure/releases/tag/v11.0.0)** reorganizes the skill
+around one command entry point, focused documentation routes and shared validation rules. It fixes
+GA4 field-scope mapping, enforces exact field shapes and keeps server review assertions separate from
+native API payloads. See the [changelog](CHANGELOG.md) for changes, validation and limitations.
 
-Existing coverage includes GTM server Clients, Event Data variables, server triggers/tags/templates,
-Transformations, GA4 and media destinations, transport ownership, consent propagation, field-shape
-proof, first-party-data and secret handling, destination-specific browser/server deduplication,
-receiver-first cutover ordering, dependency-only failure containment, and evidence-backed
-human/machine configuration results without coupling the skill to runtime recette tooling.
+Only `configuration-contract@8.0` and `configuration-run@6.0` are supported. Create fresh contracts
+and runs from approved inputs. Obsolete commands and schema migrations are intentionally absent.
 
-Known execution boundary: triggerless setup/cleanup-only tags cannot be represented by the current
-topology. Hold those requirements without inventing ordinary triggers; they are excluded from
-this release's field-test acceptance.
+## Install
 
-Mutation contracts use only `configuration-contract@7.0`; execution uses only
-`configuration-run@5.0`. Obsolete contract/run schemas and upgrade paths are intentionally absent.
+Download `configure-gtm-v11.0.0.zip` from the release and extract its `configure-gtm` folder into your
+host's skills directory. Replace the previous skill folder completely so removed paths do not remain.
+Keep any active run artifacts separately; they are not installation files.
 
-## North Star
+Python 3.11+ is required. Install the runtime dependency into the Python environment used by the host:
 
-Operationally implement approved analytics requirements and explicit media briefs across authorized
-GTM web and associated server workspaces as clean, well-organized, technically correct,
-best-practice, consent-controlled saved object graphs connected by an explicit verified pipeline.
+```shell
+python -m pip install -r configure-gtm/scripts/requirements.txt
+python configure-gtm/scripts/configure_gtm.py --help
+```
 
-The unit of success is the saved and readback-verified graph for every authorized target. For a
-pipeline it also includes static proof from sender through the one intended claiming Client and
-generated Event Data to every required server consumer. A plan, prose specification, one-sided
-pipeline, unsafe cutover, or runtime expectation is not configuration.
+The Codex relay additionally uses Node.js and PowerShell 7. Claude Code and Gemini CLI use the optional
+official MCP SDK: install `scripts/requirements-mcp.txt` instead. Follow the relevant
+[Codex guide](references/adapters/codex.md), [SDK host guide](references/adapters/mcp-sdk.md),
+or [custom adapter contract](references/adapters/custom.md). Host support does not certify a live
+configuration or model session.
 
-## Operating Routes
+Invoke the skill with `$configure-gtm` and the approved requirements and target workspace identities.
+Begin with [SKILL.md](SKILL.md); load only the references selected by its routing table.
 
-- `web` covers the complete supported client-side configuration surface and defaults.
-- `server` configures explicitly authorized server-container workspaces using server semantics.
-- `pipeline` configures the connected sender/receiver graph; several web senders may feed one
-  Client and one claimed event may fan out to several destinations.
+## Supported work and boundaries
 
-A named web target never grants authority over a discovered server endpoint, and server authority
-never grants web access. Routine create/update/reuse is implied only inside each named target's
-dedicated workspace. High-impact changes retain their explicit authority gates.
+| Route | Intended scope |
+| --- | --- |
+| Web | Supported tags, triggers, variables, templates, folders, Google tag settings and explicitly authorized workspace resources |
+| Server | Clients, Event Data variables, tags, triggers, templates, scoped Transformations and settings |
+| Pipeline | Authorized sender/receiver graph, transport ownership, consent propagation, exact field shapes and destination-specific deduplication |
+| Organization | Folder creation, rename and reuse with target authority and container evidence; no collection changes |
 
-## Utility Surface
+Analytics semantics come from approved inputs. Media mechanics come from current official product
+documentation and inspected templates. One target never grants authority over another. The runtime
+checks authenticated identity, baseline and drift, journals uncertain writes, verifies saved native
+objects and requires a read-only no-op convergence check before reporting `Configured`.
 
-The web route configures tags, normal and blocking triggers, user-defined and built-in variables,
-templates, folders, Google tag configuration/destinations, workspaces, and explicitly authorized
-Zones, environments, and settings. It supports GA4, documented non-GA4 analytics, Google Ads,
-Floodlight, Microsoft Advertising, Meta, ChatGPT Ads, TikTok, Snap, LinkedIn, Pinterest, X, Reddit, Criteo,
-affiliate/partner tags, and unlisted documented products.
+Results use `Configured`, `Partial`, `Blocked` or `Deferred`. Configuration does not prove runtime
+behavior. The skill excludes tracking-plan design, general audit/cleanup, runtime QA, publication,
+GTM version creation, infrastructure provisioning and legal decisions. Unsupported native topologies,
+including triggerless setup/cleanup-only tags, remain blocked. Draft acceptance precedes any external,
+separately authorized publication; see [pipeline workflow](references/pipeline/architecture-and-workflow.md).
 
-The server route configures supported Clients, tags, Event Data/template variables, server
-triggers, folders, templates, narrow Transformations, and settings. Every browser media playbook has
-a server counterpart. Guidance parity does not invent a supported GTM template: a route blocks or
-defers when the exact product, official schema, template, credentials owner, consent, or dedup path
-cannot be proved.
+## Commands
 
-The pipeline route additionally resolves:
+All commands use `python scripts/configure_gtm.py COMMAND`; each provides `--help`.
 
-- one transport owner and safe environment endpoint routing;
-- page-view ownership and effective `send_page_view`;
-- exactly one intended Client per request class and receiver fan-out;
-- source, web variable, wire, Client, Event Data, server owner, template, and destination field
-  shape;
-- per-destination web/transport/server consent topology and event coverage;
-- browser-only, server-only/replacement, dual-shared-ID, or template-native delivery;
-- receiver-first mutation and live endpoint cutover last; and
-- external rollout order without publishing it.
+| Command | Purpose |
+| --- | --- |
+| `import-plan` | Import approved GA4 handoff semantics with exact field names/scopes |
+| `prepare` | Compile a configuration request into the current contract |
+| `validate-contract` | Validate structure and cross-object semantics |
+| `conformance` | Compare approved tracking-plan semantics with a contract |
+| `compare` | Compare normalized native object graphs |
+| `run` | Initialize, inspect, validate, checkpoint, reopen or render a durable run |
+| `mcp` | Discover and execute through the Codex MCP relay |
+| `mcp-host` | Execute through the optional official MCP SDK |
 
-## Important Defaults
+## Repository map
 
-- Preserve approved analytics events, fields, literals, filters, sources, and success timing.
-  Official documentation validates technical feasibility; it does not silently redesign valid
-  analytics semantics.
-- Media intent comes from a human brief. Current official product documentation and the inspected
-  installed template control each browser/server destination schema.
-- Select best-practice architecture before reuse. Existing prevalence is integration evidence,
-  never architecture authority.
-- Use native or supported templates before browser Custom HTML or a custom server route. Inspect
-  publisher, version, fields, defaults, permissions, hosts, secret handling, and automatic behavior.
-- Keep web strict/basic CMP control by default: baseline tags use a verified CMP lifecycle trigger
-  plus vendor block; business tags use their business trigger plus vendor block. Do not stack an
-  equivalent Additional Consent Check.
-- Configure Google Consent Mode web-side; consent-aware server Google tags process the incoming
-  signal. Non-Google server gates use only approved documented state with complete event coverage.
-- `items` is an array and `user_data` is an object. Prove every non-scalar shape through the
-  sender, claiming Client, Event Data, and receiving template; never encode a universal two-array
-  rule or silently flatten/drop data.
-- Scope first-party data by event and consumer. `user_id`, `user_data`, GA4 user properties,
-  Configuration Settings, and Event Settings have distinct owners. Redact raw PII and secrets
-  before persistence.
-- Create no dedup contract for single-channel delivery. For dual delivery, use one current
-  vendor-documented occurrence identity across browser and server. A dual-delivery purchase needs
-  a stable product-supported transaction/order/occurrence identity. If no stable occurrence identity
-  exists for another event, use the approved shared-generation route or keep the overlap blocked.
-- Shared generation uses one inspected variable template, exact native field bindings and direct
-  same-event consumers. It excludes purchase replacement and sequencing. Browser-only runs still
-  map supplied IDs. Explicit web-sender preparation may use the documented generation route with
-  an external receiver dependency; it does not authorize receiver changes or certify deduplication.
-- Never create payload-eligibility helpers or validity triggers merely because a runtime value may
-  be absent.
+| Location | Responsibility |
+| --- | --- |
+| `SKILL.md`, `agents/` | Discovery, concise entry instructions and routing |
+| `references/core/` | Authority, evidence, authoring, workflow, execution and acceptance |
+| `references/adapters/` | Adapter profile, discovery, quotas and host-specific setup |
+| Other `references/` folders | Conditional domain and vendor guidance |
+| `schemas/` | Executed structural contracts; semantic rules remain in Python |
+| `scripts/configure_gtm.py` | Single lazy-loading command router |
+| `scripts/gtm_configure/core/` | Common models, schema loading, JSON and privacy primitives |
+| `scripts/gtm_configure/domain/` | Shared field, consent, authority, web, server and pipeline rules |
+| `scripts/gtm_configure/intake/` | Approved-input import and request compilation |
+| `scripts/gtm_configure/runtime/` | Durable execution, state, validation and saved verification |
+| `scripts/gtm_configure/adapters/` | MCP discovery, calls and transport |
+| `scripts/gtm_configure/comparison/` | Type-strict JSON, native and semantic comparisons |
+| `tests/` | Regression, schema, transport, recovery and release checks |
+| `tools/` | Repository-only release validation and deterministic packaging |
 
-## Execution And Recovery
+See [maintenance](references/maintenance.md) for rule ownership. No compatibility facades are shipped.
 
-Contract 7.0 deterministically materializes target-scoped operation keys of the form:
+## Development and release
 
-`<target-id>::<resource-family>::<semantic-name>`
-
-Contract-owned run sections carry fingerprints. Adapters may update baselines, journals,
-comparisons, readbacks, results, and recovery state; they cannot silently rewrite intention. Each
-write gets fresh pre-change proof where applicable and authoritative post-write readback. Baselines
-are captured directly through the authenticated adapter immediately before the first write; the
-runtime retains the redacted canonical object graph and creates exhaustion receipts itself. There
-is no caller-supplied baseline command.
-
-The immutable projection includes target identity, official sources, external dependencies,
-client execution topologies, page-view ownership, first-party routes, refonte dispositions,
-pipelines, consent, deduplication, and object intention. Removal is verified by authoritative
-absence. A failed operation can be reopened only after stale pre-write/readback/comparison evidence
-is cleared.
-
-The core runtime and Codex relay use the Python standard library only. The Claude/Gemini runner
-adds the optional official MCP SDK (`scripts/requirements-mcp.txt`). Draft 2020-12 JSON Schemas are
-structural/editor aids and are meta-validated with the existing development-only `jsonschema`
-dependency; the focused Python modules remain authoritative for cross-object, semantic, consent,
-authorization, and lifecycle invariants that JSON Schema cannot express cleanly.
-
-On failure, only the failed/uncertain operation and its transitive dependents stop. Independent safe
-subtrees continue. A failed Client prevents its destination tags and cutover; an unrelated GA4
-subtree need not stop because a Meta tag failed. Ambiguous writes are read before any retry, and
-only documented non-applied rate limits retry within a bound.
-
-Every mutation must link to an approved requirement and carry an exact, payload-hashed approval
-record from that requirement's approved-input locator. A payload change invalidates that record;
-authority still comes from the user's instructions and source material, never from a hash.
-`official-current` documents mechanics but never authorizes a write. First-party `user_data` and
-`user_id` configuration must be owned by an explicit first-party-data route. Shared Google
-Configuration/Event Settings and UPD-variable creation, and changes to existing variables, require
-complete closure over direct and indirect authenticated baseline consumers and a fresh prewrite check.
-These are consistency and operational checks. They do not cryptographically authenticate user
-approval, prove documentation relevance, or make editable local artifacts a security boundary.
-
-Credentials are resolved through an ephemeral secret provider for mutation and never written to
-the contract/run/diff/render/result. Readback may prove matching secret-field presence and all
-non-secret fields, but reports `present-not-compared`; two redacted markers never prove value
-equality.
-
-## Acceptance And Result
-
-Use `Configured`, `Partial`, `Blocked`, or `Deferred`. `Configured` requires complete target
-baselines, authoritative readback, static cross-target invariants, and an identical-rerun no-op.
-Open publication and recette dependencies do not downgrade a completed saved graph.
-
-The human result and machine-readable run record describe configured targets, object changes,
-field/consent/dedup mappings, saved readback, unresolved external dependencies, and the explicit
-fact that runtime validation was not performed. Runtime recette independently uses the tracking
-plan and live GTM/Preview evidence; it does not consume or trust a configure-gtm result artifact.
-
-The [external rollout sequence](references/02-execution/pipeline/architecture-and-workflow.md#separate-saved-configuration-from-publication)
-requires draft acceptance before authorized publication, followed by post-publication smoke checks.
-This repository never executes those steps.
-
-## Boundaries
-
-The skill does not design tracking plans, develop a site/dataLayer, provision cloud tagging
-infrastructure or DNS/CDN, implement vendor APIs outside GTM, perform general audit/cleanup, run
-browser/server recette, make legal decisions, administer vendor accounts, generate credentials,
-publish, or create GTM versions.
-
-Measurement Protocol, mobile-app, CRM, offline, and arbitrary backend ingress remain future
-extensions.
-
-## Repository Map
-
-- `SKILL.md`: entrypoint, route classification, conditional playbook routing, and core rules.
-- `references/01-orientation/`: utility contract and live official-source discipline.
-- `references/02-execution/`: web playbooks plus conditional `pipeline/` and `server/`
-  guidance.
-- `references/03-judgement/`: saved-state acceptance and configuration-result guidance.
-- `schemas/`: current contract 7.0 and run 5.0 schemas.
-- `scripts/configuration_run.py`: current-only CLI over split validation/state/render modules.
-- `scripts/adapter_runtime.py`: target registry, capability-local execution, redaction, and
-  dependency containment.
-- `scripts/mcp_discovery.py`: read-only preparation inventory through the existing MCP adapter;
-  selected reuse bodies feed the current compiler, with fresh execution checks retained.
-- `scripts/diff_object_graph.py`: target-aware normalized graph comparison, including Clients and
-  Transformations.
-- `tests/`: current web, server/pipeline, security, adapter, schema, and
-  documentation tests.
-
-## Install And Validate
-
-Install the release archive or copy `VERSION`, `SKILL.md`, `agents/`, `references/`, `schemas/`,
-the packaged runtime scripts, and `LICENSE` into the target skill directory. For Claude Code or
-Gemini CLI, also install `scripts/requirements-mcp.txt` in the execution Python environment and
-follow [host execution](references/02-execution/tool-adapters.md#claude-code-and-gemini-cli).
-
-~~~powershell
+```shell
 python -m pip install -e ".[dev]"
-python -m ruff format --no-cache --check scripts tests
-python -m ruff check --no-cache scripts tests
-python scripts/check_release.py --tag v10.3.0 --release-notes CHANGELOG.md
-python -m unittest discover -s tests -v
-python -m compileall -q scripts
-python scripts/build_skill_package.py --output dist/configure-gtm-v10.3.0.zip
+python -m ruff format --no-cache --check scripts tests tools
+python -m ruff check --no-cache scripts tests tools
+python -B -m pytest tests -q -p no:cacheprovider
+python tools/check_release.py --tag v11.0.0
+python tools/build_skill_package.py --output dist/configure-gtm-v11.0.0.zip
 git diff --check
-~~~
+```
 
-Releases use Semantic Versioning. Major versions may replace obsolete interchange contracts;
-minor and patch versions evolve the current supported surface.
+CI runs on Linux/Python 3.11 and Windows/Python 3.13, with Node.js 22 and PowerShell 7 for relay tests.
+Tagging the checked commit `v11.0.0` triggers release validation and deterministic archive creation.
+The workflow publishes the current changelog section, archive and SHA-256 checksum. The archive
+contains the skill and its self-contained regression suite, excluding repository-only tooling and
+the broader development fixtures.
+
+The refactor retains the measured folder scenario's one mutation and ten adapter calls. Entry
+instructions are 57% shorter and the selected Codex adapter reading path 71% shorter; word counts
+are reading proxies, not billed-token or dollar measurements. Stricter schema checks add local work
+(about 3 ms for the small fixture; cold import about 191 ms versus 28 ms). These are local fixture
+measurements, not end-to-end GTM benchmarks.
+
+Read [CONTRIBUTING.md](CONTRIBUTING.md) and [SECURITY.md](SECURITY.md) before contributing.
+Licensed under [MIT](LICENSE).

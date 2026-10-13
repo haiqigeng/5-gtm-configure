@@ -1,0 +1,63 @@
+{
+  "mode": "web",
+  "route": "analytics",
+  "targets": [
+    {
+      "target_id": "web",
+      "container_type": "web",
+      "account_id": "101",
+      "container_id": "202",
+      "workspace_id": "303",
+      "authority": {
+        "grade": "approved-input",
+        "locator": "offline-scenario: user authorizes dedicated workspace 101/202/303"
+      }
+    }
+  ],
+  "requirements": [
+    {
+      "id": "RENAME",
+      "authority": {
+        "grade": "approved-input",
+        "locator": "offline-scenario: rename folder 7 from Analytics old to Analytics"
+      }
+    }
+  ],
+  "evidence": [
+    {
+      "grade": "container-confirmed",
+      "locator": "offline-fake: folder 7 is Analytics old"
+    },
+    {
+      "grade": "official-current",
+      "locator": "https://developers.google.com/tag-platform/tag-manager/api/reference/rest/v2/accounts.containers.workspaces.folders/update",
+      "title": "SYNTHETIC FIXTURE: GTM folders.update",
+      "decision": "OFFLINE TEST ONLY: stand-in for reviewed native folder name update; URL not fetched.",
+      "accessed_on": "2026-10-13",
+      "supports": [
+        "RENAME"
+      ]
+    }
+  ],
+  "objects": [
+    {
+      "resource_family": "folder",
+      "name": "Analytics old",
+      "action": "rename",
+      "object_id": "7",
+      "new_name": "Analytics",
+      "pre_change": {
+        "name": "Analytics old"
+      },
+      "intended": {
+        "name": "Analytics"
+      },
+      "justification": "Explicitly requested folder rename only.",
+      "evidence": [
+        "approved-input",
+        "container-confirmed"
+      ],
+      "risk": "routine"
+    }
+  ]
+}

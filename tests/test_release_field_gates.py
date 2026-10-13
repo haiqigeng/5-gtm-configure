@@ -10,9 +10,6 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 sys.path.insert(0, str(ROOT / "tests"))
 
-import run_validation_web as web  # noqa: E402
-from adapter_runtime import AdapterExecutionError, TargetAdapterRegistry  # noqa: E402
-from configuration_run import create_from_contract  # noqa: E402
 from current_support import (  # noqa: E402
     approve_mutations,
     complete_capture_evidence,
@@ -20,21 +17,33 @@ from current_support import (  # noqa: E402
     valid_server_contract,
     valid_web_contract,
 )
-from diff_object_graph import GraphError, normalize_graph  # noqa: E402
-from import_ga4_tracking_plan_handoff import normalized_approved_semantics  # noqa: E402
-from redaction import (  # noqa: E402
+from gtm_configure.comparison.native import GraphError, normalize_graph  # noqa: E402
+from gtm_configure.contract import ContractValidationError, validate_document
+from gtm_configure.core.privacy import (
     REDACTED_STATE,
     redact_for_persistence,
     redacted_marker,
     scrub_sensitive_text,
     sensitive_paths,
 )
-from run_state import _record_target_baseline  # noqa: E402
-from validate_configuration_contract import (  # noqa: E402
-    ContractValidationError,
-    validate_document,
+from gtm_configure.core.validation import RunValidationError as web_RunValidationError
+from gtm_configure.domain.first_party_data import (
+    _validate_first_party_feature_contract as web__validate_first_party_feature_contract,
 )
-from verification import build_pre_write_comparison  # noqa: E402
+from gtm_configure.domain.web_native import (
+    _configured_transport_endpoint as web__configured_transport_endpoint,
+)
+from gtm_configure.domain.web_native import _send_page_view_value as web__send_page_view_value
+from gtm_configure.domain.web_native import (
+    _validate_google_destination as web__validate_google_destination,  # noqa: E402
+)
+from gtm_configure.intake.ga4 import normalized_approved_semantics  # noqa: E402
+from gtm_configure.runtime.engine import AdapterExecutionError, TargetAdapterRegistry  # noqa: E402
+from gtm_configure.runtime.state import (
+    _record_target_baseline,  # noqa: E402
+    create_from_contract,  # noqa: E402
+)
+from gtm_configure.runtime.verification import build_pre_write_comparison  # noqa: E402
 
 
 class ReleaseFieldGatesTest(unittest.TestCase):
@@ -169,7 +178,7 @@ class ReleaseFieldGatesTest(unittest.TestCase):
             "variable": [{"name": "Google Settings", "type": "gtcs", "send_page_view": True}],
         }
         with self.assertRaisesRegex(
-            web.RunValidationError, "does not include every authenticated baseline consumer"
+            web_RunValidationError, "does not include every authenticated baseline consumer"
         ):
             _record_target_baseline(
                 run,
@@ -294,8 +303,8 @@ class ReleaseFieldGatesTest(unittest.TestCase):
                 "intended": {"type": "c", "value": "G-TEST123"},
             }
         }
-        self.assertFalse(web._send_page_view_value(target, "$.tag"))
-        web._validate_google_destination(target, "G-TEST123", "$.tag", operations)
+        self.assertFalse(web__send_page_view_value(target, "$.tag"))
+        web__validate_google_destination(target, "G-TEST123", "$.tag", operations)
 
     def test_google_configuration_settings_variable_is_resolved(self) -> None:
         settings_key = "web-main::variable::Google configuration settings"
@@ -325,9 +334,9 @@ class ReleaseFieldGatesTest(unittest.TestCase):
             },
         }
         operations[tag_operation["object_key"]] = tag_operation
-        self.assertFalse(web._send_page_view_value(tag_operation["intended"], "$.tag", operations))
+        self.assertFalse(web__send_page_view_value(tag_operation["intended"], "$.tag", operations))
         self.assertEqual(
-            web._configured_transport_endpoint(tag_operation, operations, "$.tag"),
+            web__configured_transport_endpoint(tag_operation, operations, "$.tag"),
             "https://tags.example.test",
         )
 
@@ -353,7 +362,7 @@ class ReleaseFieldGatesTest(unittest.TestCase):
         self.assertEqual(requirement["business_timing"], "after CMP readiness")
         self.assertNotIn("trigger", requirement)
         help_result = subprocess.run(
-            [sys.executable, str(ROOT / "scripts" / "configuration_run.py"), "--help"],
+            [sys.executable, str(ROOT / "scripts/configure_gtm.py"), "run", "--help"],
             capture_output=True,
             text=True,
             check=False,
@@ -363,8 +372,8 @@ class ReleaseFieldGatesTest(unittest.TestCase):
         self.assertNotIn("finalize", help_result.stdout)
 
     def test_retired_web_controller_is_absent(self) -> None:
-        self.assertFalse(hasattr(web, "main"))
-        self.assertFalse(hasattr(web, "finalize_document"))
+        self.assertFalse((ROOT / "scripts/run_validation_web.py").exists())
+        self.assertFalse((ROOT / "scripts/configuration_run_web.py").exists())
 
     def test_materialized_baseline_shape_contains_identity_registry(self) -> None:
         run = create_from_contract(
@@ -500,7 +509,7 @@ class ReleaseFieldGatesTest(unittest.TestCase):
             validate_document(contract)
 
     def test_server_user_data_transport_supports_explicit_tag_wide_google_owner(self) -> None:
-        web._validate_first_party_feature_contract(
+        web__validate_first_party_feature_contract(
             path="$.first_party_data_routes[0]",
             feature="google-ads-server-user-data-transport",
             destination_field="user_data",
@@ -524,18 +533,18 @@ class ReleaseFieldGatesTest(unittest.TestCase):
             "consent_types": {"ad_user_data"},
         }
         with self.assertRaisesRegex(Exception, "tag-wide"):
-            web._validate_first_party_feature_contract(
+            web__validate_first_party_feature_contract(
                 **common, consumer_targets=[{"type": "googtag"}]
             )
-        web._validate_first_party_feature_contract(**common, consumer_targets=[{"type": "awct"}])
+        web__validate_first_party_feature_contract(**common, consumer_targets=[{"type": "awct"}])
 
         common.update(feature="google-ads-tag-wide-user-data", timing="tag-wide")
-        web._validate_first_party_feature_contract(**common, consumer_targets=[{"type": "googtag"}])
+        web__validate_first_party_feature_contract(**common, consumer_targets=[{"type": "googtag"}])
 
     def test_external_dependencies_use_only_the_structured_current_form(self) -> None:
         for value, message in (
-            (["legacy shorthand"], "must be an object"),
-            ("invalid", "must be an array"),
+            (["legacy shorthand"], "is not of type 'object'"),
+            ("invalid", "is not of type 'array'"),
         ):
             with self.subTest(value=value):
                 contract = valid_web_contract()

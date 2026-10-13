@@ -1,0 +1,118 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/haiqigeng/5-gtm-configure/schemas/common.schema.json",
+  "$defs": {
+    "assertions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "client_claim": {
+          "type": "object",
+          "properties": {
+            "description": {
+              "type": "string",
+              "minLength": 1
+            },
+            "evidence_locator": {
+              "type": "string",
+              "minLength": 1
+            },
+            "native_sha256": {
+              "type": "string",
+              "pattern": "^sha256:[a-f0-9]{64}$"
+            }
+          },
+          "required": [
+            "description",
+            "evidence_locator",
+            "native_sha256"
+          ],
+          "additionalProperties": false
+        },
+        "transformation": {
+          "type": "object",
+          "properties": {
+            "mode": {
+              "enum": [
+                "allow",
+                "augment",
+                "exclude"
+              ]
+            },
+            "scope": {
+              "type": "string",
+              "minLength": 1
+            },
+            "evidence_locator": {
+              "type": "string",
+              "minLength": 1
+            },
+            "native_sha256": {
+              "type": "string",
+              "pattern": "^sha256:[a-f0-9]{64}$"
+            },
+            "allowed_parameters": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "uniqueItems": true
+            }
+          },
+          "required": [
+            "mode",
+            "scope",
+            "evidence_locator",
+            "native_sha256"
+          ],
+          "additionalProperties": false,
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "mode": {
+                    "const": "allow"
+                  }
+                }
+              },
+              "then": {
+                "required": [
+                  "allowed_parameters"
+                ]
+              }
+            }
+          ]
+        },
+        "event_data": {
+          "type": "object",
+          "properties": {
+            "key_path": {
+              "type": "string",
+              "minLength": 1
+            },
+            "claiming_client_proof": {
+              "type": "string",
+              "minLength": 1
+            },
+            "evidence_locator": {
+              "type": "string",
+              "minLength": 1
+            },
+            "native_sha256": {
+              "type": "string",
+              "pattern": "^sha256:[a-f0-9]{64}$"
+            }
+          },
+          "required": [
+            "key_path",
+            "claiming_client_proof",
+            "evidence_locator",
+            "native_sha256"
+          ],
+          "additionalProperties": false
+        }
+      }
+    }
+  }
+}

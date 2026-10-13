@@ -10,13 +10,14 @@ from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "scripts"), str(ROOT / "tests"), str(ROOT / "tests/fixtures")]
-from compile_configuration_request import compile_request
-from configuration_run import atomic_write, create_from_contract, load_document
 from current_support import valid_pipeline_contract
+from gtm_configure.cli.mcp import execute
+from gtm_configure.domain.native import FieldResolutionError, effective_event_parameters
+from gtm_configure.intake.request import compile_request
+from gtm_configure.render import render_markdown
+from gtm_configure.runtime.adapter_protocol import atomic_write
+from gtm_configure.runtime.state import create_from_contract, load_document
 from mcp_behavior_scenario import param, request
-from mcp_execute import execute
-from native_configuration import FieldResolutionError, effective_event_parameters
-from run_render import render_markdown
 from test_current_adapter_runtime import FakeAdapter, capabilities
 
 
@@ -280,7 +281,7 @@ class StartupTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "run.json"
             atomic_write(path, document)
-            with patch("mcp_execute.McpTargetAdapter", Adapter):
+            with patch("gtm_configure.cli.mcp.McpTargetAdapter", Adapter):
                 if invalid_profile:
                     with self.assertRaises(ValueError):
                         execute(path, profiles, transport)

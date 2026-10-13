@@ -6,23 +6,24 @@ import unittest
 from pathlib import Path
 
 from jsonschema import Draft202012Validator
+from schema_support import schema_registry
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from configuration_run import (  # noqa: E402
-    FIRST_PARTY_FEATURES,
+from current_support import valid_pipeline_contract  # noqa: E402
+from gtm_configure.core.model import (  # noqa: E402
+    ACTIONS,
     OPERATION_STATES,
+    RESOURCE_FAMILIES,
     RUN_PHASES,
     RUN_STATUSES,
     SCHEMA_VERSION,
-    RunValidationError,
-    create_from_contract,
-    validate_document,
 )
-from run_model import ACTIONS, RESOURCE_FAMILIES  # noqa: E402
-
-from tests.current_support import valid_pipeline_contract  # noqa: E402
+from gtm_configure.core.validation import RunValidationError
+from gtm_configure.domain.web_model import FIRST_PARTY_FEATURES
+from gtm_configure.runtime.state import create_from_contract
+from gtm_configure.runtime.validation import validate_document
 
 
 def schema() -> dict:
@@ -41,7 +42,7 @@ class ConfigurationRunSchemaTest(unittest.TestCase):
             source_locator="approved input",
             timestamp="2026-08-18T00:00:00Z",
         )
-        errors = list(Draft202012Validator(value).iter_errors(current))
+        errors = list(Draft202012Validator(value, registry=schema_registry()).iter_errors(current))
         self.assertEqual(errors, [], "\n".join(error.message for error in errors))
 
     def test_schema_and_python_authority_enums_stay_in_sync(self) -> None:
@@ -66,9 +67,11 @@ class ConfigurationRunSchemaTest(unittest.TestCase):
             timestamp="2026-08-18T00:00:00Z",
         )
         document["object_changes"][0]["unreviewed_mutation_flag"] = True
-        errors = list(Draft202012Validator(schema()).iter_errors(document))
+        errors = list(
+            Draft202012Validator(schema(), registry=schema_registry()).iter_errors(document)
+        )
         self.assertTrue(any("Additional properties" in error.message for error in errors))
-        with self.assertRaisesRegex(RunValidationError, "unexpected key"):
+        with self.assertRaisesRegex(RunValidationError, "Additional properties"):
             validate_document(document)
 
     def test_schema_and_python_reject_pause_for_non_tag_objects(self) -> None:
@@ -82,15 +85,18 @@ class ConfigurationRunSchemaTest(unittest.TestCase):
         operation.update(
             {
                 "action": "pause",
+                "object_id": "var-1",
                 "resource_family": "variable",
                 "name": "DLV - test",
                 "object_key": "web-main::variable::DLV - test",
                 "pre_change": {"name": "DLV - test", "type": "v"},
             }
         )
-        errors = list(Draft202012Validator(schema()).iter_errors(document))
+        errors = list(
+            Draft202012Validator(schema(), registry=schema_registry()).iter_errors(document)
+        )
         self.assertTrue(errors)
-        with self.assertRaisesRegex(RunValidationError, "only for tag objects"):
+        with self.assertRaisesRegex(RunValidationError, "tag.*expected"):
             validate_document(document)
 
 

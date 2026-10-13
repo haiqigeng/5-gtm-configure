@@ -7,18 +7,17 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path[:0] = [str(ROOT / "scripts"), str(ROOT / "tests")]
-from adapter_runtime import TargetAdapterRegistry, execute_ready_operations, verify_idempotent_rerun
-from adapter_support import AmbiguousWriteError
-from compile_configuration_request import compile_request
-from configuration_run import (
-    atomic_write,
-    build_verification_comparison,
-    checkpoint_operation,
-    create_from_contract,
-    load_document,
-)
 from current_support import valid_web_contract
-from mcp_adapter import FAMILIES, McpTargetAdapter
+from gtm_configure.adapters.mcp import FAMILIES, McpTargetAdapter
+from gtm_configure.intake.request import compile_request
+from gtm_configure.runtime.adapter_protocol import AmbiguousWriteError, atomic_write
+from gtm_configure.runtime.engine import (
+    TargetAdapterRegistry,
+    execute_ready_operations,
+    verify_idempotent_rerun,
+)
+from gtm_configure.runtime.state import checkpoint_operation, create_from_contract, load_document
+from gtm_configure.runtime.verification import build_verification_comparison
 
 OUT = Path(sys.argv[1]) if __name__ == "__main__" else None
 clone = copy.deepcopy
@@ -300,7 +299,7 @@ def run():
     failed = next(o for o in load_document(p2)["object_changes"] if o["resource_family"] == "tag")
     if failed["state"] != "verified":
         print("DEFECT packaged MCP update:", failed["journal"][-1])
-        from verification import build_pre_write_comparison
+        from gtm_configure.runtime.verification import build_pre_write_comparison
 
         (OUT / "update-false-drift-comparison.json").write_text(
             json.dumps(build_pre_write_comparison(failed, ad2.read(failed))[0], indent=2)
@@ -352,7 +351,7 @@ def run():
     snapshot(b3, "uncertain")
     print("PASS uncertain save recovered by readback with no second mutation")
 
-    from configuration_run import build_pre_write_comparison
+    from gtm_configure.runtime.verification import build_pre_write_comparison
 
     doc = load_document(OUT / "update-mcp.json")
     op = next(o for o in doc["object_changes"] if o["resource_family"] == "tag")

@@ -1,5 +1,58 @@
 # Changelog
 
+## 11.0.0
+
+Released 2026-10-13.
+
+### Why This Release Matters
+
+Make the skill coherent to read, maintain and execute while preserving its remote-call discipline
+and saved-state safeguards. Shared rules now have one owner across preparation and execution.
+
+### What Changed
+
+- Replace scattered entry points with `scripts/configure_gtm.py` and focused core, domain, intake,
+  runtime, adapter, comparison and CLI modules. Remove obsolete paths without compatibility shims.
+- Route concise entry instructions to core, domain, vendor and host-specific references.
+- Correct GA4 event, item and user-property scopes and retain exact field names; keep implementation
+  controls separate from outgoing fields.
+- Enforce the closed shape vocabulary and execute cached published JSON Schemas before semantic gates.
+- Keep server review assertions outside native payloads and bind them to the reviewed native snapshot.
+- Share consent, pipeline, server and dedup rules, including rejection of unauthorized transported-event
+  renames. Use type-strict JSON comparison at every nesting level.
+- Add a narrow folder-organization route without invented product-research requirements.
+- Preserve authenticated target checks, baseline/drift checks, uncertain-write recovery, readback and
+  no-op convergence. Package a self-contained regression suite and maintenance map.
+- Update repository tests, release tooling, metadata and CI to the new structure.
+
+### What Users Should Do
+
+Replace the previous skill folder completely. Install `scripts/requirements.txt` (JSON Schema is now
+a runtime dependency), or `scripts/requirements-mcp.txt` for the SDK host. Use the new command router
+and create fresh contract 8.0/run 6.0 artifacts from approved inputs. No older-schema migration is supplied.
+
+### Validation
+
+The installed refactor passed 28 packaged regressions and independent synthetic web/pipeline scenarios,
+including native saved comparisons, no-op convergence and rejection of invalid pipeline declarations.
+The release passes all 429 repository tests and 506 subtests, with local MCP relay/SDK tests required
+and none skipped. The extracted archive independently passes its 28 packaged tests. Lint, formatting,
+schema metadata, reference routing and deterministic archive checks pass. CI repeats the checks on
+Linux/Python 3.11 and Windows/Python 3.13; see the workflows for the tagged commit. No live GTM or vendor runtime certification is claimed.
+
+The measured folder scenario retains one mutation and ten adapter calls. Entry text is 57% shorter;
+the selected Codex adapter reading path is 71% shorter. Those are word-count proxies, not measured
+billing savings. Small-fixture prepare/materialize CPU rises by about 3 ms; cold imports rise from
+about 28 ms to 191 ms due to schema validation. No end-to-end network speed benchmark was performed.
+
+### Known Limits
+
+Native comparison does not replace semantic review outside supported topologies. Triggerless
+setup/cleanup-only tags remain unsupported. Concurrent conflicts can be detected after partial
+unpublished changes. Documentation relevance and user approval remain evidence-backed judgments;
+local hashes do not authenticate either. Publication and runtime acceptance remain external.
+
+
 ## 10.3.0
 
 Released 2026-10-04.

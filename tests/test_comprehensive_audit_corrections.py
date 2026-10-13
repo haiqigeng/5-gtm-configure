@@ -12,7 +12,6 @@ from copy import deepcopy
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path[:0] = [str(ROOT / "scripts"), str(ROOT / "tests")]
 from fixtures.mcp_behavior_scenario import PROFILE, FakeGtm, request
 from gtm_configure.adapters.mcp import McpTargetAdapter
 from gtm_configure.comparison.native import GraphError

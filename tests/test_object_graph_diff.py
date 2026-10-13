@@ -1,12 +1,10 @@
 from __future__ import annotations
 
 import json
-import sys
 import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "scripts"))
 
 from gtm_configure.comparison.native import (
     BUILT_IN_TRIGGER_IDS,

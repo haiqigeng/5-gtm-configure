@@ -2,14 +2,12 @@
 
 import hashlib
 import json
-import sys
 import tempfile
 import unittest
 from copy import deepcopy
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path[:0] = [str(ROOT / "scripts"), str(ROOT / "tests")]
 
 from current_support import approve_mutations, valid_web_contract  # noqa: E402
 from gtm_configure.adapters.mcp import McpTargetAdapter, unwrap  # noqa: E402

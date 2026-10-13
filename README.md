@@ -113,7 +113,8 @@ the broader development fixtures.
 The refactor retains the measured folder scenario's one mutation and ten adapter calls. Entry
 instructions are 57% shorter and the selected Codex adapter reading path 71% shorter; word counts
 are reading proxies, not billed-token or dollar measurements. Stricter schema checks add local work
-(about 3 ms for the small fixture; cold import about 191 ms versus 28 ms). These are local fixture
+(about 5 ms total for the final one-folder fixture versus about 1 ms before the refactor;
+the earlier cold-import measurement was about 191 ms versus 28 ms). These are local fixture
 measurements, not end-to-end GTM benchmarks.
 
 Read [CONTRIBUTING.md](CONTRIBUTING.md) and [SECURITY.md](SECURITY.md) before contributing.

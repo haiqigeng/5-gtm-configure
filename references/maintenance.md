@@ -11,6 +11,8 @@ Neither check certifies live GTM, template behavior, runtime delivery, or every 
 `runtime` owns durable state and adapter execution; `adapters` owns transport; `comparison` owns
 type-strict equality with native normalization; `core` owns JSON, privacy, errors and enums.
 The JSON schemas own structural validation; cached validators resolve only packaged schemas.
+`common.schema.json` owns assertions, consent declarations, field flows, shape nodes and mutation
+approvals shared by contract and run. Phase-specific structures stay in their respective schema.
 Reference folders follow the task's decisions, with separate host and vendor surfaces loaded on demand.
 
 Current release is 11.0.0, contract 8.0, run 6.0. No old entry points, schema migrations or

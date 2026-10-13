@@ -12,7 +12,6 @@ from pathlib import Path
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path[:0] = [str(ROOT / "scripts"), str(ROOT / "tests")]
 
 from fixtures.mcp_behavior_scenario import PROFILE, FakeGtm, param, request  # noqa: E402
 from gtm_configure.adapters.discovery import discover  # noqa: E402

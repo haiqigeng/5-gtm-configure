@@ -113,6 +113,279 @@
           "additionalProperties": false
         }
       }
+    },
+    "nonEmpty": {
+      "type": "string",
+      "minLength": 1
+    },
+    "uniqueStrings": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/nonEmpty"
+      },
+      "uniqueItems": true
+    },
+    "shapeNode": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "shape"
+      ],
+      "properties": {
+        "path": {
+          "$ref": "#/$defs/nonEmpty"
+        },
+        "shape": {
+          "enum": [
+            "scalar",
+            "array",
+            "object"
+          ]
+        }
+      }
+    },
+    "fieldFlow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "field_scope",
+        "destination_field",
+        "requirement_ids",
+        "source",
+        "wire",
+        "event_data",
+        "destination"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "proved",
+            "blocked",
+            "external"
+          ]
+        },
+        "field_scope": {
+          "enum": [
+            "event-parameter",
+            "user-property",
+            "item-parameter",
+            "control"
+          ]
+        },
+        "destination_field": {
+          "$ref": "#/$defs/nonEmpty"
+        },
+        "requirement_ids": {
+          "$ref": "#/$defs/uniqueStrings"
+        },
+        "source": {
+          "$ref": "#/$defs/shapeNode"
+        },
+        "wire": {
+          "$ref": "#/$defs/shapeNode"
+        },
+        "event_data": {
+          "$ref": "#/$defs/shapeNode"
+        },
+        "destination": {
+          "$ref": "#/$defs/shapeNode"
+        },
+        "claiming_client_proof": {
+          "type": "string"
+        },
+        "receiver_owner": {
+          "type": "string"
+        },
+        "transformation_owner": {
+          "type": "string"
+        },
+        "blocker": {
+          "type": "string"
+        },
+        "external_dependency": {
+          "type": "string"
+        },
+        "missing_behavior": {
+          "type": "string"
+        },
+        "runtime_verification_note": {
+          "type": "string"
+        }
+      }
+    },
+    "mutationApproval": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "grade",
+        "locator",
+        "object_key",
+        "action",
+        "requirement_ids",
+        "payload_sha256"
+      ],
+      "properties": {
+        "grade": {
+          "const": "approved-input"
+        },
+        "locator": {
+          "$ref": "#/$defs/nonEmpty"
+        },
+        "object_key": {
+          "$ref": "#/$defs/nonEmpty"
+        },
+        "action": {
+          "enum": [
+            "create",
+            "update",
+            "replace",
+            "rename",
+            "pause",
+            "unpause",
+            "remove"
+          ]
+        },
+        "requirement_ids": {
+          "$ref": "#/$defs/uniqueStrings",
+          "minItems": 1
+        },
+        "payload_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    },
+    "consent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "consent_topology_id",
+        "destination",
+        "requirement_ids",
+        "consent_mode",
+        "transport_behavior",
+        "web_enforcement",
+        "server_enforcement",
+        "signal_authority",
+        "signal_source",
+        "unknown_state_behavior",
+        "event_coverage",
+        "intentional_double_gate",
+        "server_tag_keys",
+        "transporter_tag_keys",
+        "transporter_destination_vendor_block"
+      ],
+      "properties": {
+        "consent_topology_id": {
+          "$ref": "#/$defs/nonEmpty"
+        },
+        "destination": {
+          "$ref": "#/$defs/nonEmpty"
+        },
+        "requirement_ids": {
+          "$ref": "#/$defs/uniqueStrings"
+        },
+        "consent_mode": {
+          "enum": [
+            "strict-basic",
+            "advanced-native",
+            "product-specific",
+            "client-policy-ungated"
+          ]
+        },
+        "transport_behavior": {
+          "enum": [
+            "blocked",
+            "always-transported",
+            "conditionally-transported"
+          ]
+        },
+        "web_enforcement": {
+          "type": "object",
+          "required": [
+            "mechanism"
+          ],
+          "properties": {
+            "mechanism": {
+              "enum": [
+                "cmp-lifecycle-plus-vendor-block",
+                "business-trigger-plus-vendor-block",
+                "transport-trigger-only",
+                "google-consent-mode",
+                "product-native",
+                "none",
+                "not-applicable",
+                "firing-trigger-condition",
+                "additional-consent-checks"
+              ]
+            }
+          }
+        },
+        "server_enforcement": {
+          "type": "object",
+          "required": [
+            "mechanism"
+          ],
+          "properties": {
+            "mechanism": {
+              "enum": [
+                "incoming-google-consent-native",
+                "server-template-native-consent",
+                "server-additional-consent-check",
+                "server-blocking-trigger",
+                "none"
+              ]
+            },
+            "template_support": {
+              "type": "string"
+            },
+            "blocking_trigger_key": {
+              "type": "string"
+            }
+          }
+        },
+        "signal_authority": {
+          "enum": [
+            "google-consent-mode",
+            "third-party-cmp",
+            "product-native",
+            "none"
+          ]
+        },
+        "signal_source": {
+          "$ref": "#/$defs/nonEmpty"
+        },
+        "server_signal_path": {
+          "type": "string"
+        },
+        "unknown_state_behavior": {
+          "enum": [
+            "deny",
+            "native-product-behavior",
+            "explicit-policy"
+          ]
+        },
+        "event_coverage": {
+          "$ref": "#/$defs/uniqueStrings"
+        },
+        "intentional_double_gate": {
+          "type": "boolean"
+        },
+        "double_gate_justification": {
+          "type": "string"
+        },
+        "server_tag_keys": {
+          "$ref": "#/$defs/uniqueStrings"
+        },
+        "transporter_tag_keys": {
+          "$ref": "#/$defs/uniqueStrings"
+        },
+        "transporter_destination_vendor_block": {
+          "type": "boolean"
+        }
+      }
     }
   }
 }

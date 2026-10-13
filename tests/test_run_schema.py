@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import sys
 import unittest
 from pathlib import Path
 
@@ -9,7 +8,6 @@ from jsonschema import Draft202012Validator
 from schema_support import schema_registry
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "scripts"))
 
 from current_support import valid_pipeline_contract  # noqa: E402
 from gtm_configure.core.model import (  # noqa: E402

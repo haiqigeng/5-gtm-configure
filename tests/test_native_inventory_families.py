@@ -1,14 +1,12 @@
 # ruff: noqa: E402
 """Final native identity proof through the generic adapter protocol, without GTM calls."""
 
-import sys
 import tempfile
 import unittest
 from copy import deepcopy
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path[:0] = [str(ROOT / "scripts"), str(ROOT / "tests")]
 from current_support import approve_mutations
 from gtm_configure.domain.resources import (
     ResourceRegistryError,

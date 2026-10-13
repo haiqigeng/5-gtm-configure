@@ -1,13 +1,11 @@
 """Native parameter and consumer-closure regressions, using synthetic offline surfaces."""
 
-import sys
 import tempfile
 import unittest
 from copy import deepcopy
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path[:0] = [str(ROOT / "scripts"), str(ROOT / "tests")]
 
 from current_support import approve_mutations  # noqa: E402
 from gtm_configure.contract import ContractValidationError, validate_document  # noqa: E402

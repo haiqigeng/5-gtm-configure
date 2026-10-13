@@ -1,12 +1,10 @@
 """Focused offline regressions for native pipeline identity and typed GTM quota refusal."""
 
-import sys
 import unittest
 from copy import deepcopy
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path[:0] = [str(ROOT / "scripts"), str(ROOT / "tests")]
 
 import test_current_adapter_runtime as runtime_tests  # noqa: E402
 from current_support import (  # noqa: E402

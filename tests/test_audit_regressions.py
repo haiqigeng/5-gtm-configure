@@ -3,7 +3,6 @@ from __future__ import annotations
 import io
 import json
 import shutil
-import sys
 import tempfile
 import unittest
 from copy import deepcopy
@@ -11,8 +10,6 @@ from pathlib import Path
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "scripts"))
-sys.path.insert(0, str(ROOT / "tests"))
 
 from current_support import approve_mutations, valid_web_contract  # noqa: E402
 from gtm_configure.adapters.mcp import unwrap  # noqa: E402

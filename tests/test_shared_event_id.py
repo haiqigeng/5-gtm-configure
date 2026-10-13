@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 import json
-import re
-import sys
 import tempfile
 import unittest
 from copy import deepcopy
@@ -12,8 +10,6 @@ from jsonschema import Draft202012Validator
 from schema_support import schema_registry
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "scripts"))
-sys.path.insert(0, str(ROOT / "tests"))
 
 from current_support import (  # noqa: E402
     add_nonpurchase_dual_dedup,
@@ -76,8 +72,8 @@ def generated_contract():
 
 
 class SharedEventIdTest(unittest.TestCase):
-    def assert_generation_rejected(self, contract, message):
-        with self.assertRaisesRegex(ContractValidationError, message):
+    def assert_generation_rejected(self, contract, message, *, contract_message=None):
+        with self.assertRaisesRegex(ContractValidationError, contract_message or message):
             validate_document(approve_mutations(contract))
         # Run-phase checks must reject the same native graph before any mutation.
         errors = []
@@ -88,7 +84,7 @@ class SharedEventIdTest(unittest.TestCase):
             {item["target_id"]: item["container_type"] for item in contract["targets"]},
             errors.append,
         )
-        self.assertTrue(any(re.search(message, error) for error in errors), errors)
+        self.assertTrue(any(message in error for error in errors), errors)
 
     def test_generated_route_schemas_execution_readback_and_noop(self):
         contract = generated_contract()
@@ -133,7 +129,9 @@ class SharedEventIdTest(unittest.TestCase):
         tag["intended"]["notes"] = dedup["source_reference"]
         tag["intended"]["event_id"] = "independent-id"
         self.assert_generation_rejected(
-            contract, "consumer field does not use|native identity field does not use"
+            contract,
+            "consumer field does not use",
+            contract_message="native identity field does not use",
         )
 
     def test_sequencing_on_either_consumer_is_rejected(self):
@@ -192,7 +190,7 @@ class SharedEventIdTest(unittest.TestCase):
         contract = generated_contract()
         contract["dedup_contracts"][0]["event_name"] = "Purchase"
         self.assert_generation_rejected(
-            contract, "stable purchase/order|detached from its event flow"
+            contract, "stable purchase/order", contract_message="detached from its event flow"
         )
 
     def test_template_type_code_and_dependency_are_bound(self):

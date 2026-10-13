@@ -1,15 +1,14 @@
 """Static regressions for built-in triggers and associated Google-tag defaults."""
 # ruff: noqa: E402
 
-import sys
 import unittest
 from copy import deepcopy
 from pathlib import Path
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path[:0] = [str(ROOT / "scripts"), str(ROOT / "tests"), str(ROOT / "tests/fixtures")]
 from current_support import approve_mutations, valid_pipeline_contract
+from fixtures.mcp_behavior_scenario import param
 from gtm_configure.domain.execution import _validate_normal_trigger_bindings
 from gtm_configure.domain.fields import validate_native_mappings
 from gtm_configure.domain.web_model import BUILT_IN_TRIGGER_TYPES
@@ -20,7 +19,6 @@ from gtm_configure.domain.web_native import (
 )
 from gtm_configure.intake.request import _derive_exact_declarations, compile_request
 from gtm_configure.runtime.state import create_from_contract
-from mcp_behavior_scenario import param
 from test_mapping_startup_corrections import lead_request
 
 

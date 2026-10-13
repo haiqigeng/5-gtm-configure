@@ -10,7 +10,6 @@ from copy import deepcopy
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "scripts"))
 
 from gtm_configure.core.json_io import StrictJsonError, load_json, loads_strict  # noqa: E402
 from gtm_configure.intake.ga4 import HandoffError, normalized_approved_semantics, verify_delivery

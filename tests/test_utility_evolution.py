@@ -3,7 +3,6 @@ from __future__ import annotations
 import hashlib
 import json
 import subprocess
-import sys
 import tempfile
 import unittest
 from copy import deepcopy
@@ -11,8 +10,6 @@ from pathlib import Path
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "scripts"))
-sys.path.insert(0, str(ROOT / "tests"))
 
 import gtm_configure.runtime.state as run_state  # noqa: E402
 from check_release import check_git_state  # noqa: E402

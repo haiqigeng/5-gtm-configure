@@ -17,6 +17,7 @@ and saved-state safeguards. Shared rules now have one owner across preparation a
 - Correct GA4 event, item and user-property scopes and retain exact field names; keep implementation
   controls separate from outgoing fields.
 - Enforce the closed shape vocabulary and execute cached published JSON Schemas before semantic gates.
+  Contract and run reference one shared schema for unchanged consent, field-flow and approval structures.
 - Keep server review assertions outside native payloads and bind them to the reviewed native snapshot.
 - Share consent, pipeline, server and dedup rules, including rejection of unauthorized transported-event
   renames. Use type-strict JSON comparison at every nesting level.
@@ -35,15 +36,16 @@ and create fresh contract 8.0/run 6.0 artifacts from approved inputs. No older-s
 
 The installed refactor passed 28 packaged regressions and independent synthetic web/pipeline scenarios,
 including native saved comparisons, no-op convergence and rejection of invalid pipeline declarations.
-The release passes all 429 repository tests and 506 subtests, with local MCP relay/SDK tests required
+The release passes all 431 repository tests and 508 subtests, with local MCP relay/SDK tests required
 and none skipped. The extracted archive independently passes its 28 packaged tests. Lint, formatting,
 schema metadata, reference routing and deterministic archive checks pass. CI repeats the checks on
 Linux/Python 3.11 and Windows/Python 3.13; see the workflows for the tagged commit. No live GTM or vendor runtime certification is claimed.
 
 The measured folder scenario retains one mutation and ten adapter calls. Entry text is 57% shorter;
 the selected Codex adapter reading path is 71% shorter. Those are word-count proxies, not measured
-billing savings. Small-fixture prepare/materialize CPU rises by about 3 ms; cold imports rise from
-about 28 ms to 191 ms due to schema validation. No end-to-end network speed benchmark was performed.
+billing savings. The final one-folder prepare/materialize check takes about 5 ms locally versus
+about 1 ms before the refactor. Earlier cold-import measurements rose from about 28 ms to 191 ms
+due to schema validation. No end-to-end network speed benchmark was performed.
 
 ### Known Limits
 

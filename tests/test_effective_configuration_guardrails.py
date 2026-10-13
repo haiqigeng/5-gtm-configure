@@ -1,14 +1,11 @@
 from __future__ import annotations
 
-import sys
 import tempfile
 import unittest
 from copy import deepcopy
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "scripts"))
-sys.path.insert(0, str(ROOT / "tests"))
 
 from current_support import (  # noqa: E402
     approve_mutations,

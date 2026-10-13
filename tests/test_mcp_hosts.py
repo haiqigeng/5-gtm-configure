@@ -14,7 +14,6 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path[:0] = [str(ROOT / "scripts"), str(ROOT / "tests")]
 from fixtures.mcp_behavior_scenario import PROFILE, request  # noqa: E402
 from gtm_configure.cli.mcp_host import HostSetupError, SdkTransport, load_connection  # noqa: E402
 from gtm_configure.intake.request import compile_request  # noqa: E402

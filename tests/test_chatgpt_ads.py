@@ -2,14 +2,12 @@
 
 import hashlib
 import json
-import sys
 import tempfile
 import unittest
 from copy import deepcopy
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path[:0] = [str(ROOT / "scripts"), str(ROOT / "tests")]
 from current_support import approve_mutations  # noqa: E402
 from gtm_configure.core.privacy import sensitive_paths  # noqa: E402
 from gtm_configure.core.public_identifiers import public_identifier_paths  # noqa: E402

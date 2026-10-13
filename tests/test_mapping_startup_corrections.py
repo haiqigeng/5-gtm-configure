@@ -1,7 +1,6 @@
 """Offline regression tests for native mapping and target startup containment."""
 # ruff: noqa: E402
 
-import sys
 import tempfile
 import unittest
 from copy import deepcopy
@@ -9,15 +8,14 @@ from pathlib import Path
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path[:0] = [str(ROOT / "scripts"), str(ROOT / "tests"), str(ROOT / "tests/fixtures")]
 from current_support import valid_pipeline_contract
+from fixtures.mcp_behavior_scenario import param, request
 from gtm_configure.cli.mcp import execute
 from gtm_configure.domain.native import FieldResolutionError, effective_event_parameters
 from gtm_configure.intake.request import compile_request
 from gtm_configure.render import render_markdown
 from gtm_configure.runtime.adapter_protocol import atomic_write
 from gtm_configure.runtime.state import create_from_contract, load_document
-from mcp_behavior_scenario import param, request
 from test_current_adapter_runtime import FakeAdapter, capabilities
 
 

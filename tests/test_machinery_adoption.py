@@ -1,7 +1,6 @@
 # ruff: noqa: E402
 """Observable acceptance for the current evidence-reuse runtime."""
 
-import sys
 import tempfile
 import unittest
 from collections import Counter
@@ -10,7 +9,6 @@ from pathlib import Path
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path[:0] = [str(ROOT / "scripts"), str(ROOT / "tests")]
 from fixtures.mcp_behavior_scenario import PROFILE, FakeGtm, request
 from gtm_configure.adapters.mcp import McpTargetAdapter, unwrap
 from gtm_configure.intake.request import compile_request

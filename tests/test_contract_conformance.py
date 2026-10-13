@@ -10,7 +10,6 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts/configure_gtm.py"
-sys.path.insert(0, str(ROOT / "scripts"))
 
 from gtm_configure.intake.ga4 import HandoffError, normalized_approved_semantics, verify_delivery
 

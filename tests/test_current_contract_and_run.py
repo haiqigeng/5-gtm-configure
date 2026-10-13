@@ -12,8 +12,6 @@ from jsonschema import Draft202012Validator
 from schema_support import schema_registry
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "scripts"))
-sys.path.insert(0, str(ROOT / "tests"))
 
 from current_support import (  # noqa: E402
     add_nonpurchase_dual_dedup,

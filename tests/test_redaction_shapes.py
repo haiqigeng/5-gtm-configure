@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import sys
 import tempfile
 import unittest
 from copy import deepcopy
@@ -11,7 +10,6 @@ from pathlib import Path
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path[:0] = [str(ROOT / "scripts"), str(ROOT / "tests")]
 from current_support import approve_mutations, complete_capture_evidence, valid_web_contract
 from gtm_configure.adapters.mcp import McpTargetAdapter
 from gtm_configure.contract import validate_document

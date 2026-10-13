@@ -10,7 +10,6 @@ from copy import deepcopy
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path[:0] = [str(ROOT / "scripts"), str(ROOT / "tests")]
 from current_support import approve_mutations, valid_web_contract  # noqa: E402
 from fixtures.mcp_behavior_scenario import PROFILE, FakeGtm, bind, request  # noqa: E402
 from gtm_configure.adapters.mcp import McpTargetAdapter  # noqa: E402

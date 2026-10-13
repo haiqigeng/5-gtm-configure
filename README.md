@@ -6,17 +6,18 @@ object graph, preserves approved measurement semantics and consent, and never pu
 
 ## Current release
 
-**[v11.0.0](https://github.com/haiqigeng/5-gtm-configure/releases/tag/v11.0.0)** reorganizes the skill
-around one command entry point, focused documentation routes and shared validation rules. It fixes
-GA4 field-scope mapping, enforces exact field shapes and keeps server review assertions separate from
-native API payloads. See the [changelog](CHANGELOG.md) for changes, validation and limitations.
+**[v12.0.0](https://github.com/haiqigeng/5-gtm-configure/releases/tag/v12.0.0)** gives contract and run
+validation one domain graph, shared closed declaration schemas and one canonical hash format.
+GA4 imports preserve destination semantics and block unresolved identity or other-product routes.
+Release checks enforce module boundaries and detect copied implementations and stale documentation.
+See the [changelog](CHANGELOG.md) for changes, validation and limitations.
 
-Only `configuration-contract@8.0` and `configuration-run@6.0` are supported. Create fresh contracts
+Only `configuration-contract@9.0` and `configuration-run@7.0` are supported. Create fresh contracts
 and runs from approved inputs. Obsolete commands and schema migrations are intentionally absent.
 
 ## Install
 
-Download `configure-gtm-v11.0.0.zip` from the release and extract its `configure-gtm` folder into your
+Download `configure-gtm-v12.0.0.zip` from the release and extract its `configure-gtm` folder into your
 host's skills directory. Replace the previous skill folder completely so removed paths do not remain.
 Keep any active run artifacts separately; they are not installation files.
 
@@ -90,7 +91,7 @@ All commands use `python scripts/configure_gtm.py COMMAND`; each provides `--hel
 | `tests/` | Regression, schema, transport, recovery and release checks |
 | `tools/` | Repository-only release validation and deterministic packaging |
 
-See [maintenance](references/maintenance.md) for rule ownership. No compatibility facades are shipped.
+See [maintenance](references/maintenance.md) and [the complete rule map](docs/architecture.md) for rule ownership. No compatibility facades are shipped.
 
 ## Development and release
 
@@ -99,23 +100,21 @@ python -m pip install -e ".[dev]"
 python -m ruff format --no-cache --check scripts tests tools
 python -m ruff check --no-cache scripts tests tools
 python -B -m pytest tests -q -p no:cacheprovider
-python tools/check_release.py --tag v11.0.0
-python tools/build_skill_package.py --output dist/configure-gtm-v11.0.0.zip
+python tools/check_release.py --tag v12.0.0
+python tools/build_skill_package.py --output dist/configure-gtm-v12.0.0.zip
 git diff --check
 ```
 
 CI runs on Linux/Python 3.11 and Windows/Python 3.13, with Node.js 22 and PowerShell 7 for relay tests.
-Tagging the checked commit `v11.0.0` triggers release validation and deterministic archive creation.
+Tagging the checked commit `v12.0.0` triggers release validation and deterministic archive creation.
 The workflow publishes the current changelog section, archive and SHA-256 checksum. The archive
 contains the skill and its self-contained regression suite, excluding repository-only tooling and
 the broader development fixtures.
 
-The refactor retains the measured folder scenario's one mutation and ten adapter calls. Entry
-instructions are 57% shorter and the selected Codex adapter reading path 71% shorter; word counts
-are reading proxies, not billed-token or dollar measurements. Stricter schema checks add local work
-(about 5 ms total for the final one-folder fixture versus about 1 ms before the refactor;
-the earlier cold-import measurement was about 191 ms versus 28 ms). These are local fixture
-measurements, not end-to-end GTM benchmarks.
+Compared with v11.0.0, the same offline large-container task uses 51 API calls and the 20-event
+batch uses 63 calls. The measured batch takes 1.9 seconds of local compute versus 1.8 seconds;
+its run is 521 KB versus 519 KB after canonical hashes gained an explicit prefix. These are
+synthetic local measurements, not live latency or billing claims. Entry instructions are unchanged. See the [validation record](docs/release-12.0-validation.md).
 
 Read [CONTRIBUTING.md](CONTRIBUTING.md) and [SECURITY.md](SECURITY.md) before contributing.
 Licensed under [MIT](LICENSE).

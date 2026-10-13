@@ -4,13 +4,13 @@ import json
 import unittest
 from pathlib import Path
 
-from current_support import valid_web_contract
 from gtm_configure import contract
 from gtm_configure.core import model
 from gtm_configure.core.contract_validation import ContractValidationError
 from gtm_configure.core.validation import RunValidationError
 from gtm_configure.runtime.state import create_from_contract
 from gtm_configure.runtime.validation import validate_document as validate_run
+from support.contracts import valid_web_contract
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -26,7 +26,15 @@ class SharedSchemaTests(unittest.TestCase):
             "unknown_state_behavior": model.UNKNOWN_STATE_BEHAVIORS,
         }
         for field, expected in enums.items():
-            self.assertEqual(set(properties[field]["enum"]), expected, field)
+            self.assertEqual(
+                set(
+                    common["$defs"]["consentMode"]["enum"]
+                    if field == "consent_mode"
+                    else properties[field]["enum"]
+                ),
+                expected,
+                field,
+            )
         for field, expected in (
             ("web_enforcement", model.WEB_CONSENT_MECHANISMS),
             ("server_enforcement", model.SERVER_CONSENT_MECHANISMS),

@@ -2,19 +2,8 @@ from __future__ import annotations
 
 import subprocess
 import sys
-import unittest
 from copy import deepcopy
-from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
-
-from current_support import (  # noqa: E402
-    approve_mutations,
-    complete_capture_evidence,
-    valid_pipeline_contract,
-    valid_server_contract,
-    valid_web_contract,
-)
 from gtm_configure.comparison.native import GraphError, normalize_graph  # noqa: E402
 from gtm_configure.contract import ContractValidationError, validate_document
 from gtm_configure.core.privacy import (
@@ -26,25 +15,33 @@ from gtm_configure.core.privacy import (
 )
 from gtm_configure.core.validation import RunValidationError as web_RunValidationError
 from gtm_configure.domain.first_party_data import (
-    _validate_first_party_feature_contract as web__validate_first_party_feature_contract,
+    validate_first_party_feature_contract as web__validate_first_party_feature_contract,
 )
 from gtm_configure.domain.web_native import (
-    _configured_transport_endpoint as web__configured_transport_endpoint,
+    configured_transport_endpoint as web__configured_transport_endpoint,
 )
-from gtm_configure.domain.web_native import _send_page_view_value as web__send_page_view_value
+from gtm_configure.domain.web_native import send_page_view_value as web__send_page_view_value
 from gtm_configure.domain.web_native import (
-    _validate_google_destination as web__validate_google_destination,  # noqa: E402
+    validate_google_destination as web__validate_google_destination,  # noqa: E402
 )
 from gtm_configure.intake.ga4 import normalized_approved_semantics  # noqa: E402
 from gtm_configure.runtime.engine import AdapterExecutionError, TargetAdapterRegistry  # noqa: E402
 from gtm_configure.runtime.state import (
-    _record_target_baseline,  # noqa: E402
     create_from_contract,  # noqa: E402
+    record_target_baseline,  # noqa: E402
 )
 from gtm_configure.runtime.verification import build_pre_write_comparison  # noqa: E402
+from support.contracts import (  # noqa: E402
+    approve_mutations,
+    complete_capture_evidence,
+    valid_pipeline_contract,
+    valid_server_contract,
+    valid_web_contract,
+)
+from support.domain_contracts import ROOT, ReleaseFieldGatesTestFixture
 
 
-class ReleaseFieldGatesTest(unittest.TestCase):
+class ReleaseFieldGatesTest(ReleaseFieldGatesTestFixture):
     def test_mutations_require_approved_requirement_authority(self):
         for mutation in ("no-requirement", "official-only", "payload-drift", "wrong-locator"):
             contract = valid_web_contract()
@@ -178,7 +175,7 @@ class ReleaseFieldGatesTest(unittest.TestCase):
         with self.assertRaisesRegex(
             web_RunValidationError, "does not include every authenticated baseline consumer"
         ):
-            _record_target_baseline(
+            record_target_baseline(
                 run,
                 target_id="web-main",
                 resources=resources,
@@ -586,7 +583,7 @@ class ReleaseFieldGatesTest(unittest.TestCase):
         run = create_from_contract(contract, run_id="BASELINE-RECEIPT", source_locator="approved")
         resources = {"tag": [], "trigger": []}
         with self.assertRaisesRegex(Exception, "capture_evidence"):
-            _record_target_baseline(
+            record_target_baseline(
                 run,
                 target_id="web-main",
                 resources=resources,
@@ -597,7 +594,7 @@ class ReleaseFieldGatesTest(unittest.TestCase):
         wrong_identity = complete_capture_evidence(resources, run["run"]["targets"][0])
         wrong_identity["source_identity"]["container_id"] = "GTM-WRONG"
         with self.assertRaisesRegex(Exception, "authorized GTM target"):
-            _record_target_baseline(
+            record_target_baseline(
                 run,
                 target_id="web-main",
                 resources=resources,
@@ -637,7 +634,7 @@ class ReleaseFieldGatesTest(unittest.TestCase):
             if item["target_id"] == "web-main"
         }
         with self.assertRaisesRegex(Exception, "complete target resource surface"):
-            _record_target_baseline(
+            record_target_baseline(
                 run,
                 target_id="web-main",
                 resources=planned_families,
@@ -647,7 +644,3 @@ class ReleaseFieldGatesTest(unittest.TestCase):
                     planned_families, run["run"]["targets"][0]
                 ),
             )
-
-
-if __name__ == "__main__":
-    unittest.main()

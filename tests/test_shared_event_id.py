@@ -2,21 +2,10 @@ from __future__ import annotations
 
 import json
 import tempfile
-import unittest
 from copy import deepcopy
 from pathlib import Path
 
-from jsonschema import Draft202012Validator
-from schema_support import schema_registry
-
-ROOT = Path(__file__).resolve().parents[1]
-
-from current_support import (  # noqa: E402
-    add_nonpurchase_dual_dedup,
-    approve_mutations,
-    valid_pipeline_contract,
-)
-from gtm_configure.contract import ContractValidationError, validate_document
+from gtm_configure.contract import validate_document
 from gtm_configure.domain.deduplication import validate_generated_event_ids  # noqa: E402
 from gtm_configure.runtime.adapter_protocol import atomic_write
 from gtm_configure.runtime.engine import (
@@ -28,64 +17,16 @@ from gtm_configure.runtime.state import (
     create_from_contract,
     load_document,  # noqa: E402
 )
-from test_current_adapter_runtime import FakeAdapter, capabilities  # noqa: E402
+from jsonschema import Draft202012Validator
+from support.adapters import FakeAdapter, capabilities  # noqa: E402
+from support.contracts import (  # noqa: E402
+    approve_mutations,
+)
+from support.schemas import schema_registry
+from support.shared_event_id import ROOT, SharedEventIdTestFixture, generated_contract
 
 
-def generated_contract():
-    """Synthetic reviewed template premise, not a real GTM template export."""
-    contract = add_nonpurchase_dual_dedup(valid_pipeline_contract())
-    dedup = contract["dedup_contracts"][0]
-    template_key = "web-main::template::Reviewed occurrence ID"
-    template = {
-        "target_id": "web-main",
-        "resource_family": "template",
-        "name": "Reviewed occurrence ID",
-        "object_key": template_key,
-        "object_id": "456",
-        "action": "reuse",
-        "requirement_ids": ["REQ-ATC"],
-        "depends_on": [],
-        "justification": "Reuse the inspected occurrence-scoped generator",
-        "evidence": ["container-confirmed"],
-        "risk": "routine",
-        "intended": {"templateData": "Synthetic inspected template source"},
-    }
-    contract["implementation"]["objects"].append(template)
-    variable = next(
-        item
-        for item in contract["implementation"]["objects"]
-        if item["object_key"] == dedup["source_variable_key"]
-    )
-    variable["intended"] = {"type": "cvt_123_456"}
-    variable["depends_on"] = [template_key]
-    dedup["source_type"] = "generated-event-id"
-    dedup["generation"] = {
-        "template_object_key": template_key,
-        "template_type": "cvt_123_456",
-        "review_locator": "Synthetic source and permission review; same-event repeated reads stable",
-        "consumer_bindings": [
-            {"object_key": key, "field_path": ["event_id"]}
-            for key in dedup["browser_consumer_keys"] + dedup["transporter_consumer_keys"]
-        ],
-    }
-    return approve_mutations(contract)
-
-
-class SharedEventIdTest(unittest.TestCase):
-    def assert_generation_rejected(self, contract, message, *, contract_message=None):
-        with self.assertRaisesRegex(ContractValidationError, contract_message or message):
-            validate_document(approve_mutations(contract))
-        # Run-phase checks must reject the same native graph before any mutation.
-        errors = []
-        validate_generated_event_ids(
-            contract["dedup_contracts"],
-            contract["implementation"]["objects"],
-            contract["execution_topologies"],
-            {item["target_id"]: item["container_type"] for item in contract["targets"]},
-            errors.append,
-        )
-        self.assertTrue(any(message in error for error in errors), errors)
-
+class SharedEventIdTest(SharedEventIdTestFixture):
     def test_generated_route_schemas_execution_readback_and_noop(self):
         contract = generated_contract()
         run = create_from_contract(contract, run_id="generated", source_locator="synthetic")
@@ -229,7 +170,3 @@ class SharedEventIdTest(unittest.TestCase):
         validate_document(approve_mutations(contract))
         tag["intended"]["parameter"].append(deepcopy(tag["intended"]["parameter"][0]))
         self.assert_generation_rejected(contract, "does not resolve uniquely")
-
-
-if __name__ == "__main__":
-    unittest.main()

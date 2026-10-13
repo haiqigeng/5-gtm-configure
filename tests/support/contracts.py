@@ -150,7 +150,7 @@ def valid_pipeline_contract(*, cutover: bool = False) -> dict:
     pipeline["cutover_operation_key"] = web_key
     return approve_mutations(
         {
-            "schema_version": "8.0",
+            "schema_version": "9.0",
             "mode": "pipeline",
             "route": "analytics",
             "scope": {"included": ["REQ-PAGE"], "reference_only": [], "excluded": []},
@@ -442,7 +442,7 @@ def valid_web_contract() -> dict:
 
 def with_complete_baselines(run: dict) -> dict:
     """Explicit synthetic baseline setup for offline controller tests."""
-    from gtm_configure.runtime.state import _record_target_baseline
+    from gtm_configure.runtime.state import record_target_baseline
 
     for target in run["run"]["targets"]:
         resources = {
@@ -450,7 +450,7 @@ def with_complete_baselines(run: dict) -> dict:
             for item in run["object_changes"]
             if item["target_id"] == target["target_id"]
         }
-        run = _record_target_baseline(
+        run = record_target_baseline(
             run,
             target_id=target["target_id"],
             resources=resources,

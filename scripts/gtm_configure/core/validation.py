@@ -20,44 +20,28 @@ class RunConflictError(RunValidationError):
     """Raised when another controller owns the same run artifact."""
 
 
-def _object(value: Any, path: str) -> dict[str, Any]:
+def object(value: Any, path: str, *, error_type=RunValidationError) -> dict[str, Any]:
     if not isinstance(value, dict):
-        raise RunValidationError(f"{path} must be an object")
+        raise error_type(f"{path} must be an object")
     return value
 
 
-def _exact_keys(
-    value: dict[str, Any],
-    path: str,
-    *,
-    required: set[str],
-    optional: set[str] | None = None,
-) -> None:
-    allowed = required | (optional or set())
-    missing = sorted(required - set(value))
-    unexpected = sorted(set(value) - allowed)
-    if missing:
-        raise RunValidationError(f"{path} is missing key(s): {', '.join(missing)}")
-    if unexpected:
-        raise RunValidationError(f"{path} contains unexpected key(s): {', '.join(unexpected)}")
-
-
-def _array(value: Any, path: str) -> list[Any]:
+def array(value: Any, path: str, *, error_type=RunValidationError) -> list[Any]:
     if not isinstance(value, list):
-        raise RunValidationError(f"{path} must be an array")
+        raise error_type(f"{path} must be an array")
     return value
 
 
-def _text(value: Any, path: str) -> str:
+def text(value: Any, path: str, *, error_type=RunValidationError) -> str:
     if not isinstance(value, str) or not value.strip():
-        raise RunValidationError(f"{path} must be a non-empty string")
+        raise error_type(f"{path} must be a non-empty string")
     return value.strip()
 
 
-def _optional_text(value: Any, path: str) -> str | None:
+def optional_text(value: Any, path: str) -> str | None:
     if value is None:
         return None
-    return _text(value, path)
+    return text(value, path)
 
 
 def canonical_sha256(value: Any) -> str:
@@ -75,31 +59,28 @@ def canonical_sha256(value: Any) -> str:
     return f"sha256:{hashlib.sha256(encoded).hexdigest()}"
 
 
-def _unique_texts(value: Any, path: str, *, allow_empty: bool = True) -> list[str]:
-    items = _array(value, path)
-    normalized = [_text(item, f"{path}[]") for item in items]
+def unique_texts(
+    value: Any, path: str, *, allow_empty: bool = True, error_type=RunValidationError
+) -> list[str]:
+    items = array(value, path, error_type=error_type)
+    normalized = [text(item, f"{path}[]", error_type=error_type) for item in items]
     if len(set(normalized)) != len(normalized):
-        raise RunValidationError(f"{path} contains duplicate values")
+        raise error_type(f"{path} contains duplicate values")
     if not allow_empty and not normalized:
-        raise RunValidationError(f"{path} must not be empty")
+        raise error_type(f"{path} must not be empty")
     return normalized
 
 
-def _timestamp(value: Any, path: str) -> str:
-    text = _text(value, path)
+def timestamp(value: Any, path: str) -> str:
+    value_text = text(value, path)
     try:
-        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+        parsed = datetime.fromisoformat(value_text.replace("Z", "+00:00"))
     except ValueError as exc:
         raise RunValidationError(f"{path} must be an ISO-8601 timestamp") from exc
     if parsed.tzinfo is None:
         raise RunValidationError(f"{path} must include a timezone")
-    return text
+    return value_text
 
 
-def _date(value: Any, path: str) -> str:
-    text = _text(value, path)
-    try:
-        datetime.strptime(text, "%Y-%m-%d")
-    except ValueError as exc:
-        raise RunValidationError(f"{path} must use YYYY-MM-DD") from exc
-    return text
+def normalized_token(value: str) -> str:
+    return "".join(character for character in value.casefold() if character.isalnum())

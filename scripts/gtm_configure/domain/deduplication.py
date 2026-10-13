@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from gtm_configure.core.public_identifiers import _locate
+from gtm_configure.core.public_identifiers import locate
 from gtm_configure.domain.native import (
     effective_fields,
     field_key,
@@ -18,14 +18,14 @@ def _identity_binding(target, path, expected_field, variables=None):
     if len(path) == 1:
         field = path[0]
     elif len(path) == 3 and path[0] == "parameter" and path[-1] == "value":
-        row, _ = _locate(target, path[:-1])
+        row, _ = locate(target, path[:-1])
         field = row.get("key")
     elif (
         len(path) == 7
         and path[:3] == ["parameter", "eventSettingsTable", "list"]
         and path[4:] == ["map", "parameterValue", "value"]
     ):
-        field, _ = _locate(target, path[:4] + ["map", "parameter", "value"])
+        field, _ = locate(target, path[:4] + ["map", "parameter", "value"])
     else:
         raise ValueError("unsupported native identity field path")
 
@@ -37,7 +37,7 @@ def _identity_binding(target, path, expected_field, variables=None):
     effective = effective_fields(target, variables or {})[field_key(expected_field)]
     if len(path) == 1:
         return effective
-    value = _locate(target, path)[0]
+    value = locate(target, path)[0]
     if value != effective:
         raise ValueError("native identity cell differs from effective field")
     return value

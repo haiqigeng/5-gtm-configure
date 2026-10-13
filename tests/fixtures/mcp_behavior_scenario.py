@@ -7,7 +7,6 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path[:0] = [str(ROOT / "scripts"), str(ROOT / "tests")]
-from current_support import valid_web_contract
 from gtm_configure.adapters.mcp import FAMILIES, McpTargetAdapter
 from gtm_configure.intake.request import compile_request
 from gtm_configure.runtime.adapter_protocol import AmbiguousWriteError, atomic_write
@@ -18,6 +17,7 @@ from gtm_configure.runtime.engine import (
 )
 from gtm_configure.runtime.state import checkpoint_operation, create_from_contract, load_document
 from gtm_configure.runtime.verification import build_verification_comparison
+from support.contracts import valid_web_contract
 
 OUT = Path(sys.argv[1]) if __name__ == "__main__" else None
 clone = copy.deepcopy

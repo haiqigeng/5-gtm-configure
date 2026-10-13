@@ -31,7 +31,7 @@ the request to one exact feature and delivery route before creating any variable
 
 The same email source can therefore require different GTM variables or consumers. Never copy the
 GA4 `user_data` implementation into Google Ads or another media template by analogy. Follow
-[google-field-ownership.md](../analytics/google-fields.md) for the authoritative Google placement
+[google fields](../analytics/google-fields.md) for the authoritative Google placement
 matrix.
 
 Keep four names separate: the site's source key (which may be `user_provided_data`), the GTM

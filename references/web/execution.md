@@ -7,7 +7,7 @@
 - Sequencing boundaries
 
 For non-Custom-Event triggers, built-in variable selection, LUT/RLT mapping or environment routing,
-read [native-triggers-and-variables.md](native-resources.md). The
+read [native resources](native-resources.md). The
 [CMP reference](../consent/web.md) owns blocking predicates, initial/late page-view timing, SPA consent
 opportunities and events before CMP readiness. Do not repeat those rules inside each trigger.
 

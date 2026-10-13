@@ -39,6 +39,8 @@ jobs:
           python -B -m pytest tests -q -p no:cacheprovider
       - name: Build runtime package
         run: python tools/build_skill_package.py --output "dist/configure-gtm-$GITHUB_REF_NAME.zip"
+      - name: Map maintained files and rule owners
+        run: python tools/check_architecture.py --output dist/ownership-map.json
       - name: Checksum archive
         working-directory: dist
         run: sha256sum configure-gtm-*.zip > SHA256SUMS.txt
@@ -74,3 +76,4 @@ jobs:
           files: |
             dist/configure-gtm-*.zip
             dist/SHA256SUMS.txt
+            dist/ownership-map.json

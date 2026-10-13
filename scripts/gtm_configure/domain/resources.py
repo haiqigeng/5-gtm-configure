@@ -5,8 +5,8 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from gtm_configure.comparison.native import ID_FIELDS
 from gtm_configure.core.model import (
+    ID_FIELDS,
     MUTATING_ACTIONS,
     RESOURCE_FAMILIES,
     SERVER_RESOURCE_FAMILIES,

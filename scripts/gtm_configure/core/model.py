@@ -1,8 +1,9 @@
-"""Shared enums and immutable policy constants for configuration-run@6.0."""
+"""Shared enums and immutable policy constants for configuration run."""
 
-SCHEMA_VERSION = "6.0"
-CONTRACT_SCHEMA_VERSION = "8.0"
-VERIFICATION_SCHEMA_VERSION = "1.0"
+SCHEMA_VERSION = "7.0"
+CONTRACT_SCHEMA_VERSION = "9.0"
+MATERIALIZATION_METHOD = f"contract-{CONTRACT_SCHEMA_VERSION}-deterministic"
+VERIFICATION_SCHEMA_VERSION = "2.0"
 
 RUN_MODES = {"web", "server", "pipeline"}
 TARGET_TYPES = {"web", "server"}
@@ -71,7 +72,6 @@ ACTIONS = {
 DELTA_ACTIONS = {"update", "replace", "rename", "pause", "unpause", "remove"}
 MUTATING_ACTIONS = {"create", *DELTA_ACTIONS}
 HIGH_IMPACT_ACTIONS = {"replace", "pause", "unpause", "remove"}
-AUTHORITY_GRADES = {"approved-input", "official-current", "container-confirmed"}
 
 CONSENT_MODES = {
     "strict-basic",
@@ -135,31 +135,6 @@ PUBLICATION_ORDER = {
         "post-publication-smoke",
     ],
 }
-PUBLICATION_DEPENDENCY_KINDS = set(PUBLICATION_ORDER["pipeline"])
-
-
-TOP_LEVEL_KEYS = {
-    "schema_version",
-    "run",
-    "requirements",
-    "pipelines",
-    "object_changes",
-    "payload_mappings",
-    "consent_topologies",
-    "execution_topologies",
-    "page_view_decisions",
-    "first_party_data_routes",
-    "inventory_dispositions",
-    "container_baselines",
-    "dedup_contracts",
-    "final_inventories",
-    "target_results",
-    "official_sources",
-    "external_dependencies",
-    "publication_dependencies",
-    "recovery_boundary",
-    "idempotency",
-}
 
 
 ROUTES = {"analytics", "media", "consent", "combined", "organization"}
@@ -172,3 +147,24 @@ EVIDENCE_GRADES = {
     "container-confirmed",
     "contract-sample",
 }
+
+
+ID_FIELDS = {
+    "tagId": "tag",
+    "triggerId": "trigger",
+    "variableId": "variable",
+    "folderId": "folder",
+    "templateId": "template",
+    "zoneId": "zone",
+    "environmentId": "environment",
+    "clientId": "client",
+    "transformationId": "transformation",
+}
+BUILT_IN_TRIGGER_IDS = frozenset(
+    {
+        "2147479553",  # All Pages
+        "2147479572",  # Consent Initialization - All Pages
+        "2147479573",  # Initialization - All Pages
+    }
+)
+IDENTITY_FIELDS = ("account_id", "container_id", "workspace_id", "container_type")

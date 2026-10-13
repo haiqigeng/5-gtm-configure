@@ -8,7 +8,6 @@ from copy import deepcopy
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-from current_support import approve_mutations  # noqa: E402
 from gtm_configure.core.privacy import sensitive_paths  # noqa: E402
 from gtm_configure.core.public_identifiers import public_identifier_paths  # noqa: E402
 from gtm_configure.runtime.adapter_protocol import atomic_write
@@ -25,8 +24,9 @@ from gtm_configure.runtime.verification import (  # noqa: E402
     build_verification_comparison,
     expected_graph,
 )
-from test_current_adapter_runtime import FakeAdapter, capabilities  # noqa: E402
-from test_google_ads_enhanced_conversions import event_override_contract  # noqa: E402
+from support.adapters import FakeAdapter, capabilities  # noqa: E402
+from support.contracts import approve_mutations  # noqa: E402
+from support.enhanced_conversions import event_override_contract  # noqa: E402
 
 
 def chatgpt_contract():

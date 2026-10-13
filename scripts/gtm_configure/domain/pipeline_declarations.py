@@ -6,11 +6,11 @@ from typing import Any, Callable
 
 from gtm_configure.core.contract_validation import (
     ContractValidationError,
-    _array,
-    _fail,
-    _object,
-    _text,
-    _unique_texts,
+    array,
+    fail,
+    object,
+    text,
+    unique_texts,
 )
 from gtm_configure.core.model import (
     CONSENT_MODES,
@@ -24,7 +24,7 @@ from gtm_configure.core.model import (
     UNKNOWN_STATE_BEHAVIORS,
     WEB_CONSENT_MECHANISMS,
 )
-from gtm_configure.domain.graph import _active_tag
+from gtm_configure.domain.graph import active_tag
 
 
 def validate_transport_consent(topology: dict[str, Any], fail: Callable[[str], None]) -> None:
@@ -68,7 +68,7 @@ def validate_transport_consent(topology: dict[str, Any], fail: Callable[[str], N
         )
 
 
-def _validate_consent_topologies(
+def validate_consent_topologies(
     raw: Any,
     requirement_ids: set[str],
     objects: dict[str, dict[str, Any]],
@@ -77,20 +77,20 @@ def _validate_consent_topologies(
 ) -> dict[str, dict[str, Any]]:
     records: dict[str, dict[str, Any]] = {}
     server_tag_bindings: dict[str, list[str]] = {}
-    for index, value in enumerate(_array(raw, "$.consent_topologies")):
+    for index, value in enumerate(array(raw, "$.consent_topologies")):
         path = f"$.consent_topologies[{index}]"
-        topology = _object(value, path)
+        topology = object(value, path)
 
-        validate_transport_consent(topology, _fail)
-        topology_id = _text(topology.get("consent_topology_id"), f"{path}.consent_topology_id")
+        validate_transport_consent(topology, fail)
+        topology_id = text(topology.get("consent_topology_id"), f"{path}.consent_topology_id")
         if topology_id in records:
             raise ContractValidationError(f"duplicate consent topology {topology_id!r}")
         records[topology_id] = topology
-        _text(topology.get("destination"), f"{path}.destination")
+        text(topology.get("destination"), f"{path}.destination")
         if topology.get("consent_mode") not in CONSENT_MODES:
             raise ContractValidationError(f"{path}.consent_mode is unsupported")
         links = set(
-            _unique_texts(
+            unique_texts(
                 topology.get("requirement_ids"),
                 f"{path}.requirement_ids",
                 allow_empty=False,
@@ -100,10 +100,10 @@ def _validate_consent_topologies(
             raise ContractValidationError(f"{path}.requirement_ids contains unknown IDs")
         if topology.get("transport_behavior") not in TRANSPORT_BEHAVIORS:
             raise ContractValidationError(f"{path}.transport_behavior is unsupported")
-        web = _object(topology.get("web_enforcement"), f"{path}.web_enforcement")
+        web = object(topology.get("web_enforcement"), f"{path}.web_enforcement")
         if web.get("mechanism") not in WEB_CONSENT_MECHANISMS:
             raise ContractValidationError(f"{path}.web_enforcement.mechanism is unsupported")
-        server = _object(topology.get("server_enforcement"), f"{path}.server_enforcement")
+        server = object(topology.get("server_enforcement"), f"{path}.server_enforcement")
         mechanism = server.get("mechanism")
         if mechanism not in SERVER_CONSENT_MECHANISMS:
             raise ContractValidationError(f"{path}.server_enforcement.mechanism is unsupported")
@@ -116,8 +116,8 @@ def _validate_consent_topologies(
         signal_authority = topology.get("signal_authority")
         if signal_authority not in CONSENT_SIGNAL_AUTHORITIES:
             raise ContractValidationError(f"{path}.signal_authority is unsupported")
-        _text(topology.get("signal_source"), f"{path}.signal_source")
-        coverage = _unique_texts(
+        text(topology.get("signal_source"), f"{path}.signal_source")
+        coverage = unique_texts(
             topology.get("event_coverage"), f"{path}.event_coverage", allow_empty=False
         )
         if len(coverage) != len(set(coverage)):
@@ -126,8 +126,8 @@ def _validate_consent_topologies(
             "double_gate_justification"
         ):
             raise ContractValidationError(f"{path}.double_gate_justification is required")
-        server_tag_keys = _unique_texts(topology.get("server_tag_keys"), f"{path}.server_tag_keys")
-        transporter_tag_keys = _unique_texts(
+        server_tag_keys = unique_texts(topology.get("server_tag_keys"), f"{path}.server_tag_keys")
+        transporter_tag_keys = unique_texts(
             topology.get("transporter_tag_keys"), f"{path}.transporter_tag_keys"
         )
         vendor_block = topology.get("transporter_destination_vendor_block")
@@ -137,7 +137,7 @@ def _validate_consent_topologies(
             )
         for key in server_tag_keys:
             item = objects.get(key)
-            if item is None or not _active_tag(item):
+            if item is None or not active_tag(item):
                 raise ContractValidationError(
                     f"{path}.server_tag_keys must reference active server tags"
                 )
@@ -148,7 +148,7 @@ def _validate_consent_topologies(
             server_tag_bindings.setdefault(key, []).append(topology_id)
         for key in transporter_tag_keys:
             item = objects.get(key)
-            if item is None or not _active_tag(item):
+            if item is None or not active_tag(item):
                 raise ContractValidationError(
                     f"{path}.transporter_tag_keys must reference active web tags"
                 )
@@ -204,7 +204,7 @@ def _validate_consent_topologies(
                 )
         if signal_authority == "third-party-cmp":
             if server_tag_keys:
-                _text(topology.get("server_signal_path"), f"{path}.server_signal_path")
+                text(topology.get("server_signal_path"), f"{path}.server_signal_path")
             if topology.get("unknown_state_behavior") != "deny":
                 raise ContractValidationError(
                     f"{path} third-party CMP unknown state must fail closed"
@@ -226,7 +226,7 @@ def _validate_consent_topologies(
                     f"{path} Google native consent requires native-product-behavior"
                 )
         if mechanism == "server-blocking-trigger":
-            blocking_key = _text(
+            blocking_key = text(
                 server.get("blocking_trigger_key"),
                 f"{path}.server_enforcement.blocking_trigger_key",
             )
@@ -274,7 +274,7 @@ def _validate_consent_topologies(
     active_server_tags = {
         key
         for key, item in objects.items()
-        if _active_tag(item) and targets[item["target_id"]]["container_type"] == "server"
+        if active_tag(item) and targets[item["target_id"]]["container_type"] == "server"
     }
     missing = sorted(active_server_tags - set(server_tag_bindings))
     duplicates = sorted(key for key, links in server_tag_bindings.items() if len(links) != 1)
@@ -286,22 +286,22 @@ def _validate_consent_topologies(
     return records
 
 
-def _validate_dedup_contracts(raw: Any, requirement_ids: set[str]) -> dict[str, dict[str, Any]]:
+def validate_dedup_contracts(raw: Any, requirement_ids: set[str]) -> dict[str, dict[str, Any]]:
     records: dict[str, dict[str, Any]] = {}
-    for index, value in enumerate(_array(raw, "$.dedup_contracts")):
+    for index, value in enumerate(array(raw, "$.dedup_contracts")):
         path = f"$.dedup_contracts[{index}]"
-        contract = _object(value, path)
-        contract_id = _text(contract.get("dedup_contract_id"), f"{path}.dedup_contract_id")
+        contract = object(value, path)
+        contract_id = text(contract.get("dedup_contract_id"), f"{path}.dedup_contract_id")
         if contract_id in records:
             raise ContractValidationError(f"duplicate dedup contract {contract_id!r}")
         records[contract_id] = contract
-        requirement_id = _text(contract.get("requirement_id"), f"{path}.requirement_id")
+        requirement_id = text(contract.get("requirement_id"), f"{path}.requirement_id")
         if requirement_id not in requirement_ids:
             raise ContractValidationError(f"{path}.requirement_id is unknown")
         strategy = contract.get("strategy")
         source_type = contract.get("source_type")
-        destination = _text(contract.get("destination"), f"{path}.destination")
-        _text(contract.get("event_name"), f"{path}.event_name")
+        destination = text(contract.get("destination"), f"{path}.destination")
+        text(contract.get("event_name"), f"{path}.event_name")
         if strategy not in DEDUP_STRATEGIES:
             raise ContractValidationError(f"{path}.strategy is unsupported")
         if source_type not in DEDUP_SOURCE_TYPES:
@@ -319,31 +319,29 @@ def _validate_dedup_contracts(raw: Any, requirement_ids: set[str]) -> dict[str, 
                     f"{path} cannot apply a generic dual-shared-id contract to {destination!r}; "
                     "use the current product-specific identifier mechanism"
                 )
-            source_reference = _text(contract.get("source_reference"), f"{path}.source_reference")
-            _text(contract.get("source_variable_key"), f"{path}.source_variable_key")
-            browser_reference = _text(
-                contract.get("browser_reference"), f"{path}.browser_reference"
-            )
-            transporter_reference = _text(
+            source_reference = text(contract.get("source_reference"), f"{path}.source_reference")
+            text(contract.get("source_variable_key"), f"{path}.source_variable_key")
+            browser_reference = text(contract.get("browser_reference"), f"{path}.browser_reference")
+            transporter_reference = text(
                 contract.get("transporter_reference"), f"{path}.transporter_reference"
             )
-            _unique_texts(
+            unique_texts(
                 contract.get("browser_consumer_keys"),
                 f"{path}.browser_consumer_keys",
                 allow_empty=False,
             )
-            _unique_texts(
+            unique_texts(
                 contract.get("transporter_consumer_keys"),
                 f"{path}.transporter_consumer_keys",
                 allow_empty=False,
             )
-            server_event_data_path = _text(
+            server_event_data_path = text(
                 contract.get("server_event_data_path"), f"{path}.server_event_data_path"
             )
-            _text(contract.get("browser_field"), f"{path}.browser_field")
-            _text(contract.get("server_field"), f"{path}.server_field")
-            _text(contract.get("occurrence_scope"), f"{path}.occurrence_scope")
-            _array(contract.get("companion_fields", []), f"{path}.companion_fields")
+            text(contract.get("browser_field"), f"{path}.browser_field")
+            text(contract.get("server_field"), f"{path}.server_field")
+            text(contract.get("occurrence_scope"), f"{path}.occurrence_scope")
+            array(contract.get("companion_fields", []), f"{path}.companion_fields")
             if len({source_reference, browser_reference, transporter_reference}) != 1:
                 raise ContractValidationError(
                     f"{path} must bind browser and transporter to one occurrence source"
@@ -361,8 +359,8 @@ def _validate_dedup_contracts(raw: Any, requirement_ids: set[str]) -> dict[str, 
     return records
 
 
-def _validate_field_flow(value: Any, path: str, requirement_ids: set[str]) -> dict[str, Any]:
-    field = _object(value, path)
+def validate_field_flow(value: Any, path: str, requirement_ids: set[str]) -> dict[str, Any]:
+    field = object(value, path)
     field_scope = field.get("field_scope")
     if field_scope not in {
         "event-parameter",
@@ -371,32 +369,32 @@ def _validate_field_flow(value: Any, path: str, requirement_ids: set[str]) -> di
         "control",
     }:
         raise ContractValidationError(f"{path}.field_scope is unsupported")
-    _text(field.get("destination_field"), f"{path}.destination_field")
+    text(field.get("destination_field"), f"{path}.destination_field")
     status = field.get("status")
     if status not in FIELD_FLOW_STATUSES:
         raise ContractValidationError(f"{path}.status is unsupported")
     linked = set(
-        _unique_texts(field.get("requirement_ids"), f"{path}.requirement_ids", allow_empty=False)
+        unique_texts(field.get("requirement_ids"), f"{path}.requirement_ids", allow_empty=False)
     )
     if not linked <= requirement_ids:
         raise ContractValidationError(f"{path}.requirement_ids contains unknown IDs")
-    source = _object(field.get("source"), f"{path}.source")
-    wire = _object(field.get("wire"), f"{path}.wire")
-    event_data = _object(field.get("event_data"), f"{path}.event_data")
-    destination = _object(field.get("destination"), f"{path}.destination")
+    source = object(field.get("source"), f"{path}.source")
+    wire = object(field.get("wire"), f"{path}.wire")
+    event_data = object(field.get("event_data"), f"{path}.event_data")
+    destination = object(field.get("destination"), f"{path}.destination")
     for label, node in (
         ("source", source),
         ("wire", wire),
         ("event_data", event_data),
         ("destination", destination),
     ):
-        _text(node.get("path"), f"{path}.{label}.path")
+        text(node.get("path"), f"{path}.{label}.path")
         if node.get("shape") not in SHAPES:
             raise ContractValidationError(f"{path}.{label}.shape is unsupported")
     shapes = {source["shape"], wire["shape"], event_data["shape"], destination["shape"]}
     if status == "proved":
-        _text(field.get("claiming_client_proof"), f"{path}.claiming_client_proof")
-        _text(field.get("receiver_owner"), f"{path}.receiver_owner")
+        text(field.get("claiming_client_proof"), f"{path}.claiming_client_proof")
+        text(field.get("receiver_owner"), f"{path}.receiver_owner")
         if len(shapes) > 1 and not field.get("transformation_owner"):
             raise ContractValidationError(f"{path} changes shape without a transformation owner")
         wire_name = wire["path"].rsplit(".", 1)[-1]

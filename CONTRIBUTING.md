@@ -9,9 +9,9 @@ Use Python 3.11+, Node.js 22 and PowerShell 7. Install development dependencies 
 Set `REQUIRE_RELAY_TESTS=1` to require local relay execution, as CI does. SDK tests use the optional
 official MCP package against local stdio, HTTP and SSE servers, without account credentials.
 
-Use only contract 8.0/run 6.0. Update fixtures to current semantics; do not add legacy parsers,
+Use only contract 9.0/run 7.0. Update fixtures to current semantics; do not add legacy parsers,
 aliases, migrations or compatibility layers. Read [maintenance](references/maintenance.md) for
-ownership. Shared domain rules serve preparation and execution; adapters handle transport rather
+ownership and [the complete rule map](docs/architecture.md). Shared domain rules serve preparation and execution; adapters handle transport rather
 than owning a competing validator. Keep repository release tooling in `tools/`.
 
 Behavior changes need focused positive and negative scenarios. Preserve approval binding, consent,

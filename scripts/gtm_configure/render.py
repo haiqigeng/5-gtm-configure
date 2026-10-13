@@ -1,4 +1,4 @@
-"""Human configuration-result rendering for configuration-run@6.0."""
+"""Human configuration-result rendering for configuration run."""
 
 from __future__ import annotations
 
@@ -275,6 +275,42 @@ def render_markdown(document: dict[str, Any], *, embed_machine: bool = False) ->
     ]
     types = {target["target_id"]: target["container_type"] for target in document["run"]["targets"]}
     alerts = []
+    _render_target_summary(
+        alerts=alerts, document=document, lines=lines, operations=operations, run=run
+    )
+    _render_object_changes(document=document, lines=lines, operations=operations, types=types)
+    _render_requirement_mapping(document=document, lines=lines, operations=operations)
+    _render_domain_decisions(document=document, lines=lines)
+    _render_handoff(document=document, lines=lines, run=run)
+    if embed_machine:
+        fence = "`" * max(
+            3,
+            1
+            + max(
+                (len(match) for match in re.findall(r"`+", json.dumps(document))),
+                default=0,
+            ),
+        )
+        lines.extend(
+            [
+                "",
+                fence + "json",
+                json.dumps(
+                    redact_for_persistence(
+                        document,
+                        public_identifier_paths=public_identifier_paths(document),
+                    ),
+                    indent=2,
+                    sort_keys=True,
+                    ensure_ascii=False,
+                ),
+                fence,
+            ]
+        )
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def _render_target_summary(*, alerts, document, lines, operations, run):
     for baseline in document["container_baselines"]:
         resources = baseline.get("resources", {})
         for finding in sensitive_findings(
@@ -337,6 +373,9 @@ def render_markdown(document: dict[str, Any], *, embed_machine: bool = False) ->
         lines.append(
             f"| {_cell(target['target_id'])} | {_cell(target['container_type'])} | {_cell(target['account_id'])} | {_cell(target['container_id'])} | {_cell(target['workspace_id'])} | {_cell(baseline['complete'])} | {_cell(_workspace_change_summary(baseline.get('preexisting_workspace_changes')))} |"
         )
+
+
+def _render_object_changes(*, document, lines, operations, types):
     if document["inventory_dispositions"]:
         lines.extend(
             [
@@ -387,7 +426,7 @@ def render_markdown(document: dict[str, Any], *, embed_machine: bool = False) ->
         or item["state"] not in {"planned", "verified"}
     ]
     lines.append(
-        f"Unchanged objects: {_cell(len(operations) - len(visible))}. Full evidence remains in the machine record."
+        f"Objects without planned changes: {_cell(len(operations) - len(visible))}. Full evidence remains in the machine record."
     )
     lines.append("")
     if not visible:
@@ -434,6 +473,9 @@ def render_markdown(document: dict[str, Any], *, embed_machine: bool = False) ->
         if operation.get("error"):
             lines.append(f"- Error: {_cell(operation['error'])}")
         lines.append("")
+
+
+def _render_requirement_mapping(*, document, lines, operations):
     lines.extend(["## Requirement, payload, and consent mapping", ""])
     for requirement in document["requirements"]:
         requirement_id = requirement["id"]
@@ -510,6 +552,9 @@ def render_markdown(document: dict[str, Any], *, embed_machine: bool = False) ->
         if not mappings:
             lines.append("- Payload fields: none recorded")
         lines.append("")
+
+
+def _render_domain_decisions(*, document, lines):
     lines.extend(["## Per-tag web execution topology", ""])
     if not document["execution_topologies"]:
         lines.append("No web tag topology is recorded.")
@@ -575,6 +620,9 @@ def render_markdown(document: dict[str, Any], *, embed_machine: bool = False) ->
         lines.append(
             f"- {_cell(contract['dedup_contract_id'])} / {_cell(contract['requirement_id'])}: {_cell(contract['strategy'])} from {_cell(contract['source_type'])}; event {_cell(contract['event_name'])}; source {_cell(contract.get('source_reference') or 'none')}; server path {_cell(contract.get('server_event_data_path') or 'none')}."
         )
+
+
+def _render_handoff(*, document, lines, run):
     lines.extend(["", "## Official guidance applied", ""])
     for source in document["official_sources"]:
         lines.append(
@@ -602,34 +650,8 @@ def render_markdown(document: dict[str, Any], *, embed_machine: bool = False) ->
             "",
             "## Machine-readable run record",
             "",
-            "- Schema: configure-gtm/configuration-run@6.0",
+            "- Schema: configure-gtm/configuration run",
             f"- Run ID: {_cell(run['id'])}",
             f"- Contract fingerprint: {_cell(run['contract']['fingerprint'])}",
         ]
     )
-    if embed_machine:
-        fence = "`" * max(
-            3,
-            1
-            + max(
-                (len(match) for match in re.findall(r"`+", json.dumps(document))),
-                default=0,
-            ),
-        )
-        lines.extend(
-            [
-                "",
-                fence + "json",
-                json.dumps(
-                    redact_for_persistence(
-                        document,
-                        public_identifier_paths=public_identifier_paths(document),
-                    ),
-                    indent=2,
-                    sort_keys=True,
-                    ensure_ascii=False,
-                ),
-                fence,
-            ]
-        )
-    return "\n".join(lines).rstrip() + "\n"

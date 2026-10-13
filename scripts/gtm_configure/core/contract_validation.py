@@ -1,7 +1,9 @@
 """Contract errors and small typed accessors, independent of domain rules."""
 
+from functools import partial
 from typing import Any
 
+from gtm_configure.core import validation
 from gtm_configure.core.model import EVIDENCE_GRADES
 
 
@@ -13,43 +15,22 @@ class ContractValidationError(ValueError):
         self.error_code = error_code
 
 
-def _fail(message: str) -> None:
+def fail(message: str) -> None:
     raise ContractValidationError(message)
 
 
-def _object(value: Any, path: str) -> dict[str, Any]:
-    if not isinstance(value, dict):
-        raise ContractValidationError(f"{path} must be an object")
-    return value
+object = partial(validation.object, error_type=ContractValidationError)
+array = partial(validation.array, error_type=ContractValidationError)
+text = partial(validation.text, error_type=ContractValidationError)
+unique_texts = partial(validation.unique_texts, error_type=ContractValidationError)
 
 
-def _array(value: Any, path: str) -> list[Any]:
-    if not isinstance(value, list):
-        raise ContractValidationError(f"{path} must be an array")
-    return value
-
-
-def _text(value: Any, path: str) -> str:
-    if not isinstance(value, str) or not value.strip():
-        raise ContractValidationError(f"{path} must be a non-empty string")
-    return value.strip()
-
-
-def _unique_texts(value: Any, path: str, *, allow_empty: bool = True) -> list[str]:
-    items = [_text(item, f"{path}[]") for item in _array(value, path)]
-    if not allow_empty and not items:
-        raise ContractValidationError(f"{path} must not be empty")
-    if len(set(items)) != len(items):
-        raise ContractValidationError(f"{path} contains duplicate values")
-    return items
-
-
-def _authority(value: Any, path: str, *, approved: bool = False) -> dict[str, Any]:
-    authority = _object(value, path)
-    grade = _text(authority.get("grade"), f"{path}.grade")
+def authority(value: Any, path: str, *, approved: bool = False) -> dict[str, Any]:
+    authority = object(value, path)
+    grade = text(authority.get("grade"), f"{path}.grade")
     if grade not in EVIDENCE_GRADES:
         raise ContractValidationError(f"{path}.grade has unsupported value {grade!r}")
     if approved and grade != "approved-input":
         raise ContractValidationError(f"{path}.grade must be 'approved-input'")
-    _text(authority.get("locator"), f"{path}.locator")
+    text(authority.get("locator"), f"{path}.locator")
     return authority

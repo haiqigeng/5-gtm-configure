@@ -4,7 +4,7 @@
 
 - [Purpose and priority](#purpose-and-priority)
 - [Keep business and implementation authority separate](#keep-business-and-implementation-authority-separate)
-- [Use configuration-contract 8.0](#use-configuration-contract-80)
+- [Use configuration-contract 9.0](#use-configuration-contract-90)
 - [Map requirements and targets](#map-requirements-and-targets)
 - [Map target-scoped object actions](#map-target-scoped-object-actions)
 - [Map pipeline flow](#map-pipeline-flow)
@@ -31,9 +31,9 @@ completion. Never weaken a higher priority to make a graph look complete.
 Technical infrastructure must serve approved requirements. A field does not gain analytics or media
 authority merely because an implementation object supports it.
 
-## Use configuration-contract 8.0
+## Use configuration-contract 9.0
 
-Every new mutation map uses `"schema_version": "8.0"` and
+Every new mutation map uses `"schema_version": "9.0"` and
 [`configuration-contract.schema.json`](../../schemas/configuration-contract.schema.json):
 
 | Section | Contents |
@@ -56,7 +56,7 @@ Every new mutation map uses `"schema_version": "8.0"` and
 | `evidence` | Approved, official-current, container-confirmed, and sample provenance |
 | `external_dependencies` | Structured work outside the saved GTM graphs: `id`, affected `requirement_ids`, `owner`, `action`, and `status` (`open`, `resolved`, or `accepted`) |
 
-Only version 8.0 is accepted. Older and unversioned inputs cannot authorize mutation.
+Only version 9.0 is accepted. Older and unversioned inputs cannot authorize mutation.
 
 ## Map requirements and targets
 
@@ -211,7 +211,7 @@ declared outgoing field set, and approved sources/literals. The scoped native ev
 connect supported implementation fields to that declaration; other structures and automatic
 product behavior remain inspected ownership decisions.
 
-The validated contract deterministically materializes active `configuration-run@6.0` sections.
+The validated contract deterministically materializes active `configuration-run@7.0` sections.
 Do not hand-edit requirements, pipelines, immutable operation intention/dependencies, payload maps,
 consent topologies, dedup contracts, or publication dependencies; section fingerprints detect
 drift. Adapters may populate baselines, journals, readbacks, comparisons, and results only.

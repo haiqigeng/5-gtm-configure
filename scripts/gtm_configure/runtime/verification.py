@@ -1,9 +1,7 @@
-"""Target-scoped saved-state comparison helpers for configuration-run@6.0."""
+"""Target-scoped saved-state comparison helpers for configuration run."""
 
 from __future__ import annotations
 
-import hashlib
-import json
 from copy import deepcopy
 from typing import Any
 
@@ -25,17 +23,7 @@ from gtm_configure.core.public_identifiers import (
     canonical_template_source,
     public_identifier_paths,
 )
-
-
-def canonical_sha256(value: Any) -> str:
-    encoded = json.dumps(
-        value,
-        sort_keys=True,
-        separators=(",", ":"),
-        ensure_ascii=False,
-        allow_nan=False,
-    ).encode("utf-8")
-    return hashlib.sha256(encoded).hexdigest()
+from gtm_configure.core.validation import canonical_sha256
 
 
 def expected_graph(operation: dict[str, Any]) -> dict[str, Any]:

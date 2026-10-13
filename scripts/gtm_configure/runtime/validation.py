@@ -1,4 +1,4 @@
-"""Shared configuration-run@6.0 structure, state, and target validation."""
+"""Shared configuration run structure, state, and target validation."""
 
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ from gtm_configure.core.model import (
     ACTIONS,
     ALLOWED_TRANSITIONS,
     EXECUTION_MODES,
+    MATERIALIZATION_METHOD,
     MUTATING_ACTIONS,
     OPERATION_STATES,
     REQUIREMENT_STATUSES,
@@ -19,7 +20,6 @@ from gtm_configure.core.model import (
     SERVER_RESOURCE_FAMILIES,
     TARGET_STATUSES,
     TARGET_TYPES,
-    TOP_LEVEL_KEYS,
     WEB_RESOURCE_FAMILIES,
 )
 from gtm_configure.core.privacy import sensitive_paths
@@ -28,11 +28,15 @@ from gtm_configure.core.public_identifiers import (
     validate_public_identifiers,
 )
 from gtm_configure.core.schemas import validate_structure
-from gtm_configure.core.validation import RunValidationError, _timestamp
+from gtm_configure.core.validation import RunValidationError, canonical_sha256, timestamp
+from gtm_configure.core.validation import array as _array
+from gtm_configure.core.validation import object as _object
+from gtm_configure.core.validation import text as _text
+from gtm_configure.core.validation import unique_texts as _unique
 from gtm_configure.domain.actions import validate_action_contract
 from gtm_configure.domain.pipeline import (
-    _validate_publication_dependencies,
-    validate_pipeline_run,
+    validate_pipeline,
+    validate_publication_dependencies,
 )
 from gtm_configure.domain.resources import (
     ResourceRegistryError,
@@ -45,7 +49,6 @@ from gtm_configure.domain.server import validate_server_operations
 from gtm_configure.domain.web import validate_web_domain
 from gtm_configure.runtime.verification import (
     build_pre_write_comparison,
-    canonical_sha256,
     materialization_fingerprints,
     validate_verification_comparison,
 )
@@ -55,40 +58,9 @@ def _fail(message: str) -> None:
     raise RunValidationError(message)
 
 
-def _object(value: Any, path: str) -> dict[str, Any]:
-    if not isinstance(value, dict):
-        _fail(f"{path} must be an object")
-    return value
-
-
-def _array(value: Any, path: str) -> list[Any]:
-    if not isinstance(value, list):
-        _fail(f"{path} must be an array")
-    return value
-
-
-def _text(value: Any, path: str) -> str:
-    if not isinstance(value, str) or not value.strip():
-        _fail(f"{path} must be a non-empty string")
-    return value.strip()
-
-
-def _unique(values: Any, path: str) -> list[str]:
-    items = [_text(value, f"{path}[]") for value in _array(values, path)]
-    if len(set(items)) != len(items):
-        _fail(f"{path} contains duplicate values")
-    return items
-
-
 def _validate_header(document: dict[str, Any]) -> tuple[dict[str, str], set[str]]:
     if document.get("schema_version") != SCHEMA_VERSION:
         _fail(f"$.schema_version must be {SCHEMA_VERSION!r}")
-    missing = sorted(TOP_LEVEL_KEYS - set(document))
-    extra = sorted(set(document) - TOP_LEVEL_KEYS)
-    if missing:
-        _fail("missing top-level key(s): " + ", ".join(missing))
-    if extra:
-        _fail("unexpected top-level key(s): " + ", ".join(extra))
     run = _object(document["run"], "$.run")
     required_run = {
         "id",
@@ -398,7 +370,7 @@ def _validate_target_records(document: dict[str, Any], target_types: dict[str, s
             }
             if capture.get("source_identity") != expected_identity:
                 _fail(f"{path}.capture_evidence.source_identity differs from the authorized target")
-            expected_fingerprint = "sha256:" + canonical_sha256(
+            expected_fingerprint = canonical_sha256(
                 {
                     "resources": resources,
                     "workspace_changes": baseline["preexisting_workspace_changes"],
@@ -462,7 +434,7 @@ def _validate_target_records(document: dict[str, Any], target_types: dict[str, s
         if target_id not in target_types or target_id in inventory_targets:
             _fail(f"{path} has an unknown or duplicate target")
         inventory_targets.add(target_id)
-        _timestamp(inventory["observed_at"], f"{path}.observed_at")
+        timestamp(inventory["observed_at"], f"{path}.observed_at")
         target = next(item for item in document["run"]["targets"] if item["target_id"] == target_id)
         if inventory["source_identity"] != {
             key: target[key]
@@ -499,7 +471,7 @@ def _validate_target_records(document: dict[str, Any], target_types: dict[str, s
             error = result["baseline_error"]
             if not isinstance(error, dict) or set(error) != {"at", "error"}:
                 _fail(f"$.target_results[{index}].baseline_error has invalid fields")
-            _timestamp(error["at"], f"$.target_results[{index}].baseline_error.at")
+            timestamp(error["at"], f"$.target_results[{index}].baseline_error.at")
             _text(error["error"], f"$.target_results[{index}].baseline_error.error")
             if any(
                 item["target_id"] == result["target_id"] and item["complete"] for item in baselines
@@ -587,11 +559,11 @@ def validate_document(value: Any) -> dict[str, Any]:
         if observation.get("source_identity") != expected_identity:
             _fail(f"{path}.source_identity differs from the authorized target")
         try:
-            observed_at_text = _timestamp(observation.get("observed_at"), f"{path}.observed_at")
+            observed_at_text = timestamp(observation.get("observed_at"), f"{path}.observed_at")
             observed_at = datetime.fromisoformat(observed_at_text.replace("Z", "+00:00"))
             verified_at = max(
                 datetime.fromisoformat(
-                    _timestamp(entry.get("at"), f"{path}.verified_at").replace("Z", "+00:00")
+                    timestamp(entry.get("at"), f"{path}.verified_at").replace("Z", "+00:00")
                 )
                 for entry in operation["journal"]
                 if entry.get("state") == "verified"
@@ -621,13 +593,16 @@ def validate_document(value: Any) -> dict[str, Any]:
     if document["recovery_boundary"] is not None:
         _object(document["recovery_boundary"], "$.recovery_boundary")
     materialization = document["run"]["materialization"]
-    if materialization["method"] != "contract-8.0-deterministic":
+    if materialization["method"] != MATERIALIZATION_METHOD:
         _fail("unsupported materialization method")
     expected = materialization_fingerprints(document)
     if set(materialization["owned_sections"]) != set(expected):
         _fail("$.run.materialization.owned_sections differs from the owned projection")
     if materialization["section_fingerprints"] != expected:
         _fail("contract-owned run sections differ from deterministic materialization")
+    from gtm_configure.domain.context import ConfigurationGraph
+
+    graph = ConfigurationGraph.from_run(document)
     validate_server_operations(
         list(operations.values()),
         target_types,
@@ -636,10 +611,10 @@ def validate_document(value: Any) -> dict[str, Any]:
         requirements=document["requirements"],
     )
     try:
-        validate_pipeline_run(document, target_types, _fail)
+        validate_pipeline(graph, _fail)
     except ValueError as exc:
         _fail(str(exc))
-    _validate_publication_dependencies(
+    validate_publication_dependencies(
         document["publication_dependencies"], document["run"]["mode"], _fail
     )
     try:
@@ -651,19 +626,12 @@ def validate_document(value: Any) -> dict[str, Any]:
         _fail("run contains literal secret or user data at: " + ", ".join(leaks))
     validate_web_domain(
         execution_mode=document["run"]["execution_mode"],
-        requirements=document["requirements"],
-        operations=document["object_changes"],
-        target_types=target_types,
-        payload_mappings=document["payload_mappings"],
-        consent_topologies=document["consent_topologies"],
+        graph=graph,
         execution_topologies=document["execution_topologies"],
         page_view_decisions=document["page_view_decisions"],
         first_party_data_routes=document["first_party_data_routes"],
-        pipelines=document["pipelines"],
-        inventory_dispositions=document["inventory_dispositions"],
         external_dependencies=document["external_dependencies"],
         fail=_fail,
-        contract_phase=False,
         baseline_in_scope_tags=(
             None
             if any(

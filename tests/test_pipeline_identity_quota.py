@@ -6,13 +6,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
-import test_current_adapter_runtime as runtime_tests  # noqa: E402
-from current_support import (  # noqa: E402
-    add_nonpurchase_dual_dedup,
-    approve_mutations,
-    valid_pipeline_contract,
-    valid_web_contract,
-)
+import support.adapters as runtime_tests  # noqa: E402
 from gtm_configure.adapters.mcp import unwrap  # noqa: E402
 from gtm_configure.contract import ContractValidationError, validate_document  # noqa: E402
 from gtm_configure.domain.deduplication import validate_pipeline_dedup  # noqa: E402
@@ -23,8 +17,14 @@ from gtm_configure.runtime.adapter_protocol import (
     collect_paginated,
 )
 from gtm_configure.runtime.state import create_from_contract  # noqa: E402
-from test_current_adapter_runtime import FakeAdapter, capabilities  # noqa: E402
-from test_shared_event_id import generated_contract  # noqa: E402
+from support.adapters import FakeAdapter, capabilities  # noqa: E402
+from support.contracts import (  # noqa: E402
+    add_nonpurchase_dual_dedup,
+    approve_mutations,
+    valid_pipeline_contract,
+    valid_web_contract,
+)
+from support.shared_event_id import generated_contract  # noqa: E402
 
 
 def quota():
@@ -273,7 +273,7 @@ class QuotaTest(unittest.TestCase):
                     return super().read(operation)
 
             adapter, delays = Adapter(), []
-            run, _ = runtime_tests.CurrentAdapterRuntimeTest()._execute(
+            run, _ = runtime_tests.CurrentAdapterRuntimeTestFixture()._execute(
                 valid_web_contract(),
                 {"web-main": (adapter, capabilities("tag", "trigger"), None)},
                 sleep=delays.append,

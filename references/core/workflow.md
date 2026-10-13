@@ -25,20 +25,20 @@ For product or collection changes, use current official documentation for the ex
 fields, defaults, automatic collection, permissions and secret fields. Preserve valid approved
 semantics; report an advisory without rewriting them. Hold a technically unsupported requirement.
 A missing supported template is not authorization for Custom HTML or arbitrary vendor API code.
-Folder-only organization needs inspected capability and container evidence, without fabricated product research. See [official-source-policy.md](evidence.md).
+Folder-only organization needs inspected capability and container evidence, without fabricated product research. See [evidence](evidence.md).
 
 ## 4. Inspect relevant container integration
 
 Select the supported architecture, then inspect reuse, conflicts and dependency closure. List each
 required family once through the authenticated runtime, exhausting pagination. Analyze consumers
 locally. An authorized refonte uses the complete inventory and ordered dispositions in
-[tracking-refonte.md](../refonte.md). Shared Google Configuration Settings changes always
+[refonte](../refonte.md). Shared Google Configuration Settings changes always
 include all tag consumers. Refresh only where drift, changed identity, pagination anomalies or an
 affected shared consumer requires it. Do not treat all available families as relevant.
 
 ## 5. Build the configuration map
 
-Use [configuration-contract.md](authoring.md) and its compact-input compiler to derive
+Use [authoring](authoring.md) and its compact-input compiler to derive
 object keys, source-bound approval records and explicit reuse dependencies. Keep business and
 implementation authority separate. Supply full intended snapshots and pre-change snapshots for existing-object changes; do not manufacture
 consent, page-view or first-party-data decisions. Required active-tag topologies remain explicit.
@@ -53,8 +53,8 @@ contract hash records consistency, not authorization. The compact input uses the
 validator and does not bypass any acceptance check.
 
 Choose direct mappings before helpers; justify each object by an approved requirement. Preserve
-all approved items and non-scalar shapes. Read [cmp-consent.md](../consent/web.md) for grant timing,
-revocation and pre-CMP events, [google-field-ownership.md](../analytics/google-fields.md) for Google
+all approved items and non-scalar shapes. Read [web](../consent/web.md) for grant timing,
+revocation and pre-CMP events, [google fields](../analytics/google-fields.md) for Google
 settings, and the pipeline references only for connected transport. Resolve an existing advanced
 route against the approved policy before writing; do not silently inherit or replace it.
 
@@ -63,7 +63,7 @@ concise change summary once discovery and validation are complete; render when i
 
 ## 7. Mutate in dependency order
 
-Bind authenticated adapters using [tool-adapters.md](../adapters/overview.md). The runtime captures the
+Bind authenticated adapters using [overview](../adapters/overview.md). The runtime captures the
 baseline, verifies pre-change state, journals the write boundary and compares each save using a
 complete native response or an authoritative read when the response is insufficient. Do not
 hand-edit active run state. Drift stops the affected operation. An ambiguous outcome requires
@@ -79,5 +79,5 @@ Use the runtime's fresh read-only convergence pass. A changed intended field req
 workspace status alone is insufficient. Finalization derives status only when all saved comparisons
 and applicable cross-target invariants pass. Render findings and changed fields first, unchanged
 counts second, with full machine evidence retained. Apply
-[acceptance-and-handoff.md](acceptance.md). Configuration does not prove
+[acceptance](acceptance.md). Configuration does not prove
 browser execution, vendor receipt or reporting, and never includes publication or version creation.

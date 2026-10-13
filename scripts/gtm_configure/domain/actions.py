@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any, Callable
 
 from gtm_configure.core.model import DELTA_ACTIONS, MUTATING_ACTIONS
-from gtm_configure.runtime.verification import canonical_sha256
+from gtm_configure.core.validation import canonical_sha256
 
 
 def _non_empty_object(value: Any) -> bool:

@@ -116,6 +116,12 @@ PARAMETER_DESTINATIONS = {
     "implementation_only",
     "other",
 }
+DESTINATION_COLLECTIONS = {
+    "ga4_event_parameter": ("event", "parameters"),
+    "ga4_item_parameter": ("item", "item_parameters"),
+    "ga4_user_property": ("user", "user_properties"),
+    "implementation_only": ("implementation", "implementation_fields"),
+}
 
 
 def _text(value: Any, path: str) -> str:
@@ -222,12 +228,21 @@ def normalized_approved_semantics(handoff: dict[str, Any], plan: dict[str, Any])
         }
         for parameter in event["parameters"]:
             key = parameter["name"]
-            collection = {
-                "event": "parameters",
-                "item": "item_parameters",
-                "user": "user_properties",
-                "implementation": "implementation_fields",
-            }[parameter["scope"]]
+            destination = parameter["destination"]
+            route = DESTINATION_COLLECTIONS.get(destination)
+            if route is None:
+                raise HandoffError(
+                    f"{requirement_id} / {parameter['scope']}::{key}: destination "
+                    f"{destination!r} needs an approved configuration route before import. "
+                    "Provide a first_party_data_routes decision for identity data or "
+                    "an explicit destination field contract for other products."
+                )
+            expected_scope, collection = route
+            if parameter["scope"] != expected_scope:
+                raise HandoffError(
+                    f"{requirement_id} / {key}: destination {destination!r} requires "
+                    f"scope {expected_scope!r}; received {parameter['scope']!r}."
+                )
             provenance = {
                 "grade": "approved-input",
                 "locator": (

@@ -16,13 +16,13 @@
 
 For every server or pipeline run, and for a web refonte, destructive/replace action, shared
 consumer, template permission change, multi-product consent decision, multi-destination graph, or
-resumable multi-write operation, maintain one `configuration-run@6.0` JSON artifact from preflight
+resumable multi-write operation, maintain one `configuration-run@7.0` JSON artifact from preflight
 through final readback. Its schema is
 [`configuration-run.schema.json`](../../schemas/configuration-run.schema.json).
 The JSON Schemas provide structural/editor validation. The packaged contract and run validators
 remain authoritative for cross-object semantics, mutation eligibility, and finalization.
 
-The configuration-contract 8.0 artifact owns approved requirements, authorized targets, pipeline design, and
+The configuration-contract 9.0 artifact owns approved requirements, authorized targets, pipeline design, and
 intended actions. The run owns execution state, per-target evidence, recovery, idempotency, and the
 configuration result. Neither authorizes publication, runtime recette, site/cloud work, or
 external-platform administration. Isolated web changes use the same durable run artifact and acceptance.
@@ -38,7 +38,7 @@ they are not repeated in each object's observation. The authenticated baseline r
 redacted bodies. Compaction does not omit fresh reads, alter comparison fingerprints, or treat
 redacted secrets as equal values.
 
-`init` validates contract 8.0 and deterministically creates target-scoped operations and stable
+`init` validates contract 9.0 and deterministically creates target-scoped operations and stable
 operation IDs. It refuses an existing path unless `--replace-planned` is explicit and no write
 history exists. The following active sections are contract-owned:
 
@@ -138,7 +138,7 @@ not a credential.
 
 ## Machine-readable run record
 
-The validated `configuration-run@6.0` artifact is the machine-readable configuration result. It
+The validated `configuration-run@7.0` artifact is the machine-readable configuration result. It
 exists for deterministic mutation, recovery, saved-state proof, and human result rendering. It is
 not a recette input or acceptance authority; runtime recette independently uses the tracking plan
 and live GTM/Preview evidence.

@@ -7,7 +7,6 @@ from copy import deepcopy
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-from current_support import approve_mutations
 from gtm_configure.domain.resources import (
     ResourceRegistryError,
     native_inventory_identity,
@@ -21,8 +20,9 @@ from gtm_configure.runtime.engine import (
     verify_idempotent_rerun,
 )
 from gtm_configure.runtime.state import create_from_contract, load_document
-from test_current_adapter_runtime import FakeAdapter, capabilities
-from test_effective_configuration_guardrails import settings_contract
+from support.adapters import FakeAdapter, capabilities
+from support.contracts import approve_mutations
+from support.web_authority import settings_contract
 
 CASES = {
     "built-in variable": ("Click ID", "type", "clickId", {"type": "clickId"}),

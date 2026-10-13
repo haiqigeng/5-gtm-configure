@@ -17,7 +17,7 @@ from gtm_configure.comparison.native import differences
 from gtm_configure.contract import validate_document as validate_contract
 from gtm_configure.core.json_io import loads_strict
 from gtm_configure.core.validation import canonical_sha256
-from gtm_configure.domain.fields import _field_mappings
+from gtm_configure.domain.fields import field_mappings
 from gtm_configure.domain.native import supports_native_mapping
 from gtm_configure.intake.ga4 import normalized_approved_semantics
 from gtm_configure.intake.request import compile_request
@@ -100,7 +100,7 @@ def test_scoped_intake():
     }
     semantic = normalized_approved_semantics({"skill": {}, "plan": {}}, plan)
     requirement = semantic["requirements"][0]
-    mappings = _field_mappings(requirement)
+    mappings = field_mappings(requirement)
     assert {(m["field_scope"], m["destination_field"]) for m in mappings} == {
         ("event-parameter", "lead_type"),
         ("item-parameter", "item_id"),

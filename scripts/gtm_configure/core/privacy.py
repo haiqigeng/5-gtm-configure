@@ -692,19 +692,6 @@ def sensitive_findings(
     )[0]
 
 
-def referenced_secret_variables(value: Any) -> set[str]:
-    """Collect names from protected slots and close references in present native variables."""
-    return _scan(
-        value,
-        path="$",
-        exact_secret_paths=set(),
-        public_identifier_paths=set(),
-        secret_variable_names=set(),
-        protected_descriptor=False,
-        include_redacted=False,
-    )[1]
-
-
 def sensitive_paths(
     value: Any,
     *,

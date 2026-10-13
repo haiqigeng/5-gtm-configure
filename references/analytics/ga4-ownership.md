@@ -48,7 +48,7 @@ Use a Configuration Settings variable only for a coherent set of configuration-l
 
 Inspect consumers before changing either settings variable because one edit may affect many tags and destinations.
 
-Use [google-field-ownership.md](google-fields.md) as the authoritative placement matrix
+Use [google fields](google-fields.md) as the authoritative placement matrix
 for configuration fields, event fields, settings variables, `user_id`, `user_data`, ecommerce,
 Google Ads fields, and browser transport. This playbook adds GA4 behavior but does not override that
 matrix.

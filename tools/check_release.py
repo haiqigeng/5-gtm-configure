@@ -14,9 +14,12 @@ from pathlib import Path
 from zipfile import ZipFile
 
 from build_skill_package import build, package_files
+from check_architecture import inspect_architecture
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
+from configure_gtm import COMMANDS
+from gtm_configure.core.model import CONTRACT_SCHEMA_VERSION, SCHEMA_VERSION
 from gtm_configure.core.schemas import validator
 
 CURRENT_RELEASE = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
@@ -57,6 +60,12 @@ def check_files_and_routing():
         if source in visited:
             continue
         visited.add(source)
+        for label, link in re.findall(
+            r"\[([^\]]+)\]\(([^)]+)\)", source.read_text(encoding="utf-8")
+        ):
+            if re.fullmatch(r"[\w./-]+\.md(?:#[\w-]+)?", label) and "://" not in link:
+                if Path(label.split("#")[0]).name != Path(link.split("#")[0]).name:
+                    errors.append(f"{source.name}: file label {label} differs from {link}")
         for link in LINK.findall(source.read_text(encoding="utf-8")):
             if "://" in link or link.startswith("mailto:"):
                 continue
@@ -89,11 +98,21 @@ def check_versions_and_schemas():
         errors.append("pyproject version differs from VERSION")
     if f"v{CURRENT_RELEASE}" not in read("README.md"):
         errors.append("README is missing current version")
-    for kind, version in (("contract", "8.0"), ("run", "6.0")):
+    versions = {"contract": CONTRACT_SCHEMA_VERSION, "run": SCHEMA_VERSION}
+    for kind, version in versions.items():
         v = validator(kind)
         v.check_schema(v.schema)
         if v.schema["properties"]["schema_version"]["const"] != version:
             errors.append(f"wrong {kind} schema version")
+    for path in (ROOT / "scripts").rglob("*.py"):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.Module, ast.FunctionDef, ast.ClassDef)):
+                for kind, version in re.findall(
+                    r"(?:configuration-)?(contract|run)@(\d+\.\d+)", ast.get_docstring(node) or ""
+                ):
+                    if versions[kind] != version:
+                        errors.append(f"{path.relative_to(ROOT)}: stale {kind}@{version} docstring")
     return errors
 
 
@@ -109,16 +128,7 @@ def check_runtime_package():
                     errors.append(f"archive byte mismatch: {name}")
             archive.extractall(directory)
         script = Path(directory) / "configure-gtm/scripts/configure_gtm.py"
-        for command in (
-            "import-plan",
-            "prepare",
-            "validate-contract",
-            "conformance",
-            "compare",
-            "run",
-            "mcp",
-            "mcp-host",
-        ):
+        for command in COMMANDS:
             result = subprocess.run(
                 [sys.executable, "-B", str(script), command, "--help"],
                 capture_output=True,
@@ -127,6 +137,8 @@ def check_runtime_package():
             )
             if result.returncode:
                 errors.append(f"packaged {command}: {result.stderr}")
+            elif f"configure_gtm.py {command}" not in result.stdout:
+                errors.append(f"packaged {command}: help usage omits its command")
     return errors
 
 
@@ -206,6 +218,7 @@ def main():
     parser.add_argument("--require-clean-tree", action="store_true")
     args = parser.parse_args()
     errors = check_files_and_routing() + check_versions_and_schemas() + check_runtime_package()
+    errors += inspect_architecture()[1]
     errors += check_git_state(
         tag=args.tag, require_tag=args.require_git_tag, require_clean=args.require_clean_tree
     )

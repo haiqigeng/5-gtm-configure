@@ -248,7 +248,7 @@ class SdkTransport:
             if code.startswith("http_rejection_"):
                 import httpx
 
-                from gtm_configure.adapters.mcp import _retry_after, unwrap
+                from gtm_configure.adapters.mcp import retry_after, unwrap
 
                 pending_errors, seen_errors, hint = [exc], set(), None
                 while pending_errors:
@@ -257,7 +257,7 @@ class SdkTransport:
                         continue
                     seen_errors.add(id(item))
                     if isinstance(item, httpx.HTTPStatusError):
-                        hint = _retry_after({"headers": dict(item.response.headers)}, None, None)
+                        hint = retry_after({"headers": dict(item.response.headers)}, None, None)
                         break
                     pending_errors.extend(getattr(item, "exceptions", ()))
                     if item.__cause__ is not None:

@@ -81,7 +81,7 @@ def _records(value: Any) -> list[dict]:
     return value.get("objects", []) + value.get("reuse_candidates", [])
 
 
-def _locate(value: Any, path: list) -> tuple[Any, str]:
+def locate(value: Any, path: list) -> tuple[Any, str]:
     actual = []
     for part in path:
         if isinstance(value, list) and isinstance(part, str):
@@ -183,7 +183,7 @@ def validate_public_identifiers(document: dict) -> None:
                 native = (
                     record["pre_change"] if record.get("action") == "remove" else record["intended"]
                 )
-                literal, _ = _locate(native, path)
+                literal, _ = locate(native, path)
             except (KeyError, TypeError, IndexError) as exc:
                 raise ValueError(
                     "public identifier path does not resolve in intended native fields"
@@ -197,7 +197,7 @@ def validate_public_identifiers(document: dict) -> None:
             if "previous_value_sha256" in declaration:
                 previous = declaration["previous_value_sha256"]
                 try:
-                    previous_value, _ = _locate(record["pre_change"], path)
+                    previous_value, _ = locate(record["pre_change"], path)
                 except (KeyError, TypeError, IndexError) as exc:
                     raise ValueError(
                         "previous public identifier needs the matching pre_change field"
@@ -259,7 +259,7 @@ def public_identifier_paths(value: Any, *, records: list[dict] | None = None) ->
             if len(matches) == 1:
                 for declaration in matches[0]["public_identifiers"]:
                     try:
-                        literal, suffix = _locate(item, declaration["path"])
+                        literal, suffix = locate(item, declaration["path"])
                     except (KeyError, IndexError, TypeError):
                         continue
                     if any(

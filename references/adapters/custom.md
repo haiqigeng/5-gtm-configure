@@ -11,7 +11,7 @@ Identity is read from authenticated workspace and container metadata, including 
 and must match the authorized target at each execution boundary. Never substitute caller-assigned
 identity. Discover get/list/create/update/remove per family independently; unsupported actions
 block only their dependency subtree. Client and Transformation support does not follow from tag
-support. Scope is governed by [utility-contract.md](../core/authority.md).
+support. Scope is governed by [authority](../core/authority.md).
 
 Native inventories retain each family's real identity: built-in variable `type`, destination
 `destinationLinkId`, Google tag configuration `gtagConfigId`, container `containerId`, and

@@ -1,5 +1,63 @@
 # Changelog
 
+## 12.0.0
+
+Released 2026-10-13.
+
+### Why This Release Matters
+
+Complete the rule ownership that 11.0.0 only partly established. Preparation and execution now
+use one domain graph; published schemas own record structure, and release checks enforce the
+module boundaries. Remove contradictory consent enums and lossy tracking-plan destinations.
+
+### What Changed
+
+- Consolidate enums, typed accessors, target identities and canonical JSON hashing under core owners.
+  Keep product-specific consent consistent across schema, preflight and execution.
+- Close shared requirement, field, routing, inventory and execution records in the common schema.
+  Retain compact run requirement summaries with references to the same field definitions.
+- Preserve supported GA4 destinations exactly. User-ID and unspecified destinations require an
+  approved routing decision; import stops instead of converting them into user properties or parameters.
+- Project contract and run data into ConfigurationGraph once. Separate target localization, feature
+  predicates, preparation inventory comparison, execution checkpoints and report sections by concern.
+- Expose shared helpers as public APIs and remove obsolete definitions and reversed dependencies.
+- Standardize canonical hashes as sha256-prefixed values; advance contract to 9.0, run to 7.0 and
+  verification to 2.0. Raw producer artifact hashes retain their original byte-hash format.
+- Organize regressions by behavior owner and add schema, destination, consent, graph and architecture
+  scenarios. Release gates check duplicate owners, private cross-module use, dependency cycles,
+  unused definitions, stale filename labels, docstring versions and CLI usage.
+
+### What Users Should Do
+
+Replace the installed skill folder with this release. Create fresh contract 9.0/run 7.0 artifacts
+from approved inputs; keep executed historical artifacts as evidence. Resolve uncertain writes
+before starting another run. No schema or hash compatibility layer is supplied. A GA4 delivery
+containing User-ID or an unspecified destination needs an explicit approved route before import.
+
+### Validation
+
+The full repository suite passes 459 tests and 508 subtests with relay tests required and none
+skipped. The packaged suite has 28 scenarios. Independent web and pipeline forward tests validate
+contract 9.0, run 7.0, semantic conformance and honest preflight handoffs. Architecture, schema,
+link, CLI, lint and deterministic package gates pass.
+
+Unchanged audit probes retain 51 calls for one create in a large container and 63 calls for a
+20-event batch. Batch compute measures 1.9 seconds versus 1.8 seconds on 11.0.0; run size is
+521 KB versus 519 KB. All 16 error/recovery outcomes match. Redaction matches across 614 objects
+from four local exports; synthetic canaries leak no secrets. Two public browser key/token cases
+remain conservatively blocked in both versions. Report injection probes produce no injected
+headings or links. Same-harness branch coverage is 73.1% versus 72.9%, excluding subprocesses.
+See [the validation record](docs/release-12.0-validation.md) for methods and limits.
+CI repeats the suite on Linux and Windows. No live GTM or vendor runtime certification is claimed.
+
+### Known Limits
+
+Native comparison proves supported saved structure, not live delivery or vendor behavior.
+User-ID routing is explicitly blocked at delivery import pending an approved mapping. Static
+ownership analysis is conservative and does not prove semantic equivalence. Runtime acceptance
+and publication remain separate, authorized activities.
+
+
 ## 11.0.0
 
 Released 2026-10-13.

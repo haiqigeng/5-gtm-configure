@@ -27,6 +27,7 @@ def main():
     if command not in COMMANDS:
         print(f"Unknown command {command!r}; use --help", file=sys.stderr)
         return 2
+    sys.argv[0] += " " + command
     return importlib.import_module("gtm_configure." + COMMANDS[command]).main()
 
 

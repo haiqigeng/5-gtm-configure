@@ -20,13 +20,13 @@ from gtm_configure.core.public_identifiers import (
     validate_public_identifiers,
 )
 from gtm_configure.domain.actions import build_mutation_approval
-from gtm_configure.domain.fields import _field_mappings
+from gtm_configure.domain.fields import field_mappings
 from gtm_configure.domain.native import supports_native_mapping, variable_name
 from gtm_configure.domain.resources import semantic_object_key
-from gtm_configure.domain.web_native import _resolved_event_parameter
+from gtm_configure.domain.web_native import resolved_event_parameter
 
 
-def _derive_exact_declarations(contract: dict, objects: list[dict]) -> None:
+def derive_exact_declarations(contract: dict, objects: list[dict]) -> None:
     """Fill mechanical facts only; unresolved cases remain explicit validator input."""
     by_key = {item["object_key"]: item for item in objects}
     requirements = {item["id"]: item for item in contract["requirements"]}
@@ -93,7 +93,7 @@ def _derive_exact_declarations(contract: dict, objects: list[dict]) -> None:
                             row.setdefault(field, match[field])
     bindings = contract.setdefault("field_bindings", [])
     for requirement in requirements.values():
-        for mapping in _field_mappings(requirement):
+        for mapping in field_mappings(requirement):
             key_fields = ("requirement_id", "field_scope", "destination_field")
             existing = next(
                 (
@@ -128,7 +128,7 @@ def _derive_exact_declarations(contract: dict, objects: list[dict]) -> None:
                     and item["target_id"] == owner["target_id"]
                 }
                 try:
-                    value = _resolved_event_parameter(
+                    value = resolved_event_parameter(
                         owner, objects, variables, mapping["destination_field"]
                     )
                     variable = variables[variable_name(value)]
@@ -174,7 +174,7 @@ def _derive_exact_declarations(contract: dict, objects: list[dict]) -> None:
 def compile_request(request: dict[str, Any], *, inventory: dict | None = None) -> dict[str, Any]:
     """Derive identities, approvals and explicit-reference closure, never product policy."""
     if inventory is not None:
-        from gtm_configure.adapters.discovery import fill_reuse_candidates
+        from gtm_configure.comparison.inventory import fill_reuse_candidates
 
         request = fill_reuse_candidates(request, inventory)
     validate_public_identifiers(request)
@@ -283,7 +283,7 @@ def compile_request(request: dict[str, Any], *, inventory: dict | None = None) -
                 if merged != dependency["requirement_ids"]:
                     dependency["requirement_ids"] = merged
                     changed = True
-    _derive_exact_declarations(contract, objects)
+    derive_exact_declarations(contract, objects)
     contract["implementation"] = {
         "execution_mode": contract.pop("execution_mode", "isolated-durable"),
         "field_bindings": contract.pop("field_bindings", []),

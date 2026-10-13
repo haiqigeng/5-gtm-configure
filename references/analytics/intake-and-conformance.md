@@ -85,8 +85,13 @@ semantic requirement per event. That machine path is authoritative for configura
 XLSX remains the human review surface and must not be reparsed into a competing interpretation.
 The supported producer contract is `ga4-tracking-plan` 3.0.0: handoff `2.0.0`, canonical plan
 schema `6.0.0`. Older handoffs are rejected without migration. Event identity becomes
-`GA4::<event_name>`; preserve parameter paths, destinations, conditional and nullable semantics,
-business timing and clear-before-push instructions. If only a suite workbook is supplied, request
+`GA4::<event_name>`. Import routing follows the declared destination and requires its matching
+scope: event parameter, item parameter, user property, or implementation-only field. The imported
+record retains paths, destinations, conditional and nullable semantics, business timing and
+clear-before-push instructions. Identity (`ga4_user_id`) and unspecified (`other`) destinations
+produce a blocking routing decision: author the approved identity or destination contract using
+the [first-party data model](../data/identity.md) before configuring those requirements.
+If only a suite workbook is supplied, request
 its complete approved delivery directory. Do not relabel its version or reconstruct missing
 machine authority from the workbook. Independent client plans still use the general intake above.
 

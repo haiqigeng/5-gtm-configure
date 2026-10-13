@@ -20,13 +20,13 @@ from gtm_configure.runtime.adapter_protocol import (
 )
 from gtm_configure.runtime.engine import (
     TargetAdapterRegistry,
-    _complete_observation,
+    complete_observation,
     execute_ready_operations,
     verify_idempotent_rerun,
 )
 from gtm_configure.runtime.state import create_from_contract, load_document
 from gtm_configure.runtime.verification import expected_graph
-from test_mapping_startup_corrections import lead_request
+from support.field_binding import lead_request
 
 
 class MachineryAdoption(unittest.TestCase):
@@ -133,13 +133,13 @@ class MachineryAdoption(unittest.TestCase):
             if op["resource_family"] == "tag"
         )
         saved = expected_graph(operation)
-        self.assertTrue(_complete_observation(operation, saved))
+        self.assertTrue(complete_observation(operation, saved))
         partial = deepcopy(saved)
         partial["objects"][0]["parameter"][-1]["list"][0]["map"].pop()
-        self.assertFalse(_complete_observation(operation, partial))
+        self.assertFalse(complete_observation(operation, partial))
         wrong = deepcopy(saved)
         wrong["objects"][0]["parameter"][0]["value"] = "wrong"
-        self.assertTrue(_complete_observation(operation, wrong))
+        self.assertTrue(complete_observation(operation, wrong))
 
     def test_relevant_duplicate_names_fail_even_with_known_ids(self):
         for family in ("tag", "trigger", "variable"):
@@ -219,8 +219,8 @@ class MachineryAdoption(unittest.TestCase):
                 compile_request(req)
 
     def test_small_stable_id_update_keeps_targeted_final_read(self):
-        from test_current_adapter_runtime import FakeAdapter, capabilities
-        from test_effective_configuration_guardrails import settings_contract
+        from support.adapters import FakeAdapter, capabilities
+        from support.web_authority import settings_contract
 
         class Adapter(FakeAdapter):
             lists = 0

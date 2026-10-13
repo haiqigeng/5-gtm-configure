@@ -1,21 +1,5 @@
-"""Shared current web-domain enums for configuration-run@6.0."""
+"""Shared current web-domain enums for configuration run."""
 
-SCHEMA_VERSION = "4.0"
-VERIFICATION_SCHEMA_VERSION = "1.0"
-RUN_PHASES = {"preflight", "mutation", "readback", "complete"}
-RUN_STATUSES = {"In progress", "Configured", "Partial", "Blocked", "Deferred"}
-REQUIREMENT_STATUSES = {"In progress", "Configured", "Partial", "Blocked", "Deferred"}
-OPERATION_STATES = {
-    "planned",
-    "in_progress",
-    "saved",
-    "verified",
-    "failed",
-    "uncertain",
-    "skipped",
-}
-CONSENT_MODES = {"strict-basic", "advanced-native", "client-policy-ungated"}
-CONSENT_MECHANISMS = {"blocking-trigger", "grant-event", "native-advanced"}
 MAPPING_STATUSES = {"pending", "mapped", "intentionally-omitted", "external", "blocked"}
 MAPPING_METHODS = {
     "constant",
@@ -36,8 +20,6 @@ EXTENDED_MAPPING_KEYS = {
     "mapping_method",
     "missing_behavior",
 }
-DEFAULT_VENDOR_BLOCK_SCOPE = "regex:.*"
-EXECUTION_MODES = {"isolated-durable", "refonte-durable"}
 LIFECYCLE_ROLES = {"baseline-page-load", "event-driven"}
 NORMAL_TRIGGER_ROLES = {
     "cmp-readiness-grant",
@@ -171,32 +153,4 @@ INVENTORY_DISPOSITIONS = {
     "remove",
     "replace",
     "supersede",
-}
-TOP_LEVEL_KEYS = {
-    "schema_version",
-    "run",
-    "requirements",
-    "object_changes",
-    "payload_mappings",
-    "consent_routes",
-    "container_baseline",
-    "execution_topologies",
-    "page_view_decisions",
-    "first_party_data_routes",
-    "inventory_dispositions",
-    "saved_readback",
-    "official_sources",
-    "external_dependencies",
-    "recovery_boundary",
-    "idempotency",
-    "recette_handoff",
-}
-ALLOWED_TRANSITIONS = {
-    "planned": {"in_progress", "skipped", "verified", "failed"},
-    "in_progress": {"saved", "verified", "failed", "uncertain"},
-    "saved": {"verified", "failed", "uncertain"},
-    "uncertain": {"verified", "failed"},
-    "verified": set(),
-    "failed": set(),
-    "skipped": set(),
 }

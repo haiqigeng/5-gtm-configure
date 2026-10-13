@@ -1,16 +1,12 @@
-# ruff: noqa: E402
 from __future__ import annotations
 
 import hashlib
 import json
 import tempfile
-import unittest
 from copy import deepcopy
 from pathlib import Path
 from unittest.mock import patch
 
-ROOT = Path(__file__).resolve().parents[1]
-from current_support import approve_mutations, complete_capture_evidence, valid_web_contract
 from gtm_configure.adapters.mcp import McpTargetAdapter
 from gtm_configure.contract import validate_document
 from gtm_configure.core.privacy import (
@@ -30,56 +26,14 @@ from gtm_configure.runtime.engine import (
     execute_ready_operations,
     verify_idempotent_rerun,
 )
-from gtm_configure.runtime.state import _build_target_baseline, create_from_contract, load_document
-from test_current_adapter_runtime import FakeAdapter, capabilities
-from test_mcp_transport import profile
-
-PUBLIC = "synthetic-public-browser-project"
-SOURCE = "https://amplitude.com/docs/apis/keys-and-tokens"
-
-
-def public_contract():
-    contract = valid_web_contract()
-    contract["evidence"].append(
-        {
-            "grade": "official-current",
-            "locator": SOURCE,
-            "title": "Synthetic evidence fixture",
-            "decision": "Fixture represents inspected public browser key semantics, not a live vendor check",
-            "accessed_on": "2026-09-28",
-            "supports": ["REQ-PAGE"],
-        }
-    )
-    contract["implementation"]["objects"].append(
-        {
-            "object_key": "web-main::variable::Amplitude API Key",
-            "target_id": "web-main",
-            "resource_family": "variable",
-            "name": "Amplitude API Key",
-            "action": "create",
-            "requirement_ids": ["REQ-PAGE"],
-            "depends_on": [],
-            "justification": "Synthetic approved public key fixture",
-            "evidence": ["approved-input", "official-current"],
-            "risk": "routine",
-            "intended": {
-                "type": "c",
-                "parameter": [{"key": "value", "type": "template", "value": PUBLIC}],
-            },
-            "public_identifiers": [
-                {
-                    "path": ["parameter", "value", "value"],
-                    "value_sha256": hashlib.sha256(PUBLIC.encode()).hexdigest(),
-                    "source_url": SOURCE,
-                    "reason": "Inspected browser collection identifier, not an authentication secret",
-                }
-            ],
-        }
-    )
-    return approve_mutations(contract)
+from gtm_configure.runtime.state import build_target_baseline, create_from_contract, load_document
+from support.adapters import FakeAdapter, capabilities
+from support.contracts import approve_mutations, complete_capture_evidence, valid_web_contract
+from support.mcp_transport import profile
+from support.privacy_shapes import PUBLIC, ROOT, RedactionShapeTestsFixture, public_contract
 
 
-class RedactionShapeTests(unittest.TestCase):
+class RedactionShapeTests(RedactionShapeTestsFixture):
     def test_source_authority_descriptor_metadata_is_scanned_without_false_positive(self):
         from copy import deepcopy
 
@@ -155,7 +109,7 @@ class RedactionShapeTests(unittest.TestCase):
                 },
             ],
         }
-        baseline = _build_target_baseline(
+        baseline = build_target_baseline(
             target,
             resources,
             captured_at="2026-09-28T00:00:00Z",

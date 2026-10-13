@@ -40,7 +40,7 @@ FAMILIES = {
 }
 
 
-def _retry_after(response: dict, details: Any, error: Any) -> float | None:
+def retry_after(response: dict, details: Any, error: Any) -> float | None:
     for source in (error, details, response):
         if not isinstance(source, dict):
             continue
@@ -104,12 +104,12 @@ def unwrap(response: Any, *, mutation: bool = False) -> Any:
             # A full GTM sliding window, through the existing bounded retry policy.
             raise RateLimitError(
                 "MCP endpoint rejected the request (403 quota)",
-                retry_after_seconds=_retry_after(response, details, error),
+                retry_after_seconds=retry_after(response, details, error),
             )
         if type(code) is int and code == 429:
             raise RateLimitError(
                 "MCP endpoint rejected the request (429)",
-                retry_after_seconds=_retry_after(response, details, error),
+                retry_after_seconds=retry_after(response, details, error),
             )
         if type(code) is int and code in {400, 403, 404, 409, 422}:
             raise AdapterExecutionError("MCP endpoint rejected the request", code=f"http_{code}")

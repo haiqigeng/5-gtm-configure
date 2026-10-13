@@ -42,7 +42,7 @@ class ConfigurationAdapter(Protocol):
     def mutate(self, operation: dict[str, Any]) -> dict[str, Any] | None: ...
 
 
-def _retry_delay(
+def retry_delay(
     error: RateLimitError,
     *,
     max_delay_seconds: float,
@@ -94,7 +94,7 @@ def collect_paginated_with_receipt(
             except RateLimitError as exc:
                 if retries >= min(max_rate_limit_retries, 2):
                     raise
-                delay = _retry_delay(
+                delay = retry_delay(
                     exc,
                     max_delay_seconds=max_retry_delay_seconds,
                 )

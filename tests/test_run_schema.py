@@ -5,11 +5,10 @@ import unittest
 from pathlib import Path
 
 from jsonschema import Draft202012Validator
-from schema_support import schema_registry
+from support.schemas import schema_registry
 
 ROOT = Path(__file__).resolve().parents[1]
 
-from current_support import valid_pipeline_contract  # noqa: E402
 from gtm_configure.core.model import (  # noqa: E402
     ACTIONS,
     OPERATION_STATES,
@@ -22,6 +21,7 @@ from gtm_configure.core.validation import RunValidationError
 from gtm_configure.domain.web_model import FIRST_PARTY_FEATURES
 from gtm_configure.runtime.state import create_from_contract
 from gtm_configure.runtime.validation import validate_document
+from support.contracts import valid_pipeline_contract  # noqa: E402
 
 
 def schema() -> dict:
@@ -48,7 +48,9 @@ class ConfigurationRunSchemaTest(unittest.TestCase):
         properties = value["properties"]
         operation = value["$defs"]["operation"]["properties"]
         run = value["$defs"]["run"]["properties"]
-        first_party = value["properties"]["first_party_data_routes"]["items"]["properties"]
+        first_party = json.loads((ROOT / "schemas/common.schema.json").read_text())["$defs"][
+            "firstPartyRoute"
+        ]["properties"]
         self.assertEqual(properties["schema_version"]["const"], SCHEMA_VERSION)
         self.assertEqual(set(operation["action"]["enum"]), ACTIONS)
         self.assertEqual(set(operation["resource_family"]["enum"]), RESOURCE_FAMILIES)

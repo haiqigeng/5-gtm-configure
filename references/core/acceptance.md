@@ -23,6 +23,7 @@ or reporting without the separate recette evidence. Never publish or create a GT
 
 | Status | Exact meaning |
 | --- | --- |
+| `In progress` | The current run has pending work; saved configuration has not yet been fully verified. |
 | `Configured` | Every in-scope required operation and target is verified; static cross-target invariants and identical-rerun no-op pass. |
 | `Partial` | At least one current-run save is verified or may have saved, but the complete graph is not proved. Name the exact target and recovery frontier. |
 | `Blocked` | No required saved result can safely proceed because authority, source, capability, template, target, or critical technical evidence is absent. |

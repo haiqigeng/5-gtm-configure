@@ -15,6 +15,7 @@ from typing import Any, Protocol
 import gtm_configure.runtime.adapter_protocol as adapter_support
 import gtm_configure.runtime.state as run_state
 from gtm_configure.comparison.native import semantic_references
+from gtm_configure.core.model import IDENTITY_FIELDS
 from gtm_configure.core.privacy import (
     SecretProvider,
     SecretResolutionError,
@@ -75,9 +76,6 @@ class TargetBinding:
     secret_provider: SecretProvider | None
 
 
-_IDENTITY_FIELDS = ("account_id", "container_id", "workspace_id", "container_type")
-
-
 def _verified_adapter_identity(target: dict[str, Any], adapter: TargetAdapter) -> dict[str, str]:
     try:
         observed = adapter.identity()
@@ -86,13 +84,13 @@ def _verified_adapter_identity(target: dict[str, Any], adapter: TargetAdapter) -
             "target adapter identity could not be read",
             code="target_identity_unavailable",
         ) from exc
-    if not isinstance(observed, dict) or set(observed) != set(_IDENTITY_FIELDS):
+    if not isinstance(observed, dict) or set(observed) != set(IDENTITY_FIELDS):
         raise AdapterExecutionError(
             "target adapter identity must contain only account_id, container_id, workspace_id, and container_type",
             code="target_identity_invalid",
         )
     normalized: dict[str, str] = {}
-    for field in _IDENTITY_FIELDS:
+    for field in IDENTITY_FIELDS:
         value = observed.get(field)
         if not isinstance(value, str) or not value.strip():
             raise AdapterExecutionError(
@@ -100,7 +98,7 @@ def _verified_adapter_identity(target: dict[str, Any], adapter: TargetAdapter) -
                 code="target_identity_invalid",
             )
         normalized[field] = value.strip()
-    expected = {field: str(target[field]).strip() for field in _IDENTITY_FIELDS}
+    expected = {field: str(target[field]).strip() for field in IDENTITY_FIELDS}
     if normalized != expected:
         raise AdapterExecutionError(
             "authenticated adapter identity differs from the authorized GTM target",
@@ -189,7 +187,7 @@ def _contains_only_observed_fields(expected: Any, actual: Any) -> bool:
     return expected == actual
 
 
-def _complete_observation(operation: dict, saved: Any) -> bool:
+def complete_observation(operation: dict, saved: Any) -> bool:
     if not isinstance(saved, dict):
         return False
     try:
@@ -234,7 +232,7 @@ def _call_with_rate_limit(
         except RateLimitError as exc:
             if retry_index >= min(max_retries, 2):
                 raise
-            delay = adapter_support._retry_delay(
+            delay = adapter_support.retry_delay(
                 exc,
                 max_delay_seconds=max_delay_seconds,
             )
@@ -249,13 +247,6 @@ def _save(path: Path, document: dict[str, Any]) -> None:
         path,
         document,
     )
-
-
-def _operation(document: dict[str, Any], operation_id: str) -> dict[str, Any]:
-    for operation in document["object_changes"]:
-        if operation["operation_id"] == operation_id:
-            return operation
-    raise AdapterExecutionError(f"unknown operation {operation_id!r}")
 
 
 def _target(document: dict[str, Any], target_id: str) -> dict[str, Any]:
@@ -332,7 +323,7 @@ def _capture_one_authenticated_baseline(
                 "fingerprint": None,
             }
             break
-    return run_state._record_target_baseline(
+    return run_state.record_target_baseline(
         value,
         target_id=target_id,
         resources=resources,
@@ -367,7 +358,7 @@ def _capture_authenticated_baselines(
             next(
                 item for item in value["target_results"] if item["target_id"] == target["target_id"]
             ).pop("baseline_error", None)
-            run_state._derive_live_status(value)
+            run_state.derive_live_status(value)
         except Exception as exc:
             error = "baseline_capture_failed: " + (
                 scrub_sensitive_text(str(exc), set()) or "authenticated baseline unavailable"
@@ -392,7 +383,7 @@ def _capture_authenticated_baselines(
                 item for item in value["target_results"] if item["target_id"] == target["target_id"]
             )
             result["baseline_error"] = {"at": options["captured_at"](), "error": error}
-            run_state._derive_live_status(value)
+            run_state.derive_live_status(value)
     return value
 
 
@@ -426,21 +417,24 @@ def _execute_current_locked(
     _save(run_path, document)
 
     while True:
-        inspection = run_state._inspect_document(document)
+        inspection = run_state.inspect_validated_document(document)
         ready = inspection["ready_operations"]
         if not ready:
             run_state.validate_document(document)
             return inspection
         progress = False
         for operation_id in ready:
-            if operation_id not in run_state._inspect_document(document)["ready_operations"]:
+            if (
+                operation_id
+                not in run_state.inspect_validated_document(document)["ready_operations"]
+            ):
                 continue
-            operation = _operation(document, operation_id)
+            operation = run_state.find_operation(document, operation_id)
             _target(document, operation["target_id"])
             try:
                 binding = registry.binding(operation["target_id"])
             except AdapterExecutionError as exc:
-                document = run_state._checkpoint_operation(
+                document = run_state.checkpoint_validated_operation(
                     document,
                     operation_id=operation_id,
                     state="failed",
@@ -453,7 +447,7 @@ def _execute_current_locked(
                 continue
             reason = unsupported_operation_reason(operation, binding.capabilities)
             if reason:
-                document = run_state._checkpoint_operation(
+                document = run_state.checkpoint_validated_operation(
                     document,
                     operation_id=operation_id,
                     state="failed",
@@ -467,150 +461,31 @@ def _execute_current_locked(
             ephemeral_values: set[str] = set()
             write_accepted_or_ambiguous = False
             try:
-                if operation["container_type"] == "web" and requires_variable_consumer_check(
-                    operation
-                ):
-                    if not all(
-                        binding.capabilities.get(family, {}).get("list")
-                        for family in ("tag", "variable")
-                    ):
-                        raise AdapterExecutionError(
-                            "shared variable review requires tag/variable-list capabilities"
-                        )
-                    current_tags = collect_paginated(
-                        lambda cursor: binding.adapter.list_resource_page("tag", cursor),
-                        max_rate_limit_retries=max_rate_limit_retries,
-                        max_retry_delay_seconds=max_delay_seconds,
-                        sleep=sleep,
-                    )
-                    current_variables = collect_paginated(
-                        lambda cursor: binding.adapter.list_resource_page("variable", cursor),
-                        max_rate_limit_retries=max_rate_limit_retries,
-                        max_retry_delay_seconds=max_delay_seconds,
-                        sleep=sleep,
-                    )
-                    in_scope_names = {
-                        item["name"]
-                        for item in document["object_changes"]
-                        if item["target_id"] == operation["target_id"]
-                        and item["resource_family"] == "tag"
-                    }
-                    missing_consumers = (
-                        variable_consumers(operation, current_tags, current_variables)
-                        - in_scope_names
-                    )
-                    if missing_consumers:
-                        raise AdapterExecutionError(
-                            "shared variable has unreviewed current consumers: "
-                            + ", ".join(sorted(missing_consumers))
-                        )
+                _validate_current_variable_consumers(
+                    binding=binding,
+                    document=document,
+                    max_delay_seconds=max_delay_seconds,
+                    max_rate_limit_retries=max_rate_limit_retries,
+                    operation=operation,
+                    sleep=sleep,
+                )
                 current = _call_with_rate_limit(
                     lambda: _read(binding.adapter, operation),
                     max_retries=max_rate_limit_retries,
                     max_delay_seconds=max_delay_seconds,
                     sleep=sleep,
                 )
-                if operation["action"] == "create" and current is not None:
-                    comparison, safe_current = build_verification_comparison(operation, current)
-                    if comparison["pass"]:
-                        document = run_state._checkpoint_operation(
-                            document,
-                            operation_id=operation_id,
-                            state="verified",
-                            note="Existing semantic object already matches; no write performed.",
-                            timestamp=timestamp(),
-                            comparison=comparison,
-                            saved=safe_current,
-                        )
-                    else:
-                        document = run_state._checkpoint_operation(
-                            document,
-                            operation_id=operation_id,
-                            state="failed",
-                            note="Create conflict; existing semantic object was not overwritten.",
-                            timestamp=timestamp(),
-                            error="create_conflict",
-                            result={"comparison": comparison, "saved": safe_current},
-                        )
+                document, kwargs = _prepare_write(document, operation, current, timestamp=timestamp)
+                if kwargs is None:
                     _save(run_path, document)
                     progress = True
                     continue
-                if operation["action"] in {"reuse", "untouched"}:
-                    if current is None:
-                        document = run_state._checkpoint_operation(
-                            document,
-                            operation_id=operation_id,
-                            state="failed",
-                            note="Required existing object was not found; no write performed.",
-                            timestamp=timestamp(),
-                            error="existing_object_missing",
-                        )
-                    else:
-                        comparison, safe_current = build_verification_comparison(operation, current)
-                        if comparison["pass"]:
-                            document = run_state._checkpoint_operation(
-                                document,
-                                operation_id=operation_id,
-                                state="verified",
-                                note="Existing object compatibility verified; no write performed.",
-                                timestamp=timestamp(),
-                                comparison=comparison,
-                                saved=safe_current,
-                            )
-                        else:
-                            document = run_state._checkpoint_operation(
-                                document,
-                                operation_id=operation_id,
-                                state="failed",
-                                note="Existing object does not match the approved reuse contract.",
-                                timestamp=timestamp(),
-                                error="reuse_mismatch",
-                                result={
-                                    "comparison": comparison,
-                                    "saved": safe_current,
-                                },
-                            )
-                    _save(run_path, document)
-                    progress = True
-                    continue
-                kwargs: dict[str, Any] = {}
-                if operation["action"] in {
-                    "update",
-                    "replace",
-                    "rename",
-                    "pause",
-                    "unpause",
-                    "remove",
-                }:
-                    pre_write_comparison, safe_current = build_pre_write_comparison(
-                        operation, current
-                    )
-                    if not pre_write_comparison["pass"]:
-                        document = run_state._checkpoint_operation(
-                            document,
-                            operation_id=operation_id,
-                            state="failed",
-                            note="Fresh target state differs from the approved pre-change snapshot; no write performed.",
-                            timestamp=timestamp(),
-                            error="container_drift",
-                            result={
-                                "comparison": pre_write_comparison,
-                                "saved": safe_current,
-                            },
-                        )
-                        _save(run_path, document)
-                        progress = True
-                        continue
-                    kwargs = {
-                        "pre_write_comparison": pre_write_comparison,
-                        "pre_write_saved": safe_current,
-                    }
                 try:
                     mutation_operation, ephemeral_values = resolve_for_mutation(
                         operation, binding.secret_provider
                     )
                 except SecretResolutionError as exc:
-                    document = run_state._checkpoint_operation(
+                    document = run_state.checkpoint_validated_operation(
                         document,
                         operation_id=operation_id,
                         state="failed",
@@ -621,7 +496,7 @@ def _execute_current_locked(
                     _save(run_path, document)
                     progress = True
                     continue
-                document = run_state._checkpoint_operation(
+                document = run_state.checkpoint_validated_operation(
                     document,
                     operation_id=operation_id,
                     state="in_progress",
@@ -630,34 +505,13 @@ def _execute_current_locked(
                     **kwargs,
                 )
                 _save(run_path, document)
-                operation = _operation(document, operation_id)
+                operation = run_state.find_operation(document, operation_id)
                 try:
-                    _verified_adapter_identity(binding.identity, binding.adapter)
-                    mutation_attempted = False
-
-                    def mutate_with_fresh_retry():
-                        nonlocal mutation_attempted
-                        if mutation_attempted:
-                            # A documented quota rejection did not write, but the backoff
-                            # consumed the prior read proof. Re-read and compare before
-                            # retrying so missing fingerprints and intervening drift are safe.
-                            _verified_adapter_identity(binding.identity, binding.adapter)
-                            if operation["action"] != "create":
-                                retry_saved = _read(binding.adapter, operation)
-                                retry_comparison, _ = build_pre_write_comparison(
-                                    operation, retry_saved
-                                )
-                                if not retry_comparison["pass"]:
-                                    raise AdapterExecutionError(
-                                        "Target changed during quota backoff; no retry write performed",
-                                        code="container_drift",
-                                    )
-                        mutation_attempted = True
-                        return binding.adapter.mutate(deepcopy(mutation_operation))
-
-                    mutation_saved = _call_with_rate_limit(
-                        mutate_with_fresh_retry,
-                        max_retries=max_rate_limit_retries,
+                    mutation_saved = _mutate_with_quota_proof(
+                        binding,
+                        operation,
+                        mutation_operation,
+                        max_rate_limit_retries=max_rate_limit_retries,
                         max_delay_seconds=max_delay_seconds,
                         sleep=sleep,
                     )
@@ -671,7 +525,7 @@ def _execute_current_locked(
                         sleep=sleep,
                     )
                     if saved is None and operation["action"] != "remove":
-                        document = run_state._checkpoint_operation(
+                        document = run_state.checkpoint_validated_operation(
                             document,
                             operation_id=operation_id,
                             state="uncertain",
@@ -683,7 +537,7 @@ def _execute_current_locked(
                     else:
                         comparison, safe_saved = build_verification_comparison(operation, saved)
                         if comparison["pass"]:
-                            document = run_state._checkpoint_operation(
+                            document = run_state.checkpoint_validated_operation(
                                 document,
                                 operation_id=operation_id,
                                 state="verified",
@@ -693,7 +547,7 @@ def _execute_current_locked(
                                 saved=safe_saved,
                             )
                         else:
-                            document = run_state._checkpoint_operation(
+                            document = run_state.checkpoint_validated_operation(
                                 document,
                                 operation_id=operation_id,
                                 state="uncertain",
@@ -706,7 +560,7 @@ def _execute_current_locked(
                     progress = True
                     continue
                 saved = mutation_saved
-                if operation["action"] == "remove" or not _complete_observation(operation, saved):
+                if operation["action"] == "remove" or not complete_observation(operation, saved):
                     saved = _call_with_rate_limit(
                         lambda: _read(binding.adapter, operation),
                         max_retries=max_rate_limit_retries,
@@ -714,7 +568,7 @@ def _execute_current_locked(
                         sleep=sleep,
                     )
                 if saved is None and operation["action"] != "remove":
-                    document = run_state._checkpoint_operation(
+                    document = run_state.checkpoint_validated_operation(
                         document,
                         operation_id=operation_id,
                         state="uncertain",
@@ -725,7 +579,7 @@ def _execute_current_locked(
                 else:
                     comparison, safe_saved = build_verification_comparison(operation, saved)
                     if comparison["pass"]:
-                        document = run_state._checkpoint_operation(
+                        document = run_state.checkpoint_validated_operation(
                             document,
                             operation_id=operation_id,
                             state="verified",
@@ -735,7 +589,7 @@ def _execute_current_locked(
                             saved=safe_saved,
                         )
                     else:
-                        document = run_state._checkpoint_operation(
+                        document = run_state.checkpoint_validated_operation(
                             document,
                             operation_id=operation_id,
                             state="uncertain",
@@ -746,81 +600,15 @@ def _execute_current_locked(
                         )
                 _save(run_path, document)
                 progress = True
-            except AuthenticationError as exc:
-                latest = document
-                operation = _operation(latest, operation_id)
-                state = "failed" if operation["state"] == "planned" else "uncertain"
-                latest = run_state._checkpoint_operation(
-                    latest,
-                    operation_id=operation_id,
-                    state=state,
-                    note="Authentication failed for this target; independent targets may continue.",
-                    timestamp=timestamp(),
-                    error="authentication_required: "
-                    + (
-                        scrub_sensitive_text(str(exc), ephemeral_values)
-                        or "target authorization unavailable"
-                    ),
-                )
-                document = latest
-                _save(run_path, document)
-                progress = True
-            except ValueError as exc:
-                latest = document
-                operation = _operation(latest, operation_id)
-                state = "failed" if operation["state"] == "planned" else "uncertain"
-                latest = run_state._checkpoint_operation(
-                    latest,
-                    operation_id=operation_id,
-                    state=state,
-                    note="Adapter readback could not be normalized or compared safely.",
-                    timestamp=timestamp(),
-                    error="invalid_adapter_readback: "
-                    + scrub_sensitive_text(str(exc), ephemeral_values),
-                )
-                document = latest
-                _save(run_path, document)
-                progress = True
-            except RateLimitError as exc:
-                latest = document
-                latest = run_state._checkpoint_operation(
-                    latest,
-                    operation_id=operation_id,
-                    state="uncertain" if write_accepted_or_ambiguous else "failed",
-                    note="Rate limit stopped this operation; preserve uncertainty if a write may have succeeded.",
-                    timestamp=timestamp(),
-                    error=scrub_sensitive_text(str(exc), ephemeral_values),
-                )
-                document = latest
-                _save(run_path, document)
-                progress = True
-            except AdapterExecutionError as exc:
-                latest = document
-                latest = run_state._checkpoint_operation(
-                    latest,
-                    operation_id=operation_id,
-                    state="uncertain" if write_accepted_or_ambiguous else "failed",
-                    note="Adapter failure stopped this operation; preserve uncertainty if a write may have succeeded.",
-                    timestamp=timestamp(),
-                    error=scrub_sensitive_text(str(exc), ephemeral_values),
-                )
-                document = latest
-                _save(run_path, document)
-                progress = True
             except Exception as exc:
-                latest = document
-                operation = _operation(latest, operation_id)
-                state = "failed" if operation["state"] == "planned" else "uncertain"
-                latest = run_state._checkpoint_operation(
-                    latest,
-                    operation_id=operation_id,
-                    state=state,
-                    note="Unexpected adapter failure stopped this operation; dependents remain stopped.",
-                    timestamp=timestamp(),
-                    error="unexpected_adapter_failure: "
-                    + scrub_sensitive_text(str(exc), ephemeral_values),
+                document = _checkpoint_failure(
+                    document,
+                    operation_id,
+                    exc,
+                    timestamp=timestamp,
+                    ephemeral_values=ephemeral_values,
+                    write_accepted_or_ambiguous=write_accepted_or_ambiguous,
                 )
-                document = latest
                 _save(run_path, document)
                 progress = True
         if not progress:
@@ -834,7 +622,7 @@ def execute_ready_operations(
 ) -> dict[str, Any]:
     """Execute independent target subtrees for the current run schema."""
     if not isinstance(adapter, TargetAdapterRegistry):
-        raise AdapterExecutionError("configuration-run@6.0 requires a TargetAdapterRegistry")
+        raise AdapterExecutionError("configuration run requires a TargetAdapterRegistry")
     timestamp = kwargs.pop("timestamp", None) or _utc_now
     max_rate_limit_retries = kwargs.pop("max_rate_limit_retries", 2)
     max_delay_seconds = kwargs.pop("max_delay_seconds", 100.0)
@@ -950,7 +738,7 @@ def verify_idempotent_rerun(
                         "remaining_actions": [],
                         "observations": [],
                     }
-                    run_state._derive_live_status(document)
+                    run_state.derive_live_status(document)
                     _save(run_path, document)
                     raise
                 inventories[target_id] = resources
@@ -1039,7 +827,7 @@ def verify_idempotent_rerun(
                                     ]
                                 }
                             )
-                            use_listing = _complete_observation(operation, saved)
+                            use_listing = complete_observation(operation, saved)
                     if not use_listing:
                         saved = _read(binding.adapter, operation)
                 except Exception as exc:
@@ -1057,10 +845,249 @@ def verify_idempotent_rerun(
                         "saved": saved,
                     }
                 )
-            document = run_state._record_adapter_idempotency_observations(document, observations)
+            document = run_state.record_adapter_idempotency_observations(document, observations)
             if document["idempotency"]["checked"]:
-                document = run_state._finalize_adapter_verified_document(document, timestamp=now())
+                document = run_state.finalize_adapter_verified_document(document, timestamp=now())
             _save(run_path, document)
             return deepcopy(document["idempotency"])
     except adapter_support.RunConflictError as exc:
         raise AdapterExecutionError(str(exc), code="run_conflict") from exc
+
+
+def _validate_current_variable_consumers(
+    *, binding, document, max_delay_seconds, max_rate_limit_retries, operation, sleep
+):
+    if operation["container_type"] == "web" and requires_variable_consumer_check(operation):
+        if not all(
+            binding.capabilities.get(family, {}).get("list") for family in ("tag", "variable")
+        ):
+            raise AdapterExecutionError(
+                "shared variable review requires tag/variable-list capabilities"
+            )
+        current_tags = collect_paginated(
+            lambda cursor: binding.adapter.list_resource_page("tag", cursor),
+            max_rate_limit_retries=max_rate_limit_retries,
+            max_retry_delay_seconds=max_delay_seconds,
+            sleep=sleep,
+        )
+        current_variables = collect_paginated(
+            lambda cursor: binding.adapter.list_resource_page("variable", cursor),
+            max_rate_limit_retries=max_rate_limit_retries,
+            max_retry_delay_seconds=max_delay_seconds,
+            sleep=sleep,
+        )
+        in_scope_names = {
+            item["name"]
+            for item in document["object_changes"]
+            if item["target_id"] == operation["target_id"] and item["resource_family"] == "tag"
+        }
+        missing_consumers = (
+            variable_consumers(operation, current_tags, current_variables) - in_scope_names
+        )
+        if missing_consumers:
+            raise AdapterExecutionError(
+                "shared variable has unreviewed current consumers: "
+                + ", ".join(sorted(missing_consumers))
+            )
+
+
+def _checkpoint_failure(
+    document, operation_id, exc, *, timestamp, ephemeral_values, write_accepted_or_ambiguous
+):
+    """Classify an execution failure using its established write boundary."""
+    if isinstance(exc, AuthenticationError):
+        latest = document
+        operation = run_state.find_operation(latest, operation_id)
+        state = "failed" if operation["state"] == "planned" else "uncertain"
+        latest = run_state.checkpoint_validated_operation(
+            latest,
+            operation_id=operation_id,
+            state=state,
+            note="Authentication failed for this target; independent targets may continue.",
+            timestamp=timestamp(),
+            error="authentication_required: "
+            + (
+                scrub_sensitive_text(str(exc), ephemeral_values)
+                or "target authorization unavailable"
+            ),
+        )
+        document = latest
+        return document
+    elif isinstance(exc, ValueError):
+        latest = document
+        operation = run_state.find_operation(latest, operation_id)
+        state = "failed" if operation["state"] == "planned" else "uncertain"
+        latest = run_state.checkpoint_validated_operation(
+            latest,
+            operation_id=operation_id,
+            state=state,
+            note="Adapter readback could not be normalized or compared safely.",
+            timestamp=timestamp(),
+            error="invalid_adapter_readback: " + scrub_sensitive_text(str(exc), ephemeral_values),
+        )
+        document = latest
+        return document
+    elif isinstance(exc, RateLimitError):
+        latest = document
+        latest = run_state.checkpoint_validated_operation(
+            latest,
+            operation_id=operation_id,
+            state="uncertain" if write_accepted_or_ambiguous else "failed",
+            note="Rate limit stopped this operation; preserve uncertainty if a write may have succeeded.",
+            timestamp=timestamp(),
+            error=scrub_sensitive_text(str(exc), ephemeral_values),
+        )
+        document = latest
+        return document
+    elif isinstance(exc, AdapterExecutionError):
+        latest = document
+        latest = run_state.checkpoint_validated_operation(
+            latest,
+            operation_id=operation_id,
+            state="uncertain" if write_accepted_or_ambiguous else "failed",
+            note="Adapter failure stopped this operation; preserve uncertainty if a write may have succeeded.",
+            timestamp=timestamp(),
+            error=scrub_sensitive_text(str(exc), ephemeral_values),
+        )
+        document = latest
+        return document
+    elif isinstance(exc, Exception):
+        latest = document
+        operation = run_state.find_operation(latest, operation_id)
+        state = "failed" if operation["state"] == "planned" else "uncertain"
+        latest = run_state.checkpoint_validated_operation(
+            latest,
+            operation_id=operation_id,
+            state=state,
+            note="Unexpected adapter failure stopped this operation; dependents remain stopped.",
+            timestamp=timestamp(),
+            error="unexpected_adapter_failure: " + scrub_sensitive_text(str(exc), ephemeral_values),
+        )
+        document = latest
+        return document
+
+
+def _mutate_with_quota_proof(
+    binding, operation, mutation_operation, *, max_rate_limit_retries, max_delay_seconds, sleep
+):
+    _verified_adapter_identity(binding.identity, binding.adapter)
+    mutation_attempted = False
+
+    def mutate_with_fresh_retry():
+        nonlocal mutation_attempted
+        if mutation_attempted:
+            # A documented quota rejection did not write, but the backoff
+            # consumed the prior read proof. Re-read and compare before
+            # retrying so missing fingerprints and intervening drift are safe.
+            _verified_adapter_identity(binding.identity, binding.adapter)
+            if operation["action"] != "create":
+                retry_saved = _read(binding.adapter, operation)
+                retry_comparison, _ = build_pre_write_comparison(operation, retry_saved)
+                if not retry_comparison["pass"]:
+                    raise AdapterExecutionError(
+                        "Target changed during quota backoff; no retry write performed",
+                        code="container_drift",
+                    )
+        mutation_attempted = True
+        return binding.adapter.mutate(deepcopy(mutation_operation))
+
+    mutation_saved = _call_with_rate_limit(
+        mutate_with_fresh_retry,
+        max_retries=max_rate_limit_retries,
+        max_delay_seconds=max_delay_seconds,
+        sleep=sleep,
+    )
+    return mutation_saved
+
+
+def _prepare_write(document, operation, current, *, timestamp):
+    """Return the fresh pre-write proof, or finish a read-only/failed operation."""
+    operation_id = operation["operation_id"]
+    if operation["action"] == "create" and current is not None:
+        comparison, safe_current = build_verification_comparison(operation, current)
+        if comparison["pass"]:
+            document = run_state.checkpoint_validated_operation(
+                document,
+                operation_id=operation_id,
+                state="verified",
+                note="Existing semantic object already matches; no write performed.",
+                timestamp=timestamp(),
+                comparison=comparison,
+                saved=safe_current,
+            )
+        else:
+            document = run_state.checkpoint_validated_operation(
+                document,
+                operation_id=operation_id,
+                state="failed",
+                note="Create conflict; existing semantic object was not overwritten.",
+                timestamp=timestamp(),
+                error="create_conflict",
+                result={"comparison": comparison, "saved": safe_current},
+            )
+        return document, None
+    if operation["action"] in {"reuse", "untouched"}:
+        if current is None:
+            document = run_state.checkpoint_validated_operation(
+                document,
+                operation_id=operation_id,
+                state="failed",
+                note="Required existing object was not found; no write performed.",
+                timestamp=timestamp(),
+                error="existing_object_missing",
+            )
+        else:
+            comparison, safe_current = build_verification_comparison(operation, current)
+            if comparison["pass"]:
+                document = run_state.checkpoint_validated_operation(
+                    document,
+                    operation_id=operation_id,
+                    state="verified",
+                    note="Existing object compatibility verified; no write performed.",
+                    timestamp=timestamp(),
+                    comparison=comparison,
+                    saved=safe_current,
+                )
+            else:
+                document = run_state.checkpoint_validated_operation(
+                    document,
+                    operation_id=operation_id,
+                    state="failed",
+                    note="Existing object does not match the approved reuse contract.",
+                    timestamp=timestamp(),
+                    error="reuse_mismatch",
+                    result={
+                        "comparison": comparison,
+                        "saved": safe_current,
+                    },
+                )
+        return document, None
+    kwargs: dict[str, Any] = {}
+    if operation["action"] in {
+        "update",
+        "replace",
+        "rename",
+        "pause",
+        "unpause",
+        "remove",
+    }:
+        pre_write_comparison, safe_current = build_pre_write_comparison(operation, current)
+        if not pre_write_comparison["pass"]:
+            document = run_state.checkpoint_validated_operation(
+                document,
+                operation_id=operation_id,
+                state="failed",
+                note="Fresh target state differs from the approved pre-change snapshot; no write performed.",
+                timestamp=timestamp(),
+                error="container_drift",
+                result={
+                    "comparison": pre_write_comparison,
+                    "saved": safe_current,
+                },
+            )
+            return document, None
+        kwargs = {
+            "pre_write_comparison": pre_write_comparison,
+            "pre_write_saved": safe_current,
+        }
+    return document, kwargs

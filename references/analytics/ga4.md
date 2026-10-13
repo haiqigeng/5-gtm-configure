@@ -5,21 +5,21 @@ For linker and cross-domain changes, read [linker guidance](../web/linker-cross-
 Implement the approved analytics event names, exact outgoing fields, source mappings, literals and
 timing. Current official documentation establishes technical validity; a valid alternative is an
 advisory, not permission to redesign the plan. See
-[tracking-plan-fidelity-and-conformance.md](intake-and-conformance.md).
+[intake and conformance](intake-and-conformance.md).
 
 ## Read by changed feature
 
 - For every GA4 event: the safety gate and event procedure below, plus
-  [ga4-collection-safety.md](ga4-validity.md).
-- For field placement/inheritance: [google-field-ownership.md](google-fields.md).
+  [ga4 validity](ga4-validity.md).
+- For field placement/inheritance: [google fields](google-fields.md).
 - When changing Google configuration, connected destinations, page views, automatic collection,
-  diagnostic fields or transport: [ga4-configuration-and-lifecycle.md](ga4-ownership.md).
-- For ecommerce: [ga4-ecommerce.md](ga4-ecommerce.md).
-- For user properties, User-ID or user-provided data: [first-party-data.md](../data/identity.md).
-- For CMP grants, blocks and timing: [cmp-consent.md](../consent/web.md). Existing advanced behavior
+  diagnostic fields or transport: [ga4 ownership](ga4-ownership.md).
+- For ecommerce: [ga4 ecommerce](ga4-ecommerce.md).
+- For user properties, User-ID or user-provided data: [identity](../data/identity.md).
+- For CMP grants, blocks and timing: [web](../consent/web.md). Existing advanced behavior
   requires an applicable approved topology; resolve a policy conflict before adding a consumer.
-- For naming and shared values: [naming-and-reuse.md](../organization.md).
-- For multiple environments/destinations: [multi-destination-routing.md](../routing.md).
+- For naming and shared values: [organization](../organization.md).
+- For multiple environments/destinations: [routing](../routing.md).
 
 ## Apply the GA4 safety gate
 

@@ -7,13 +7,13 @@ from typing import Any
 import gtm_configure.core.validation as validation
 import gtm_configure.domain.web_model as web_model
 import gtm_configure.domain.web_native as web_native
+from gtm_configure.core.schemas import validate_definition
 from gtm_configure.core.validation import (
     RunValidationError,
-    _array,
-    _exact_keys,
-    _object,
-    _optional_text,
-    _text,
+    array,
+    object,
+    optional_text,
+    text,
 )
 from gtm_configure.domain.native import (
     supports_native_mapping,
@@ -28,75 +28,60 @@ from gtm_configure.domain.web_model import (
 )
 
 
-def _validate_payload_mappings(raw: Any, requirement_ids: set[str]) -> list[dict[str, Any]]:
+def validate_payload_mappings(raw: Any, requirement_ids: set[str]) -> list[dict[str, Any]]:
     identities: set[tuple[str, str, str]] = set()
     records: list[dict[str, Any]] = []
-    for index, item_raw in enumerate(_array(raw, "$.payload_mappings")):
+    for index, item_raw in enumerate(array(raw, "$.payload_mappings")):
         path = f"$.payload_mappings[{index}]"
-        item = _object(item_raw, path)
-        _exact_keys(
-            item,
-            path,
-            required={
-                "requirement_id",
-                "field_scope",
-                "destination_field",
-                "source",
-                "gtm_resolution",
-                "template_field",
-                "status",
-                "provenance_locator",
-            },
-            optional=EXTENDED_MAPPING_KEYS | {"native_binding"},
-        )
-        requirement_id = _text(item.get("requirement_id"), f"{path}.requirement_id")
+        item = object(item_raw, path)
+        requirement_id = text(item.get("requirement_id"), f"{path}.requirement_id")
         if requirement_id not in requirement_ids:
             raise RunValidationError(f"{path}.requirement_id is unknown")
-        field_scope = _text(item.get("field_scope"), f"{path}.field_scope")
+        field_scope = text(item.get("field_scope"), f"{path}.field_scope")
         if field_scope not in {"event-parameter", "user-property", "item-parameter"}:
             raise RunValidationError(f"{path}.field_scope has unsupported value {field_scope!r}")
-        destination_field = _text(item.get("destination_field"), f"{path}.destination_field")
+        destination_field = text(item.get("destination_field"), f"{path}.destination_field")
         identity = (requirement_id, field_scope, destination_field)
         if identity in identities:
             raise RunValidationError(f"duplicate payload mapping {identity!r}")
         identities.add(identity)
-        _optional_text(item.get("source"), f"{path}.source")
-        _optional_text(item.get("gtm_resolution"), f"{path}.gtm_resolution")
-        _optional_text(item.get("template_field"), f"{path}.template_field")
+        optional_text(item.get("source"), f"{path}.source")
+        optional_text(item.get("gtm_resolution"), f"{path}.gtm_resolution")
+        optional_text(item.get("template_field"), f"{path}.template_field")
         for shape_field in ("source_shape", "destination_shape"):
             if item.get(shape_field) is not None:
                 try:
                     collection_shape(item[shape_field])
                 except ValueError as exc:
                     raise RunValidationError(f"{path}.{shape_field}: {exc}") from exc
-        status = _text(item.get("status"), f"{path}.status")
+        status = text(item.get("status"), f"{path}.status")
         if status not in MAPPING_STATUSES:
             raise RunValidationError(f"{path}.status has unsupported value {status!r}")
-        _text(item.get("provenance_locator"), f"{path}.provenance_locator")
+        text(item.get("provenance_locator"), f"{path}.provenance_locator")
         extended_keys = set(item) & EXTENDED_MAPPING_KEYS
         if extended_keys and extended_keys != EXTENDED_MAPPING_KEYS:
             missing = ", ".join(sorted(EXTENDED_MAPPING_KEYS - extended_keys))
             raise RunValidationError(f"{path} is missing extended mapping key(s): {missing}")
         if extended_keys:
-            authority_grade = _optional_text(
+            authority_grade = optional_text(
                 item.get("source_authority_grade"),
                 f"{path}.source_authority_grade",
             )
-            authority_locator = _optional_text(
+            authority_locator = optional_text(
                 item.get("source_authority_locator"),
                 f"{path}.source_authority_locator",
             )
-            source_shape = _optional_text(item.get("source_shape"), f"{path}.source_shape")
-            destination_shape = _optional_text(
+            source_shape = optional_text(item.get("source_shape"), f"{path}.source_shape")
+            destination_shape = optional_text(
                 item.get("destination_shape"),
                 f"{path}.destination_shape",
             )
-            compatibility = _optional_text(
+            compatibility = optional_text(
                 item.get("shape_compatibility"),
                 f"{path}.shape_compatibility",
             )
-            method = _optional_text(item.get("mapping_method"), f"{path}.mapping_method")
-            missing_behavior = _optional_text(
+            method = optional_text(item.get("mapping_method"), f"{path}.mapping_method")
+            missing_behavior = optional_text(
                 item.get("missing_behavior"),
                 f"{path}.missing_behavior",
             )
@@ -109,9 +94,9 @@ def _validate_payload_mappings(raw: Any, requirement_ids: set[str]) -> list[dict
             if method is not None and method not in MAPPING_METHODS:
                 raise RunValidationError(f"{path}.mapping_method has unsupported value {method!r}")
         if status == "mapped":
-            _text(item.get("source"), f"{path}.source")
-            _text(item.get("gtm_resolution"), f"{path}.gtm_resolution")
-            _text(item.get("template_field"), f"{path}.template_field")
+            text(item.get("source"), f"{path}.source")
+            text(item.get("gtm_resolution"), f"{path}.gtm_resolution")
+            text(item.get("template_field"), f"{path}.template_field")
             if extended_keys:
                 if authority_grade != "approved-input":
                     raise RunValidationError(
@@ -165,7 +150,7 @@ def _validate_payload_mappings(raw: Any, requirement_ids: set[str]) -> list[dict
     return records
 
 
-def _field_mappings(requirement: dict[str, Any]) -> list[dict[str, Any]]:
+def field_mappings(requirement: dict[str, Any]) -> list[dict[str, Any]]:
     mappings: list[dict[str, Any]] = []
     field_scopes = {
         "parameters": "event-parameter",
@@ -210,10 +195,14 @@ def _field_mappings(requirement: dict[str, Any]) -> list[dict[str, Any]]:
     return mappings
 
 
+def fail_validation(message):
+    raise validation.RunValidationError(message)
+
+
 def materialize_payload_mappings(contract: dict[str, Any]) -> list[dict[str, Any]]:
     """Attach implementation decisions without rewriting approved source semantics."""
     mappings = [
-        row for requirement in contract["requirements"] for row in _field_mappings(requirement)
+        row for requirement in contract["requirements"] for row in field_mappings(requirement)
     ]
     by_key = {
         (row["requirement_id"], row["field_scope"], row["destination_field"]): row
@@ -223,24 +212,8 @@ def materialize_payload_mappings(contract: dict[str, Any]) -> list[dict[str, Any
     if not isinstance(bindings, list):
         raise validation.RunValidationError("implementation.field_bindings must be an array")
     seen = set()
-    required = {
-        "requirement_id",
-        "field_scope",
-        "destination_field",
-        "shape_compatibility",
-        "mapping_method",
-        "gtm_resolution",
-        "template_field",
-        "missing_behavior",
-        "status",
-    }
     for binding in bindings:
-        if (
-            not isinstance(binding, dict)
-            or not required <= set(binding)
-            or set(binding) - required - {"native_binding"}
-        ):
-            raise validation.RunValidationError("field binding has missing or unexpected fields")
+        validate_definition(binding, "fieldBinding", fail_validation)
         key = (
             binding["requirement_id"],
             binding["field_scope"],
@@ -250,7 +223,7 @@ def materialize_payload_mappings(contract: dict[str, Any]) -> list[dict[str, Any
             raise validation.RunValidationError("field binding is unknown or duplicated")
         seen.add(key)
         by_key[key].update(binding)
-    return _validate_payload_mappings(mappings, {item["id"] for item in contract["requirements"]})
+    return validate_payload_mappings(mappings, {item["id"] for item in contract["requirements"]})
 
 
 def validate_native_mappings(mappings, operations, fail):
@@ -301,7 +274,7 @@ def validate_native_mappings(mappings, operations, fail):
                 raise ValueError("native mapping owner is paused")
             if not supports_native_mapping(mapping, target):
                 continue
-            value = web_native._resolved_event_parameter(owner, operations, variables, field)
+            value = web_native.resolved_event_parameter(owner, operations, variables, field)
             if value != mapping["gtm_resolution"]:
                 raise ValueError("native mapping value differs from gtm_resolution")
             if mapping.get("mapping_method") == "direct-dlv":

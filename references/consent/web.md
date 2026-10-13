@@ -6,14 +6,17 @@
 - CMP evidence and complete blocking predicate
 - Static expectations
 
-For a named CMP load [cmp-platform-patterns.md](cmp-patterns.md); for actual TCF deployments
-load [tcf-consent.md](tcf.md). Advanced/native consent requires explicit approval and the
-exact product capability in [vendor-consent-modes.md](product-capabilities.md); Google routes also
-use [google-consent-mode.md](google.md). Existing configuration alone is not approval.
+For a named CMP load [cmp patterns](cmp-patterns.md); for actual TCF deployments
+load [tcf](tcf.md). Advanced/native consent requires explicit approval and the
+exact product capability in [product capabilities](product-capabilities.md); Google routes also
+use [google](google.md). Existing configuration alone is not approval.
+`product-specific` identifies an approved product-native policy: the linked topology records
+the product mechanism, signal authority and unknown-state behavior. The product owns eligibility;
+the execution topology represents its normal lifecycle without an additional basic gate.
 If the current execution unit conflicts with the requested/default policy, resolve that before
 adding a consumer. Reuse applicable explicit approval without asking again.
 
-Read [cmp-lifecycle.md](lifecycle.md) when initial or late-grant timing, pre-CMP business events,
+Read [lifecycle](lifecycle.md) when initial or late-grant timing, pre-CMP business events,
 withdrawal, SPA initialization or pipeline transport is affected. A gate never replays an earlier
 event. Pre-CMP policy must be explicit; do not assume accepted loss or use a Trigger Group as a queue.
 

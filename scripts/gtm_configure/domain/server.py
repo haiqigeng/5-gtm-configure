@@ -1,10 +1,10 @@
-"""Server-container object and Event Data validation for configuration-run@6.0."""
+"""Server-container object and Event Data validation for configuration run."""
 
 from __future__ import annotations
 
 from typing import Any, Callable
 
-from gtm_configure.core.model import SERVER_RESOURCE_FAMILIES
+from gtm_configure.core.model import BUILT_IN_TRIGGER_IDS, SERVER_RESOURCE_FAMILIES
 from gtm_configure.domain.events import approved_event_name, configured_event_name
 from gtm_configure.domain.events import trigger_accepts_event as matches_event
 from gtm_configure.domain.server_assertions import validate_server_assertions
@@ -22,7 +22,6 @@ _WEB_ONLY_TRIGGER_MARKERS = {
     "youtube-video",
 }
 _BROWSER_CODE_TYPES = {"custom-html", "custom-javascript", "html", "cjs"}
-_WEB_BUILT_IN_TRIGGER_IDS = {"2147479553", "2147479572", "2147479573"}
 
 
 def validate_server_operations(
@@ -75,7 +74,7 @@ def validate_server_operations(
             if not isinstance(references, list):
                 fail(f"{path}.intended.{field} must be an array")
                 continue
-            if any(str(value) in _WEB_BUILT_IN_TRIGGER_IDS for value in references):
+            if any(str(value) in BUILT_IN_TRIGGER_IDS for value in references):
                 fail(f"{path}.intended.{field} uses a web built-in trigger in a server container")
         if raw_type in _BROWSER_CODE_TYPES:
             fail(f"{path} uses a browser Custom HTML/Custom JavaScript escape hatch")

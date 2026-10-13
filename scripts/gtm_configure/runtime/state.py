@@ -1,4 +1,4 @@
-"""Deterministic creation, checkpoints, inspection, and finalization for run@5.0."""
+"""Deterministic creation, checkpoints, inspection, and finalization for the current run model."""
 
 from __future__ import annotations
 
@@ -13,6 +13,7 @@ from gtm_configure.contract import ContractValidationError
 from gtm_configure.contract import validate_document as validate_contract
 from gtm_configure.core.json_io import StrictJsonError, load_json
 from gtm_configure.core.model import (
+    MATERIALIZATION_METHOD,
     PUBLICATION_ORDER,
     SCHEMA_VERSION,
     SERVER_RESOURCE_FAMILIES,
@@ -20,6 +21,7 @@ from gtm_configure.core.model import (
 )
 from gtm_configure.core.privacy import redact_for_persistence
 from gtm_configure.core.public_identifiers import public_identifier_paths
+from gtm_configure.core.validation import canonical_sha256
 from gtm_configure.domain.resources import (
     ResourceRegistryError,
     required_baseline_families,
@@ -29,7 +31,6 @@ from gtm_configure.runtime.validation import transition_allowed, validate_docume
 from gtm_configure.runtime.verification import (
     build_pre_write_comparison,
     build_verification_comparison,
-    canonical_sha256,
     materialization_fingerprints,
     validate_verification_comparison,
 )
@@ -90,7 +91,7 @@ def create_from_contract(
     source_locator: str,
     timestamp: str | None = None,
 ) -> dict[str, Any]:
-    """Materialize every active run section deterministically from contract@8.0."""
+    """Materialize every active run section deterministically from the validated contract."""
     try:
         contract = validate_contract(deepcopy(contract))
     except ContractValidationError as exc:
@@ -213,7 +214,7 @@ def create_from_contract(
             },
             "publication": {"performed": False, "version_created": False},
             "materialization": {
-                "method": "contract-8.0-deterministic",
+                "method": MATERIALIZATION_METHOD,
                 "owned_sections": [
                     "targets",
                     "requirements",
@@ -287,7 +288,7 @@ def load_document(path: Path) -> dict[str, Any]:
     return validate_document(value)
 
 
-def _build_target_baseline(
+def build_target_baseline(
     target: dict[str, Any],
     resources: dict[str, list[dict[str, Any]]],
     *,
@@ -381,11 +382,17 @@ def _build_target_baseline(
         "resources": normalized,
         "preexisting_workspace_changes": safe_changes,
         "capture_evidence": deepcopy(capture_evidence),
-        "fingerprint": f"sha256:{canonical_sha256({'resources': normalized, 'workspace_changes': safe_changes, 'capture_evidence': capture_evidence})}",
+        "fingerprint": canonical_sha256(
+            {
+                "resources": normalized,
+                "workspace_changes": safe_changes,
+                "capture_evidence": capture_evidence,
+            }
+        ),
     }
 
 
-def _record_target_baseline(
+def record_target_baseline(
     document: dict[str, Any],
     *,
     target_id: str,
@@ -436,7 +443,7 @@ def _record_target_baseline(
         raise RunConflictError(
             "target baseline must be recorded before mutation: " + ", ".join(started)
         )
-    baseline = _build_target_baseline(
+    baseline = build_target_baseline(
         target,
         resources,
         captured_at=captured_at,
@@ -459,7 +466,7 @@ def _record_target_baseline(
     return validate_document(value)
 
 
-def _operation(document: dict[str, Any], operation_id: str) -> dict[str, Any]:
+def find_operation(document: dict[str, Any], operation_id: str) -> dict[str, Any]:
     for operation in document["object_changes"]:
         if operation["operation_id"] == operation_id:
             return operation
@@ -468,10 +475,10 @@ def _operation(document: dict[str, Any], operation_id: str) -> dict[str, Any]:
 
 def checkpoint_operation(document: dict[str, Any], **kwargs: Any) -> dict[str, Any]:
     value = deepcopy(validate_document(document))
-    return validate_document(_checkpoint_operation(value, **kwargs))
+    return validate_document(checkpoint_validated_operation(value, **kwargs))
 
 
-def _checkpoint_operation(
+def checkpoint_validated_operation(
     document: dict[str, Any],
     *,
     operation_id: str,
@@ -486,7 +493,7 @@ def _checkpoint_operation(
     error: str | None = None,
 ) -> dict[str, Any]:
     value = document
-    operation = _operation(value, operation_id)
+    operation = find_operation(value, operation_id)
     current = operation["state"]
     if state in {"in_progress", "saved", "verified"} and not any(
         baseline["target_id"] == operation["target_id"] and baseline.get("complete") is True
@@ -589,7 +596,7 @@ def _checkpoint_operation(
     )
     value["run"]["updated_at"] = timestamp or _utc_now()
     value["run"]["phase"] = "readback" if state in {"saved", "verified"} else "mutation"
-    _derive_live_status(value)
+    derive_live_status(value)
     return value
 
 
@@ -601,7 +608,7 @@ def reopen_failed_operation(
     timestamp: str | None = None,
 ) -> dict[str, Any]:
     value = deepcopy(validate_document(document))
-    operation = _operation(value, operation_id)
+    operation = find_operation(value, operation_id)
     if operation["state"] != "failed":
         raise RunValidationError("only a known failed operation can be reopened")
     for field in (
@@ -626,11 +633,11 @@ def reopen_failed_operation(
         }
     )
     value["run"]["updated_at"] = timestamp or _utc_now()
-    _derive_live_status(value)
+    derive_live_status(value)
     return validate_document(value)
 
 
-def _derive_live_status(document: dict[str, Any]) -> None:
+def derive_live_status(document: dict[str, Any]) -> None:
     for result in document["target_results"]:
         operations = [
             item for item in document["object_changes"] if item["target_id"] == result["target_id"]
@@ -689,10 +696,10 @@ def _derive_live_status(document: dict[str, Any]) -> None:
 
 
 def inspect_document(document: dict[str, Any]) -> dict[str, Any]:
-    return _inspect_document(validate_document(document))
+    return inspect_validated_document(validate_document(document))
 
 
-def _inspect_document(value: dict[str, Any]) -> dict[str, Any]:
+def inspect_validated_document(value: dict[str, Any]) -> dict[str, Any]:
     states = {item["operation_id"]: item["state"] for item in value["object_changes"]}
     ready: list[str] = []
     waiting: dict[str, list[str]] = {}
@@ -761,7 +768,7 @@ def _parse_instant(value: Any, path: str) -> datetime:
     return parsed.astimezone(timezone.utc)
 
 
-def _record_adapter_idempotency_observations(
+def record_adapter_idempotency_observations(
     document: dict[str, Any],
     observations: list[dict[str, Any]],
 ) -> dict[str, Any]:
@@ -873,11 +880,11 @@ def _record_adapter_idempotency_observations(
                     "convergence_repair": True,
                 }
             )
-        _derive_live_status(value)
+        derive_live_status(value)
     return validate_document(value)
 
 
-def _finalize_adapter_verified_document(
+def finalize_adapter_verified_document(
     document: dict[str, Any],
     *,
     timestamp: str | None = None,

@@ -2,24 +2,30 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 from typing import Any
 
+import gtm_configure.core.validation as validation
 from gtm_configure.core.validation import (
     RunValidationError,
-    _array,
-    _exact_keys,
-    _object,
-    _optional_text,
-    _text,
-    _unique_texts,
+    array,
+    object,
+    optional_text,
+    text,
+    unique_texts,
 )
+from gtm_configure.domain.localization import local_key
+from gtm_configure.domain.native import (
+    variable_consumers,
+)
+from gtm_configure.domain.resources import requires_variable_consumer_check
 from gtm_configure.domain.web_model import (
     INVENTORY_DISPOSITIONS,
 )
-from gtm_configure.domain.web_native import _effective_target
+from gtm_configure.domain.web_native import effective_target
 
 
-def _validate_inventory_dispositions(
+def validate_inventory_dispositions(
     raw: Any,
     *,
     execution_mode: str,
@@ -43,30 +49,10 @@ def _validate_inventory_dispositions(
     after_names: set[str] = set()
     linked_tag_operation_ids: set[str] = set()
     records: list[dict[str, Any]] = []
-    for index, item_raw in enumerate(_array(raw, "$.inventory_dispositions")):
+    for index, item_raw in enumerate(array(raw, "$.inventory_dispositions")):
         path = f"$.inventory_dispositions[{index}]"
-        item = _object(item_raw, path)
-        _exact_keys(
-            item,
-            path,
-            required={
-                "row_id",
-                "source_order",
-                "source_locator",
-                "before_object_key",
-                "before_tag_name",
-                "disposition",
-                "after_tag_name",
-                "trigger_before",
-                "trigger_after",
-                "variable_changes",
-                "parameter_changes",
-                "consent_changes",
-                "rationale",
-                "operation_ids",
-            },
-        )
-        row_id = _text(item.get("row_id"), f"{path}.row_id")
+        item = object(item_raw, path)
+        row_id = text(item.get("row_id"), f"{path}.row_id")
         if row_id in row_ids:
             raise RunValidationError(f"duplicate inventory row_id {row_id!r}")
         row_ids.add(row_id)
@@ -76,13 +62,13 @@ def _validate_inventory_dispositions(
         if order in orders:
             raise RunValidationError(f"duplicate inventory source_order {order}")
         orders.add(order)
-        _text(item.get("source_locator"), f"{path}.source_locator")
-        before_key = _optional_text(item.get("before_object_key"), f"{path}.before_object_key")
-        before_name = _optional_text(item.get("before_tag_name"), f"{path}.before_tag_name")
-        disposition = _text(item.get("disposition"), f"{path}.disposition")
+        text(item.get("source_locator"), f"{path}.source_locator")
+        before_key = optional_text(item.get("before_object_key"), f"{path}.before_object_key")
+        before_name = optional_text(item.get("before_tag_name"), f"{path}.before_tag_name")
+        disposition = text(item.get("disposition"), f"{path}.disposition")
         if disposition not in INVENTORY_DISPOSITIONS:
             raise RunValidationError(f"{path}.disposition has unsupported value {disposition!r}")
-        after_name = _optional_text(item.get("after_tag_name"), f"{path}.after_tag_name")
+        after_name = optional_text(item.get("after_tag_name"), f"{path}.after_tag_name")
         if disposition == "added":
             if before_key is not None or before_name is not None or after_name is None:
                 raise RunValidationError(
@@ -111,9 +97,9 @@ def _validate_inventory_dispositions(
             "parameter_changes",
             "consent_changes",
         ):
-            _unique_texts(item.get(field), f"{path}.{field}")
-        _text(item.get("rationale"), f"{path}.rationale")
-        linked_operations = set(_unique_texts(item.get("operation_ids"), f"{path}.operation_ids"))
+            unique_texts(item.get(field), f"{path}.{field}")
+        text(item.get("rationale"), f"{path}.rationale")
+        linked_operations = set(unique_texts(item.get("operation_ids"), f"{path}.operation_ids"))
         if linked_operations - operation_ids:
             raise RunValidationError(f"{path}.operation_ids contains unknown IDs")
         tag_operations = [
@@ -134,7 +120,7 @@ def _validate_inventory_dispositions(
             raise RunValidationError(
                 f"{path}.{disposition} is incompatible with tag action {tag_operation['action']!r}"
             )
-        target = _effective_target(tag_operation, path) if disposition != "remove" else None
+        target = effective_target(tag_operation, path) if disposition != "remove" else None
         target_name = target.get("name") if isinstance(target, dict) else None
         if disposition == "added":
             if after_name != target_name:
@@ -142,9 +128,7 @@ def _validate_inventory_dispositions(
         else:
             if before_key != tag_operation["object_key"]:
                 raise RunValidationError(f"{path}.before_object_key differs from its tag operation")
-            pre_change = _object(
-                tag_operation.get("pre_change"), f"{path}.tag_operation.pre_change"
-            )
+            pre_change = object(tag_operation.get("pre_change"), f"{path}.tag_operation.pre_change")
             if before_name != pre_change.get("name"):
                 raise RunValidationError(f"{path}.before_tag_name differs from pre_change.name")
             if disposition != "remove" and after_name != target_name:
@@ -177,3 +161,83 @@ def _validate_inventory_dispositions(
         if existing_orders and added_orders and min(added_orders) <= max(existing_orders):
             raise RunValidationError("refonte added inventory rows must follow all source rows")
     return records
+
+
+def validate_shared_variable_consumers(
+    *, local_operations, baseline_resources, fail, operations_by_key, target_id
+):
+    if baseline_resources is not None:
+        target_baseline = baseline_resources.get(target_id, {})
+        baseline_tags = target_baseline.get("tag", [])
+        for operation in local_operations.values():
+            if not requires_variable_consumer_check(operation):
+                continue
+            consumers = {
+                f"tag::{name}"
+                for name in variable_consumers(
+                    operation, baseline_tags, target_baseline.get("variable", [])
+                )
+            }
+            missing_consumers = sorted(consumers - set(operations_by_key))
+            if missing_consumers:
+                fail(
+                    f"shared variable mutation {operation['object_key']!r} "
+                    "does not include every authenticated baseline consumer: "
+                    + ", ".join(missing_consumers)
+                )
+
+
+def validate_target_inventory(
+    *,
+    local_operations,
+    baseline_in_scope_tags,
+    execution_mode,
+    fail,
+    inventory_dispositions,
+    target_id,
+):
+    local_inventory = []
+    for index, row in enumerate(inventory_dispositions):
+        if not isinstance(row, dict):
+            continue
+        local_ids = [value for value in row["operation_ids"] if value in local_operations]
+        if not local_ids:
+            continue
+        record = deepcopy(row)
+        record.pop("operation_keys", None)
+        record["operation_ids"] = local_ids
+        if record.get("before_object_key") is not None:
+            record["before_object_key"] = local_key(
+                record["before_object_key"],
+                target_id,
+                f"$.inventory_dispositions[{index}].before_object_key",
+                fail,
+            )
+        local_inventory.append(record)
+    local_scope = (
+        {
+            local_key(
+                value,
+                target_id,
+                "$.container_baselines[].resource_identities.tag",
+                fail,
+            )
+            for value in baseline_in_scope_tags.get(target_id, set())
+        }
+        if baseline_in_scope_tags is not None
+        else {
+            item["object_key"]
+            for item in local_operations.values()
+            if item["object_type"] == "tag" and item["action"] != "create"
+        }
+    )
+    try:
+        validate_inventory_dispositions(
+            local_inventory,
+            execution_mode=execution_mode,
+            in_scope_tag_keys=local_scope,
+            operations=local_operations,
+        )
+    except validation.RunValidationError as exc:
+        fail(str(exc))
+        return

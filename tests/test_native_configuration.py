@@ -7,7 +7,6 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
-from current_support import approve_mutations  # noqa: E402
 from gtm_configure.contract import ContractValidationError, validate_document  # noqa: E402
 from gtm_configure.domain.native import (
     FieldResolutionError,
@@ -17,7 +16,7 @@ from gtm_configure.domain.native import (
     sensitive_fields,
     variable_consumers,
 )
-from gtm_configure.domain.web_native import _configured_destinations, _effective_configuration_value
+from gtm_configure.domain.web_native import configured_destinations, effective_configuration_value
 from gtm_configure.runtime.adapter_protocol import atomic_write
 from gtm_configure.runtime.engine import (
     TargetAdapterRegistry,
@@ -28,10 +27,11 @@ from gtm_configure.runtime.state import (
     create_from_contract,
     load_document,  # noqa: E402
 )
-from test_current_adapter_runtime import FakeAdapter, capabilities  # noqa: E402
-from test_effective_configuration_guardrails import settings_contract  # noqa: E402
-from test_google_ads_enhanced_conversions import event_override_contract  # noqa: E402
-from test_utility_evolution import ads_transport_contract  # noqa: E402
+from support.adapters import FakeAdapter, capabilities  # noqa: E402
+from support.contracts import approve_mutations  # noqa: E402
+from support.enhanced_conversions import event_override_contract  # noqa: E402
+from support.transport_and_state import ads_transport_contract  # noqa: E402
+from support.web_authority import settings_contract  # noqa: E402
 
 
 def table(key, name="user_data", value="{{UPD - Approved conversion}}"):
@@ -98,7 +98,7 @@ class NativeConfigurationTests(unittest.TestCase):
                 table("eventParameters"),
             ],
         }
-        self.assertEqual(_configured_destinations(target, {}, "$.tag"), {"G-TEST123"})
+        self.assertEqual(configured_destinations(target, {}, "$.tag"), {"G-TEST123"})
 
     def test_all_native_tables_preserve_values_and_do_not_mutate_payload(self):
         for name in ("configSettingsTable", "eventSettingsTable", "eventParameters"):
@@ -148,7 +148,7 @@ class NativeConfigurationTests(unittest.TestCase):
         }
         target = {"configSettingsVariable": "{{Config}}", "eventSettingsVariable": "{{Event}}"}
         self.assertEqual(
-            _effective_configuration_value(target, {"user_id"}, operations, "$.tag"),
+            effective_configuration_value(target, {"user_id"}, operations, "$.tag"),
             (True, "{{ID}}"),
         )
 

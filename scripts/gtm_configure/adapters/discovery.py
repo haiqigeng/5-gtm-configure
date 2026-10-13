@@ -1,25 +1,21 @@
 """Read-only preparation inventory through the same authenticated GTM adapter."""
 
-from copy import deepcopy
 from datetime import datetime, timezone
 
 from gtm_configure.adapters.mcp import FAMILIES, McpTargetAdapter
+from gtm_configure.comparison.inventory import IDENTITY_FIELDS, INVENTORY_VERSION
 from gtm_configure.comparison.native import (
     BUILT_IN_TRIGGER_IDS,
     ID_FIELDS,
     REFERENCE_FIELDS,
-    normalize_graph,
 )
-from gtm_configure.contract import _validate_targets
 from gtm_configure.core.json_io import write_json_atomic
 from gtm_configure.core.privacy import redact_for_persistence
+from gtm_configure.domain.targets import validate_targets
 from gtm_configure.runtime.adapter_protocol import (
     AdapterExecutionError,
     collect_paginated_with_receipt,
 )
-
-INVENTORY_VERSION = "gtm-preparation-inventory@1"
-IDENTITY_FIELDS = ("account_id", "container_id", "workspace_id", "container_type")
 
 
 def discovery_targets(request):
@@ -33,7 +29,7 @@ def discovery_targets(request):
         )
     if request["mode"] not in {"web", "server", "pipeline"}:
         raise ValueError("Unsupported discovery mode")
-    targets = list(_validate_targets(request["targets"], request["mode"]).values())
+    targets = list(validate_targets(request["targets"], request["mode"]).values())
     selected = request["resource_families"]
     if not isinstance(selected, dict) or set(selected) != {t["target_id"] for t in targets}:
         raise ValueError("resource_families must select each approved target")
@@ -153,60 +149,3 @@ def discover(request, profiles, transport, output):
         ],
         "next_action": "Inspect inventory; select reuse candidates and supply policy/evidence in the request. Execution captures a fresh baseline.",
     }
-
-
-def fill_reuse_candidates(request, inventory):
-    """Fill only explicitly selected native bodies; never derive authority or policy."""
-    if (
-        inventory.get("schema_version") != INVENTORY_VERSION
-        or inventory.get("purpose") != "preparation-only"
-    ):
-        raise ValueError("Expected a current preparation inventory")
-    records = inventory.get("targets")
-    if not isinstance(records, list) or len({t["target_id"] for t in records}) != len(records):
-        raise ValueError("Inventory needs unique targets")
-    result = deepcopy(request)
-    targets = {t["target_id"]: t for t in result["targets"]}
-    by_target = {t["target_id"]: t for t in records}
-    for candidate in result.get("reuse_candidates", []):
-        if "intended" in candidate:
-            continue
-        target_id = candidate.get("target_id")
-        if target_id is None and len(targets) == 1:
-            target_id = next(iter(targets))
-        target, captured = targets.get(target_id), by_target.get(target_id)
-        if (
-            target is None
-            or captured is None
-            or any(target[f] != captured.get(f) for f in IDENTITY_FIELDS)
-        ):
-            raise ValueError("Reuse candidate inventory does not match the approved target")
-        family, name = candidate["resource_family"], candidate["name"]
-        receipt = captured.get("pagination", {}).get(family, {})
-        if (
-            receipt.get("exhausted") is not True
-            or type(receipt.get("pages_read")) is not int
-            or receipt["pages_read"] < 1
-        ):
-            raise ValueError("Reuse candidate family listing is incomplete")
-        matches = [
-            o
-            for o in captured["objects"]
-            if o.get("object_type") == family and o.get("name") == name
-        ]
-        if len(matches) != 1:
-            raise ValueError("Reuse candidate must have exactly one inventory match")
-        # Context resolves native IDs; all primary fields survive normalization.
-        graph = {
-            "objects": matches,
-            "context_objects": [o for o in captured["objects"] if o is not matches[0]],
-        }
-        graph = redact_for_persistence(graph)
-        normalized = normalize_graph(graph, target_types={target_id: target["container_type"]})
-        native = next(iter(normalized.values()))
-        if native.get("target_id") != target_id:
-            raise ValueError("Inventory object is scoped to another target")
-        candidate["intended"] = {
-            k: v for k, v in native.items() if k not in {"target_id", "object_type", "name"}
-        }
-    return result

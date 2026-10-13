@@ -1,4 +1,3 @@
-# ruff: noqa: E402
 from __future__ import annotations
 
 import io
@@ -6,14 +5,11 @@ import json
 import subprocess
 import sys
 import tempfile
-import unittest
 from copy import deepcopy
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-ROOT = Path(__file__).resolve().parents[1]
-from current_support import valid_web_contract
 from gtm_configure.adapters.mcp import FAMILIES, McpTargetAdapter
 from gtm_configure.adapters.transport import StdioTransport
 from gtm_configure.runtime.adapter_protocol import (
@@ -23,28 +19,11 @@ from gtm_configure.runtime.adapter_protocol import (
     collect_paginated,
 )
 from gtm_configure.runtime.state import create_from_contract
+from support.contracts import valid_web_contract
+from support.mcp_transport import ROOT, McpTransportTestsFixture, profile
 
 
-def profile(*families):
-    return {
-        "tool_prefix": "synthetic__",
-        "workspace_path": [],
-        "container_path": [],
-        "status_path": [],
-        "families": {
-            family: {
-                "actions": ["get", "list", "create", "update", "remove"],
-                "first_page": 1,
-                "page_size": 2,
-                "list_path": [family],
-                "object_path": [],
-            }
-            for family in families
-        },
-    }
-
-
-class McpTransportTests(unittest.TestCase):
+class McpTransportTests(McpTransportTestsFixture):
     def test_cold_read_builtin_trigger_needs_no_trigger_tool(self):
         calls = []
         raw = {

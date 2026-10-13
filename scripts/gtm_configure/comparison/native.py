@@ -10,6 +10,8 @@ from typing import Any
 
 from gtm_configure.comparison.json_values import differences
 from gtm_configure.core.json_io import StrictJsonError, load_json
+from gtm_configure.core.model import BUILT_IN_TRIGGER_IDS, ID_FIELDS
+from gtm_configure.core.validation import normalized_token
 
 ROOT_METADATA_KEYS = {
     "accountId",
@@ -36,24 +38,6 @@ ROOT_METADATA_KEYS = {
     "_meta",
 }
 SET_LIKE_KEYS = {"firingTriggerId", "blockingTriggerId"}
-ID_FIELDS = {
-    "tagId": "tag",
-    "triggerId": "trigger",
-    "variableId": "variable",
-    "folderId": "folder",
-    "templateId": "template",
-    "zoneId": "zone",
-    "environmentId": "environment",
-    "clientId": "client",
-    "transformationId": "transformation",
-}
-BUILT_IN_TRIGGER_IDS = frozenset(
-    {
-        "2147479553",  # All Pages
-        "2147479572",  # Consent Initialization - All Pages
-        "2147479573",  # Initialization - All Pages
-    }
-)
 REFERENCE_FIELDS = {
     "firingTriggerId": "triggerId",
     "blockingTriggerId": "triggerId",
@@ -198,10 +182,6 @@ def _identity(item: dict[str, Any], path: str) -> tuple[str, str]:
     return object_type.strip(), name.strip()
 
 
-def _normalized_object_type(value: str) -> str:
-    return "".join(character for character in value.casefold() if character.isalnum())
-
-
 def _target_id(item: dict[str, Any], path: str) -> str | None:
     value = item.get("target_id")
     if value is None:
@@ -272,7 +252,7 @@ def _reference_maps(
     for index, item in enumerate(objects):
         object_type, name = _identity(item, f"$.objects[{index}]")
         target_id = _target_id(item, f"$.objects[{index}]")
-        normalized_type = _normalized_object_type(object_type)
+        normalized_type = normalized_token(object_type)
         if normalized_type in identities:
             identities[normalized_type].add(_semantic_name(target_id, normalized_type, name))
         for field, semantic_type in ID_FIELDS.items():

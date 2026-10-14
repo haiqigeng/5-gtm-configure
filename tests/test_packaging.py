@@ -9,7 +9,7 @@ from zipfile import ZipFile
 
 ROOT = Path(__file__).resolve().parents[1]
 
-from check_release import assigned_string_constant  # noqa: E402
+from check_release import CURRENT_RELEASE, assigned_string_constant  # noqa: E402
 
 
 class ReleaseChecksTest(unittest.TestCase):
@@ -19,7 +19,7 @@ class ReleaseChecksTest(unittest.TestCase):
                 sys.executable,
                 str(ROOT / "tools" / "check_release.py"),
                 "--tag",
-                "v13.0.0",
+                f"v{CURRENT_RELEASE}",
                 "--release-notes",
                 str(ROOT / "CHANGELOG.md"),
             ],
@@ -64,7 +64,7 @@ class ReleaseChecksTest(unittest.TestCase):
             notes = Path(temporary) / "CHANGELOG.md"
             notes.write_text(
                 "# Changelog\n\n"
-                "## 13.0.0\n\n"
+                f"## {CURRENT_RELEASE}\n\n"
                 "### Why This Release Matters\n\n"
                 "### What Changed\n\n"
                 "### What Users Should Do\n\n"
@@ -129,6 +129,7 @@ class ReleaseChecksTest(unittest.TestCase):
                 "tests/fixtures/folder-request.json",
                 "tests/fixtures/client-request.json",
                 "tests/fixtures/web-request.json",
+                "tests/fixtures/shared-events-request.json",
                 "tests/fixtures/pipeline-request.json",
             )
         ]

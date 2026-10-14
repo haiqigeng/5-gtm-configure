@@ -13,6 +13,7 @@ from typing import Any
 from urllib.parse import urlsplit
 
 from gtm_configure.core.json_io import loads_strict
+from gtm_configure.core.schemas import definition_validator
 
 
 def canonical_template_source(value: str) -> str:
@@ -118,19 +119,7 @@ def validate_public_identifiers(document: dict) -> None:
             raise ValueError("public_identifiers must be an array")
         seen = set()
         for declaration in declarations:
-            if (
-                not isinstance(declaration, dict)
-                or not {"path", "value_sha256", "source_url", "reason"} <= set(declaration)
-                or set(declaration)
-                - {
-                    "path",
-                    "value_sha256",
-                    "previous_value_sha256",
-                    "source_url",
-                    "reason",
-                    "classification",
-                }
-            ):
+            if not definition_validator("publicIdentifier").is_valid(declaration):
                 raise ValueError(
                     "public identifier needs exact path, value_sha256, source_url and reason"
                 )

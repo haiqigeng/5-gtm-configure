@@ -8,6 +8,12 @@ from typing import Any
 from gtm_configure.domain.shapes import collection_shape
 from gtm_configure.domain.web_model import CONFIGURATION_FIELD_ALIASES
 
+NATIVE_MAPPING_SCOPES = {
+    "gaawe": "event-parameter",
+    "googtag": "configuration",
+    "gaawc": "configuration",
+}
+
 CONFIGURATION_SETTINGS_TYPES = {
     "gtcs",
     "googtagconfigsettings",
@@ -195,12 +201,16 @@ def effective_fields(
     return {**inherited, **local}
 
 
+def native_mapping_scope(target: dict) -> str | None:
+    """The field namespace owned by a supported native collection tag."""
+    return NATIVE_MAPPING_SCOPES.get(target.get("type"))
+
+
 def supports_native_mapping(mapping: dict, target: dict) -> bool:
     """Resolve the native namespace selected by the approved field contract."""
-    scopes = {"gaawe": "event-parameter", "googtag": "configuration", "gaawc": "configuration"}
     return (
-        target.get("type") in scopes
-        and scopes[target["type"]] == mapping.get("field_scope")
+        native_mapping_scope(target) is not None
+        and native_mapping_scope(target) == mapping.get("field_scope")
         and collection_shape(mapping.get("destination_shape")).startswith("scalar:")
         and mapping.get("mapping_method") != "native-template"
     )

@@ -16,7 +16,9 @@ from gtm_configure.core.validation import (
     text,
 )
 from gtm_configure.domain.native import (
+    NATIVE_MAPPING_SCOPES,
     direct_dlv_source,
+    native_mapping_scope,
     supports_native_mapping,
     variable_name,
 )
@@ -238,12 +240,12 @@ def materialize_payload_mappings(contract: dict[str, Any]) -> list[dict[str, Any
 
 
 def validate_native_mappings(mappings, operations, fail):
-    """Prove supported scalar destination mappings; other native structures stay agent-reviewed."""
+    """Validate field ownership at every status, then prove supported mapped values."""
     by_key = {item.get("object_key"): item for item in operations}
     for mapping in mappings:
-        if mapping["status"] != "mapped":
-            continue
         binding = mapping.get("native_binding")
+        if binding is None and mapping["status"] != "mapped":
+            continue
         if binding is None and not any(
             mapping["requirement_id"] in item.get("requirement_ids", [])
             and supports_native_mapping(
@@ -252,13 +254,10 @@ def validate_native_mappings(mappings, operations, fail):
             for item in operations
         ):
             continue
-        if (
-            not isinstance(binding, dict)
-            or set(binding) != {"object_key", "field"}
-            or not all(isinstance(binding[key], str) and binding[key].strip() for key in binding)
-        ):
+        if binding is None:
             fail("mapped scalar native field requires native_binding object_key and field")
             continue
+        validate_definition(binding, "nativeBinding", fail)
         owner = by_key.get(binding["object_key"], {})
         if (
             (owner.get("resource_family") or owner.get("object_type")) != "tag"
@@ -267,24 +266,30 @@ def validate_native_mappings(mappings, operations, fail):
         ):
             fail("native mapping owner must be an active tag for the approved requirement")
             continue
-        variables = {
-            item["name"]: item.get("intended") or item.get("pre_change") or {}
-            for item in operations
-            if item.get("target_id") == owner.get("target_id")
-            and (item.get("resource_family") or item.get("object_type")) == "variable"
-            and item.get("action") not in web_model.NON_EXECUTING_TAG_ACTIONS
-        }
         try:
-            field = binding["field"]
-            if field != mapping["destination_field"]:
+            target = owner.get("intended") or owner.get("pre_change") or {}
+            if binding["field"] != mapping["destination_field"]:
                 raise ValueError(
                     "native mapping field must identify the approved destination field"
                 )
-            target = owner.get("intended") or owner.get("pre_change") or {}
             if target.get("paused") is True:
                 raise ValueError("native mapping owner is paused")
-            if not supports_native_mapping(mapping, target):
+            scope = native_mapping_scope(target)
+            if (
+                scope is not None
+                and mapping["field_scope"] in NATIVE_MAPPING_SCOPES.values()
+                and scope != mapping["field_scope"]
+            ):
+                raise ValueError("native mapping owner has a different field namespace")
+            if mapping["status"] != "mapped" or not supports_native_mapping(mapping, target):
                 continue
+            variables = {
+                item["name"]: item.get("intended") or item.get("pre_change") or {}
+                for item in operations
+                if item.get("target_id") == owner.get("target_id")
+                and (item.get("resource_family") or item.get("object_type")) == "variable"
+                and item.get("action") not in web_model.NON_EXECUTING_TAG_ACTIONS
+            }
             value = web_native.resolved_mapping_value(owner, operations, variables, mapping)
             if validation.canonical_sha256(value) != validation.canonical_sha256(
                 mapping["gtm_resolution"]

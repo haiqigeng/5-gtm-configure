@@ -26,9 +26,14 @@ from gtm_configure.runtime.engine import (
     execute_ready_operations,
     verify_idempotent_rerun,
 )
-from gtm_configure.runtime.state import create_from_contract, load_document
+from gtm_configure.runtime.state import (
+    checkpoint_operation,
+    create_from_contract,
+    inspect_document,
+    load_document,
+)
 from gtm_configure.runtime.validation import validate_document as validate_run
-from gtm_configure.runtime.verification import materialization_fingerprints
+from gtm_configure.runtime.verification import expected_graph, materialization_fingerprints
 
 
 @pytest.fixture
@@ -429,3 +434,103 @@ def test_field_proof_rejects_wrong_native_source():
     parameter["value"] = "unapproved_source"
     with pytest.raises(ValueError):
         compile_request(value)
+
+
+class FakeGraphAdapter:
+    """Memory-only native graphs for multi-object packaged execution scenarios."""
+
+    def __init__(self, target):
+        self.target = target
+        self.saved = {}
+        self.mutations = []
+
+    def identity(self):
+        return {
+            key: self.target[key]
+            for key in ("account_id", "container_id", "workspace_id", "container_type")
+        }
+
+    def read(self, operation):
+        return deepcopy(self.saved.get(operation["object_key"]))
+
+    def mutate(self, operation):
+        self.mutations.append(operation["name"])
+        self.saved[operation["object_key"]] = expected_graph(operation)
+        return self.read(operation)
+
+    def list_resource_page(self, resource_family, cursor):
+        assert cursor is None
+        from gtm_configure.comparison.native import ID_FIELDS
+
+        identity = next(key for key, family in ID_FIELDS.items() if family == resource_family)
+        items = [
+            {identity: str(index), **deepcopy(native)}
+            for index, graph in enumerate(self.saved.values(), 1)
+            for native in graph["objects"]
+            if native["object_type"] == resource_family
+        ]
+        return {"items": items, "next_cursor": None}
+
+    def list_workspace_changes_page(self, cursor):
+        assert cursor is None
+        return {"items": [], "next_cursor": None}
+
+
+def shared_events_contract():
+    request = json.loads((FIXTURES / "shared-events-request.json").read_text(encoding="utf-8"))
+    for evidence in request["evidence"]:
+        if evidence["grade"] == "official-current":
+            evidence["accessed_on"] = date.today().isoformat()
+    return compile_request(request)
+
+
+@pytest.mark.parametrize("blocked", [0, 1, 2])
+def test_shared_consent_dependencies_serve_ready_event(blocked, tmp_path):
+    contract = shared_events_contract()
+    if blocked == 0:
+        del contract["requirements"][0]["unresolved_fields"]
+    elif blocked == 2:
+        contract["requirements"][1]["unresolved_fields"] = deepcopy(
+            contract["requirements"][0]["unresolved_fields"]
+        )
+    target = contract["targets"][0]
+    adapter = FakeGraphAdapter(target)
+    capabilities = {
+        family: {action: True for action in ("list", "get", "create", "update", "remove")}
+        for family in ("tag", "trigger", "variable")
+    }
+    registry = TargetAdapterRegistry()
+    registry.register(target, adapter, capabilities)
+    path = tmp_path / "shared-events.json"
+    from gtm_configure.runtime.adapter_protocol import atomic_write
+
+    atomic_write(
+        path,
+        create_from_contract(
+            contract, run_id="SHARED", source_locator="synthetic two-event request"
+        ),
+    )
+    execute_ready_operations(path, registry)
+    run = load_document(path)
+    inspection = inspect_document(run)
+    assert len(adapter.mutations) == {0: 7, 1: 5, 2: 0}[blocked]
+    assert inspection["waiting_operations"] == {}
+    if blocked:
+        assert "GA4 - Event - generate_lead" not in adapter.mutations
+        assert run["run"]["status"] == ("Partial" if blocked == 1 else "Blocked")
+        assert all(
+            any("unresolved::pending" in reason for reason in reasons)
+            for reasons in inspection["blocked_operations"].values()
+        )
+        blocked_id = next(
+            op["operation_id"]
+            for op in run["object_changes"]
+            if op["name"] == "GA4 - Event - generate_lead"
+        )
+        with pytest.raises(ValueError, match="unresolved::pending"):
+            checkpoint_operation(
+                run, operation_id=blocked_id, state="in_progress", note="synthetic"
+            )
+    else:
+        verify_idempotent_rerun(path, registry)
+        assert load_document(path)["run"]["status"] == "Configured"

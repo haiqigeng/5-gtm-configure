@@ -62,21 +62,6 @@ def _validate_header(document: dict[str, Any]) -> tuple[dict[str, str], set[str]
     if document.get("schema_version") != SCHEMA_VERSION:
         _fail(f"$.schema_version must be {SCHEMA_VERSION!r}")
     run = _object(document["run"], "$.run")
-    required_run = {
-        "id",
-        "mode",
-        "execution_mode",
-        "phase",
-        "status",
-        "started_at",
-        "updated_at",
-        "targets",
-        "contract",
-        "publication",
-        "materialization",
-    }
-    if set(run) != required_run:
-        _fail("$.run has missing or unexpected fields")
     _text(run["id"], "$.run.id")
     if run["mode"] not in RUN_MODES:
         _fail("$.run.mode is unsupported")
@@ -110,15 +95,6 @@ def _validate_header(document: dict[str, Any]) -> tuple[dict[str, str], set[str]
     for index, value in enumerate(_array(run["targets"], "$.run.targets")):
         path = f"$.run.targets[{index}]"
         target = _object(value, path)
-        if set(target) != {
-            "target_id",
-            "container_type",
-            "account_id",
-            "container_id",
-            "workspace_id",
-            "adapter_capabilities",
-        }:
-            _fail(f"{path} has missing or unexpected fields")
         target_id = _text(target.get("target_id"), f"{path}.target_id")
         if target_id in target_types:
             _fail(f"duplicate target_id {target_id!r}")
@@ -167,41 +143,9 @@ def _validate_operations(
     requirement_locators = {item["id"]: item["source_locator"] for item in document["requirements"]}
     operations: dict[str, dict[str, Any]] = {}
     keys: set[str] = set()
-    allowed_fields = {
-        "operation_id",
-        "target_id",
-        "container_type",
-        "resource_family",
-        "name",
-        "object_key",
-        "action",
-        "requirement_ids",
-        "dependencies",
-        "justification",
-        "intended",
-        "pre_change",
-        "object_id",
-        "new_name",
-        "approval",
-        "replacement_reason",
-        "permission_delta",
-        "public_identifiers",
-        "assertions",
-        "evidence",
-        "risk",
-        "state",
-        "journal",
-        "comparison",
-        "saved_readback",
-        "pre_write_readback",
-        "pre_write_comparison",
-    }
     for index, value in enumerate(_array(document["object_changes"], "$.object_changes")):
         path = f"$.object_changes[{index}]"
         operation = _object(value, path)
-        unexpected = sorted(set(operation) - allowed_fields)
-        if unexpected:
-            _fail(f"{path} has unexpected key(s): {', '.join(unexpected)}")
         operation_id = _text(operation.get("operation_id"), f"{path}.operation_id")
         _text(operation.get("justification"), f"{path}.justification")
         if operation_id in operations:
@@ -345,15 +289,6 @@ def _validate_target_records(document: dict[str, Any], target_types: dict[str, s
             if baseline.get("preexisting_workspace_changes") is None:
                 _fail(f"{path}.preexisting_workspace_changes is required when complete")
             capture = _object(baseline.get("capture_evidence"), f"{path}.capture_evidence")
-            if set(capture) != {
-                "captured_by",
-                "source_identity",
-                "resource_pagination",
-                "workspace_changes_pagination",
-            }:
-                _fail(f"{path}.capture_evidence has missing or unexpected fields")
-            if capture.get("captured_by") != "authenticated-adapter-runtime":
-                _fail(f"{path}.capture_evidence.captured_by is not adapter-authenticated")
             target = next(
                 item
                 for item in document["run"]["targets"]
@@ -385,20 +320,6 @@ def _validate_target_records(document: dict[str, Any], target_types: dict[str, s
             )
             if set(pagination) != set(families):
                 _fail(f"{path}.capture_evidence must cover exactly the captured families")
-            receipts = [
-                *pagination.items(),
-                ("workspace changes", capture.get("workspace_changes_pagination")),
-            ]
-            for family, receipt in receipts:
-                if (
-                    not isinstance(receipt, dict)
-                    or set(receipt) != {"pages_read", "exhausted"}
-                    or not isinstance(receipt.get("pages_read"), int)
-                    or isinstance(receipt.get("pages_read"), bool)
-                    or receipt["pages_read"] < 1
-                    or receipt.get("exhausted") is not True
-                ):
-                    _fail(f"{path} has invalid pagination receipt for {family!r}")
             required_families = required_baseline_families(
                 [
                     item
@@ -422,14 +343,6 @@ def _validate_target_records(document: dict[str, Any], target_types: dict[str, s
     inventory_targets = set()
     for index, inventory in enumerate(document["final_inventories"]):
         path = f"$.final_inventories[{index}]"
-        if not isinstance(inventory, dict) or set(inventory) != {
-            "target_id",
-            "observed_at",
-            "source_identity",
-            "resources",
-            "resource_pagination",
-        }:
-            _fail(f"{path} has missing or unexpected fields")
         target_id = inventory["target_id"]
         if target_id not in target_types or target_id in inventory_targets:
             _fail(f"{path} has an unknown or duplicate target")
@@ -453,15 +366,6 @@ def _validate_target_records(document: dict[str, Any], target_types: dict[str, s
                     native_inventory_identity(family, item, target)
                 except ResourceRegistryError as exc:
                     _fail(f"{path}.resources.{family}: {exc}")
-            receipt = pagination[family]
-            if (
-                not isinstance(receipt, dict)
-                or set(receipt) != {"pages_read", "exhausted"}
-                or type(receipt["pages_read"]) is not int
-                or receipt["pages_read"] < 1
-                or receipt["exhausted"] is not True
-            ):
-                _fail(f"{path}.resource_pagination.{family} lacks exhaustion evidence")
     results = _array(document["target_results"], "$.target_results")
     result_ids = [item.get("target_id") for item in results if isinstance(item, dict)]
     if set(result_ids) != set(target_types) or len(result_ids) != len(target_types):
@@ -469,8 +373,6 @@ def _validate_target_records(document: dict[str, Any], target_types: dict[str, s
     for index, result in enumerate(results):
         if "baseline_error" in result:
             error = result["baseline_error"]
-            if not isinstance(error, dict) or set(error) != {"at", "error"}:
-                _fail(f"$.target_results[{index}].baseline_error has invalid fields")
             timestamp(error["at"], f"$.target_results[{index}].baseline_error.at")
             _text(error["error"], f"$.target_results[{index}].baseline_error.error")
             if any(
@@ -506,8 +408,6 @@ def validate_document(value: Any) -> dict[str, Any]:
         _array(document[field], f"$.{field}")
     _validate_target_records(document, target_types)
     idempotency = _object(document["idempotency"], "$.idempotency")
-    if set(idempotency) != {"checked", "remaining_actions", "observations"}:
-        _fail("$.idempotency has missing or unexpected fields")
     if not isinstance(idempotency["checked"], bool):
         _fail("$.idempotency.checked must be boolean")
     if not isinstance(idempotency["remaining_actions"], list) or len(
@@ -522,17 +422,6 @@ def validate_document(value: Any) -> dict[str, Any]:
     mutation_required: set[str] = set()
     for index, observation in enumerate(observations):
         path = f"$.idempotency.observations[{index}]"
-        if not isinstance(observation, dict) or set(observation) != {
-            "operation_id",
-            "target_id",
-            "source",
-            "source_identity",
-            "observed_at",
-            "decision",
-            "saved",
-            "comparison",
-        }:
-            _fail(f"{path} has missing or unexpected fields")
         operation_id = observation.get("operation_id")
         if operation_id in observed_ids or operation_id not in operation_by_id:
             _fail(f"{path}.operation_id is unknown or duplicated")

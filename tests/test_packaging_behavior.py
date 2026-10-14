@@ -1,5 +1,6 @@
 """Behavioral tests owned by packaging."""
 
+from check_release import CURRENT_RELEASE
 from support import transport_and_state as fixture_transport_and_state
 
 
@@ -10,7 +11,7 @@ class TestTransportAndState(fixture_transport_and_state.UtilityEvolutionTestFixt
                 ["git"], 128, "", "synthetic failure"
             )
             errors = fixture_transport_and_state.check_git_state(
-                tag="v13.0.0", require_tag=True, require_clean=True
+                tag=f"v{CURRENT_RELEASE}", require_tag=True, require_clean=True
             )
         self.assertEqual(len(errors), 2)
         self.assertTrue(all("git exited 128" in error for error in errors))

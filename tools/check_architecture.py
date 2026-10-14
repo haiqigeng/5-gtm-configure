@@ -21,8 +21,28 @@ def module_index(root):
     }
 
 
+def schema_record_keys(root):
+    owners = defaultdict(list)
+
+    def visit(value, path):
+        if isinstance(value, dict):
+            properties = value.get("properties", {})
+            if value.get("additionalProperties") is False and len(properties) >= 2:
+                owners[frozenset(properties)].append(path)
+            for key, child in value.items():
+                visit(child, path + "/" + key)
+        elif isinstance(value, list):
+            for index, child in enumerate(value):
+                visit(child, path + "/" + str(index))
+
+    for path in (root / "schemas").glob("*.schema.json"):
+        visit(json.loads(path.read_text(encoding="utf-8")), path.relative_to(root).as_posix())
+    return owners
+
+
 def inspect_architecture(root=ROOT):
     modules = module_index(root)
+    record_keys = schema_record_keys(root)
     errors, records = [], {}
     constants, bodies = defaultdict(list), defaultdict(list)
     referenced = set()
@@ -63,6 +83,16 @@ def inspect_architecture(root=ROOT):
                 and node.attr.startswith("_")
             ):
                 errors.append(f"{module}: private access {aliases[node.value.id]}.{node.attr}")
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Set):
+                try:
+                    keys = frozenset(ast.literal_eval(node))
+                except (ValueError, TypeError):
+                    continue
+                if keys in record_keys:
+                    errors.append(
+                        f"{module}:{node.lineno}: duplicated schema record keys owned by {', '.join(record_keys[keys])}"
+                    )
         layer = module.split(".")[1]
         allowed = {"core": {"core"}, "domain": {"domain", "core"}}
         for imported in imports:

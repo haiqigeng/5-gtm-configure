@@ -1,8 +1,10 @@
 """Release gates reject structural ownership regressions in synthetic modules."""
 
+import json
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
 from check_architecture import inspect_architecture
 from check_release import check_files_and_routing
 
@@ -58,3 +60,28 @@ def test_link_label_tracks_its_file_target(tmp_path):
     (tmp_path / "SKILL.md").write_text("[retired.md](references/current.md)\n")
     with patch("check_release.ROOT", tmp_path):
         assert any("file label" in error for error in check_files_and_routing())
+
+
+@pytest.mark.parametrize(
+    "keys",
+    [
+        ["pages_read", "exhausted"],
+        ["operation_id", "target_id", "state", "journal", "dependencies"],
+    ],
+)
+def test_local_closed_record_copy_is_rejected(tmp_path, keys):
+    schema = {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {key: {} for key in keys},
+    }
+    (tmp_path / "schemas").mkdir()
+    (tmp_path / "schemas/run.schema.json").write_text(json.dumps(schema))
+    write_module(
+        tmp_path,
+        "gtm_configure.runtime.reader",
+        f"def read(row):\n    fields = {set(keys)!r}\n    return set(row) - fields\nread({{}})\n",
+    )
+    assert any(
+        "duplicated schema record keys" in error for error in inspect_architecture(tmp_path)[1]
+    )

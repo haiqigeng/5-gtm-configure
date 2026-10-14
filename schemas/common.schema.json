@@ -1678,6 +1678,151 @@
           ]
         }
       }
+    },
+    "publicIdentifier": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "value_sha256",
+        "source_url",
+        "reason"
+      ],
+      "properties": {
+        "path": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "oneOf": [
+              {
+                "type": "string",
+                "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+              },
+              {
+                "type": "integer",
+                "minimum": 0
+              }
+            ]
+          }
+        },
+        "value_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "classification": {
+          "const": "inspected-template-source"
+        },
+        "previous_value_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "source_url": {
+          "type": "string",
+          "pattern": "^https://"
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "paginationReceipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "pages_read",
+        "exhausted"
+      ],
+      "properties": {
+        "pages_read": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "exhausted": {
+          "const": true
+        }
+      }
+    },
+    "baselineCapture": {
+      "type": "object",
+      "properties": {
+        "captured_by": {
+          "const": "authenticated-adapter-runtime"
+        },
+        "source_identity": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "account_id",
+            "container_id",
+            "workspace_id",
+            "container_type"
+          ],
+          "properties": {
+            "account_id": {
+              "$ref": "https://github.com/haiqigeng/5-gtm-configure/schemas/common.schema.json#/$defs/nonEmpty"
+            },
+            "container_id": {
+              "$ref": "https://github.com/haiqigeng/5-gtm-configure/schemas/common.schema.json#/$defs/nonEmpty"
+            },
+            "workspace_id": {
+              "$ref": "https://github.com/haiqigeng/5-gtm-configure/schemas/common.schema.json#/$defs/nonEmpty"
+            },
+            "container_type": {
+              "enum": [
+                "web",
+                "server"
+              ]
+            }
+          }
+        },
+        "resource_pagination": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "https://github.com/haiqigeng/5-gtm-configure/schemas/common.schema.json#/$defs/paginationReceipt"
+          }
+        },
+        "workspace_changes_pagination": {
+          "$ref": "https://github.com/haiqigeng/5-gtm-configure/schemas/common.schema.json#/$defs/paginationReceipt"
+        }
+      },
+      "required": [
+        "captured_by",
+        "source_identity",
+        "resource_pagination",
+        "workspace_changes_pagination"
+      ],
+      "additionalProperties": false
+    },
+    "nativeFieldPath": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "object_key",
+        "field_path"
+      ],
+      "properties": {
+        "object_key": {
+          "type": "string",
+          "minLength": 1
+        },
+        "field_path": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "oneOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "integer",
+                "minimum": 0
+              }
+            ]
+          }
+        }
+      }
     }
   }
 }

@@ -42,6 +42,7 @@ release gate rejects reversed core/domain dependencies, cycles and private cross
 | First-party data and inventory consumers | `domain/first_party_data.py`, `domain/inventory.py` | web coordinator, identity and organization references | first-party, Google Ads and inventory tests |
 | Server and pipeline predicates | `domain/server.py`, `domain/pipeline.py`, `domain/pipeline_declarations.py` | phase-neutral graph, pipeline and server references | pipeline, quota/identity and packaged scenarios |
 | Dependency closure and external owners | `domain/graph.py` | contract, runtime and web validation | contract, pipeline and execution scenarios |
+| Field ownership and dependency readiness | `runtime/readiness.py` | native namespace owner, state inspection, engine and manual checkpoints | shared consent/settings, all-blocked and native-owner tests |
 | Durable state and evidence | `runtime/state.py`, `runtime/validation.py`, `runtime/verification.py` | run schema, CLI run | state, verification, recovery and run schema tests |
 | Writes, recovery and quota discipline | `runtime/engine.py` | adapter protocol and adapters | execution, transport and quota tests |
 | Host transport and discovery | `adapters/`, `scripts/mcp_relay.js` | MCP CLI commands and adapter references | MCP transport and SDK/relay fixtures |
@@ -63,10 +64,15 @@ release gate rejects reversed core/domain dependencies, cycles and private cross
 | CG-69 | Semantic link labels and derived CLI usage/version checks | references, router, release checker | stale-label synthetic regression; every packaged command help |
 | CG-70 | Test files follow behavior owners; fixture graphs live in support | tests/support, behavior suites, architecture and ownership suites | all original test methods retained; branch coverage measured on both tags |
 
+| CG-71 | Field ownership is distinct from inherited requirement attribution; blockers propagate through the operation graph | runtime readiness/state, native namespace owner, field binding validation | packaged two-event shared consent scenario; independent shared settings/configuration and recovery replay |
+| CG-72 | Closed schema records own structural keys, including public declaration APIs; local copies are detected | common/run/contract schemas, core schema loader, runtime validation/state, field/consent/public-identifier APIs, architecture gate | existing malformed-record tests, independent schema probes, local two/five-key mutation tests |
+
 ## Limits of the checks
 
 Static ownership analysis catches literal constant duplication, identical substantial function
-bodies, unused top-level names, dependency direction and cycles. Its reference analysis is
+bodies, unused top-level names, dependency direction and cycles. Closed-record key detection
+compares complete literal sets of at least two keys with schema records, including function locals;
+it does not detect partial key subsets or computed sets. Its reference analysis is
 conservative; it does not prove semantic equivalence or identify every possible duplicate rule.
 The inventory indexes every maintained file; function call/failure indexes are syntactic and may
 include nested function sites. Composition and leaf constraints retain their exact schema pointers.

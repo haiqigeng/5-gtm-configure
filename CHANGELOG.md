@@ -1,5 +1,44 @@
 # Changelog
 
+## 13.0.1
+
+Released 2026-10-14.
+
+### Why This Release Matters
+
+A blocked field on one event no longer prevents another approved event from using shared consent
+or settings objects. Actual field owners remain indivisible: an unresolved shared configuration
+setting blocks its Google tag and every dependent event, with the originating reason visible.
+
+### What Changed
+
+- Replace requirement-wide readiness with one graph resolver shared by inspection, checkpoints and
+  execution. Separate native field ownership, shared dependency demand and transitive blockers.
+- Resolve supported native namespaces from one domain owner. Validate explicit owner, requirement,
+  namespace and destination field at every mapping status before mapped-value proof.
+- Remove structural key-list copies throughout runtime and declaration APIs. Share public identifier,
+  capture, pagination and native field-path definitions; schemas own their structure.
+- Detect complete literal schema-key copies in function-local and module scope. Add a self-contained
+  two-event shared-consent scenario to the package and negative owner/graph regression tests.
+
+### What Users Should Do
+
+Replace the installed folder with this release. Contract 10.0 and run 8.0 remain current.
+Resolve the approved destination for `other` fields before implementing those fields. Valid independent
+requirements may proceed; shared configuration owners must be complete for all their consumers.
+Resolve any uncertain write from its durable evidence before resuming.
+
+### Validation
+
+See [the full offline evaluation](docs/release-13.0.1-validation.md) for suite results, independent
+counterexample replay, same-input cost/recovery checks, complete mapping and package verification.
+
+### Known Limits
+
+Live GTM testing remains deferred by the user. Offline graphs do not certify live persistence,
+consent timing, vendor receipt or runtime delivery. The static ownership gate detects complete
+literal record copies, not every semantically equivalent rule or computed subset.
+
 ## 13.0.0
 
 Released 2026-10-14.

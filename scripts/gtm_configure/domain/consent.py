@@ -3,6 +3,7 @@
 from typing import Any, Callable
 
 from gtm_configure.core.public_identifiers import locate
+from gtm_configure.core.schemas import validate_definition
 from gtm_configure.domain.localization import (
     local_array,
 )
@@ -76,11 +77,7 @@ def validate_convention(execution, enforcement, operations, fail):
         if not checks or not isinstance(bindings, dict) or set(bindings) != set(checks):
             fail("Every Additional Consent Check requires an exact denied default binding")
         for binding in bindings.values():
-            if not isinstance(binding, dict) or set(binding) != {
-                "object_key",
-                "field_path",
-            }:
-                fail("Consent default binding needs object_key and field_path")
+            validate_definition(binding, "nativeFieldPath", fail)
             owner = snapshot(binding["object_key"])
             if (
                 owner.get("paused") is True

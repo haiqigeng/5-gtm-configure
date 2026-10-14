@@ -1,0 +1,500 @@
+{
+  "mode": "web",
+  "route": "analytics",
+  "targets": [
+    {
+      "target_id": "web",
+      "container_type": "web",
+      "account_id": "101",
+      "container_id": "202",
+      "workspace_id": "303",
+      "authority": {
+        "grade": "approved-input",
+        "locator": "SYNTHETIC approved brief: generate_lead on successful form completion; lead_type string from same push; only consent.analytics=granted allows GA4; drop denied or pre-CMP occurrence without replay"
+      }
+    }
+  ],
+  "requirements": [
+    {
+      "id": "LEAD",
+      "authority": {
+        "grade": "approved-input",
+        "locator": "SYNTHETIC approved brief: generate_lead on successful form completion; lead_type string from same push; only consent.analytics=granted allows GA4; drop denied or pre-CMP occurrence without replay"
+      },
+      "source_event": "generate_lead",
+      "event_name": "generate_lead",
+      "destination": "G-SYNTHETIC1",
+      "timing": "Successful form submission, one occurrence per success push",
+      "parameters": {
+        "lead_type": {
+          "source": "lead_type",
+          "source_shape": "scalar:string",
+          "destination_shape": "scalar:string",
+          "missing_behavior": "omit missing value; keep approved event",
+          "provenance": {
+            "grade": "approved-input",
+            "locator": "SYNTHETIC approved brief: generate_lead on successful form completion; lead_type string from same push; only consent.analytics=granted allows GA4; drop denied or pre-CMP occurrence without replay"
+          }
+        }
+      },
+      "unresolved_fields": {
+        "pending": {
+          "source": "lead_type",
+          "source_shape": "scalar:string",
+          "destination_shape": "scalar:string",
+          "missing_behavior": "omit missing value; keep approved event",
+          "provenance": {
+            "grade": "approved-input",
+            "locator": "SYNTHETIC approved brief: generate_lead on successful form completion; lead_type string from same push; only consent.analytics=granted allows GA4; drop denied or pre-CMP occurrence without replay"
+          },
+          "destination": "other"
+        }
+      }
+    },
+    {
+      "id": "SIGNUP",
+      "authority": {
+        "grade": "approved-input",
+        "locator": "SYNTHETIC approved brief: generate_lead on successful form completion; lead_type string from same push; only consent.analytics=granted allows GA4; drop denied or pre-CMP occurrence without replay"
+      },
+      "source_event": "sign_up",
+      "event_name": "sign_up",
+      "destination": "G-SYNTHETIC1",
+      "timing": "Successful form submission, one occurrence per success push",
+      "parameters": {
+        "lead_type": {
+          "source": "lead_type",
+          "source_shape": "scalar:string",
+          "destination_shape": "scalar:string",
+          "missing_behavior": "omit missing value; keep approved event",
+          "provenance": {
+            "grade": "approved-input",
+            "locator": "SYNTHETIC approved brief: generate_lead on successful form completion; lead_type string from same push; only consent.analytics=granted allows GA4; drop denied or pre-CMP occurrence without replay"
+          }
+        }
+      }
+    }
+  ],
+  "objects": [
+    {
+      "resource_family": "variable",
+      "name": "DLV - consent.analytics",
+      "action": "create",
+      "intended": {
+        "name": "DLV - consent.analytics",
+        "type": "v",
+        "parameter": [
+          {
+            "type": "template",
+            "key": "name",
+            "value": "consent.analytics"
+          },
+          {
+            "type": "integer",
+            "key": "dataLayerVersion",
+            "value": "2"
+          }
+        ]
+      },
+      "justification": "SYNTHETIC approved GA4 lead event dependency.",
+      "evidence": [
+        "approved-input",
+        "container-confirmed"
+      ],
+      "risk": "routine",
+      "requirement_ids": [
+        "LEAD",
+        "SIGNUP"
+      ]
+    },
+    {
+      "resource_family": "variable",
+      "name": "DLV - lead_type",
+      "action": "create",
+      "intended": {
+        "name": "DLV - lead_type",
+        "type": "v",
+        "parameter": [
+          {
+            "type": "template",
+            "key": "name",
+            "value": "lead_type"
+          },
+          {
+            "type": "integer",
+            "key": "dataLayerVersion",
+            "value": "2"
+          }
+        ]
+      },
+      "justification": "SYNTHETIC approved GA4 lead event dependency.",
+      "evidence": [
+        "approved-input",
+        "container-confirmed"
+      ],
+      "risk": "routine",
+      "requirement_ids": [
+        "LEAD",
+        "SIGNUP"
+      ]
+    },
+    {
+      "resource_family": "trigger",
+      "name": "Block - CMP - GA4 denied",
+      "action": "create",
+      "intended": {
+        "name": "Block - CMP - GA4 denied",
+        "type": "customEvent",
+        "customEventFilter": [
+          {
+            "type": "matchRegex",
+            "parameter": [
+              {
+                "type": "template",
+                "key": "arg0",
+                "value": "{{_event}}"
+              },
+              {
+                "type": "template",
+                "key": "arg1",
+                "value": ".*"
+              }
+            ]
+          }
+        ],
+        "filter": [
+          {
+            "type": "equals",
+            "parameter": [
+              {
+                "type": "template",
+                "key": "arg0",
+                "value": "{{DLV - consent.analytics}}"
+              },
+              {
+                "type": "template",
+                "key": "arg1",
+                "value": "granted"
+              },
+              {
+                "type": "boolean",
+                "key": "negate",
+                "value": "true"
+              }
+            ]
+          }
+        ]
+      },
+      "justification": "SYNTHETIC approved GA4 lead event dependency.",
+      "evidence": [
+        "approved-input",
+        "container-confirmed"
+      ],
+      "risk": "routine",
+      "requirement_ids": [
+        "LEAD",
+        "SIGNUP"
+      ]
+    },
+    {
+      "resource_family": "trigger",
+      "name": "CE - generate_lead",
+      "action": "create",
+      "intended": {
+        "name": "CE - generate_lead",
+        "type": "customEvent",
+        "customEventFilter": [
+          {
+            "type": "equals",
+            "parameter": [
+              {
+                "type": "template",
+                "key": "arg0",
+                "value": "{{_event}}"
+              },
+              {
+                "type": "template",
+                "key": "arg1",
+                "value": "generate_lead"
+              }
+            ]
+          }
+        ]
+      },
+      "justification": "SYNTHETIC approved GA4 lead event dependency.",
+      "evidence": [
+        "approved-input",
+        "container-confirmed"
+      ],
+      "risk": "routine",
+      "requirement_ids": [
+        "LEAD"
+      ]
+    },
+    {
+      "resource_family": "tag",
+      "name": "GA4 - Event - generate_lead",
+      "action": "create",
+      "intended": {
+        "name": "GA4 - Event - generate_lead",
+        "type": "gaawe",
+        "parameter": [
+          {
+            "type": "template",
+            "key": "eventName",
+            "value": "generate_lead"
+          },
+          {
+            "type": "template",
+            "key": "measurementIdOverride",
+            "value": "G-SYNTHETIC1"
+          },
+          {
+            "type": "list",
+            "key": "eventSettingsTable",
+            "list": [
+              {
+                "type": "map",
+                "map": [
+                  {
+                    "type": "template",
+                    "key": "parameter",
+                    "value": "lead_type"
+                  },
+                  {
+                    "type": "template",
+                    "key": "parameterValue",
+                    "value": "{{DLV - lead_type}}"
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "firingTriggerId": [
+          "web::trigger::CE - generate_lead"
+        ],
+        "blockingTriggerId": [
+          "web::trigger::Block - CMP - GA4 denied"
+        ],
+        "tagFiringOption": "oncePerEvent"
+      },
+      "justification": "SYNTHETIC approved GA4 lead event dependency.",
+      "evidence": [
+        "approved-input",
+        "container-confirmed"
+      ],
+      "risk": "routine",
+      "requirement_ids": [
+        "LEAD"
+      ]
+    },
+    {
+      "resource_family": "trigger",
+      "name": "CE - sign_up",
+      "action": "create",
+      "intended": {
+        "name": "CE - sign_up",
+        "type": "customEvent",
+        "customEventFilter": [
+          {
+            "type": "equals",
+            "parameter": [
+              {
+                "type": "template",
+                "key": "arg0",
+                "value": "{{_event}}"
+              },
+              {
+                "type": "template",
+                "key": "arg1",
+                "value": "sign_up"
+              }
+            ]
+          }
+        ]
+      },
+      "justification": "SYNTHETIC approved GA4 lead event dependency.",
+      "evidence": [
+        "approved-input",
+        "container-confirmed"
+      ],
+      "risk": "routine",
+      "requirement_ids": [
+        "SIGNUP"
+      ]
+    },
+    {
+      "resource_family": "tag",
+      "name": "GA4 - Event - sign_up",
+      "action": "create",
+      "intended": {
+        "name": "GA4 - Event - sign_up",
+        "type": "gaawe",
+        "parameter": [
+          {
+            "type": "template",
+            "key": "eventName",
+            "value": "sign_up"
+          },
+          {
+            "type": "template",
+            "key": "measurementIdOverride",
+            "value": "G-SYNTHETIC1"
+          },
+          {
+            "type": "list",
+            "key": "eventSettingsTable",
+            "list": [
+              {
+                "type": "map",
+                "map": [
+                  {
+                    "type": "template",
+                    "key": "parameter",
+                    "value": "lead_type"
+                  },
+                  {
+                    "type": "template",
+                    "key": "parameterValue",
+                    "value": "{{DLV - lead_type}}"
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "firingTriggerId": [
+          "web::trigger::CE - sign_up"
+        ],
+        "blockingTriggerId": [
+          "web::trigger::Block - CMP - GA4 denied"
+        ],
+        "tagFiringOption": "oncePerEvent"
+      },
+      "justification": "SYNTHETIC approved GA4 lead event dependency.",
+      "evidence": [
+        "approved-input",
+        "container-confirmed"
+      ],
+      "risk": "routine",
+      "requirement_ids": [
+        "SIGNUP"
+      ]
+    }
+  ],
+  "evidence": [
+    {
+      "grade": "container-confirmed",
+      "locator": "SYNTHETIC native inventory and inspected template; consent.analytics is granted/denied/undefined; base tag G-SYNTHETIC1 already initialized after grant outside requested change; no inherited event parameters"
+    },
+    {
+      "grade": "official-current",
+      "locator": "https://developers.google.com/analytics/devguides/collection/ga4/reference/events#generate_lead",
+      "title": "SYNTHETIC source fixture, NOT fetched",
+      "accessed_on": "2026-10-13",
+      "supports": [
+        "LEAD",
+        "SIGNUP"
+      ],
+      "decision": "OFFLINE fixture: native GA4 eventSettingsTable, approved string field, CMP denial gate and exact success event. No actual source review claimed."
+    }
+  ],
+  "consent_topologies": [
+    {
+      "consent_topology_id": "GA4-CONSENT",
+      "destination": "G-SYNTHETIC1",
+      "requirement_ids": [
+        "LEAD",
+        "SIGNUP"
+      ],
+      "consent_mode": "strict-basic",
+      "transport_behavior": "blocked",
+      "web_enforcement": {
+        "mechanism": "business-trigger-plus-vendor-block"
+      },
+      "server_enforcement": {
+        "mechanism": "none"
+      },
+      "signal_authority": "third-party-cmp",
+      "signal_source": "SYNTHETIC consent.analytics: string granted allows; denied, undefined and unknown block",
+      "unknown_state_behavior": "deny",
+      "event_coverage": [
+        "generate_lead",
+        "sign_up"
+      ],
+      "intentional_double_gate": false,
+      "server_tag_keys": [],
+      "transporter_tag_keys": [],
+      "transporter_destination_vendor_block": false
+    }
+  ],
+  "execution_topologies": [
+    {
+      "tag_object_key": "web::tag::GA4 - Event - generate_lead",
+      "requirement_ids": [
+        "LEAD"
+      ],
+      "lifecycle_role": "event-driven",
+      "consent_mode": "strict-basic",
+      "blocking_trigger_keys": [
+        "web::trigger::Block - CMP - GA4 denied"
+      ],
+      "blocking_event_scope": "regex:.*",
+      "built_in_consent_checks": [
+        "analytics_storage",
+        "ad_storage",
+        "ad_user_data",
+        "ad_personalization"
+      ],
+      "additional_consent_checks": [],
+      "firing_option": "once-per-event",
+      "may_precede_cmp": true,
+      "pre_cmp_policy": "drop-unconsented-occurrence",
+      "page_view_capable": false,
+      "page_view_destinations": [],
+      "page_view_occurrences": [],
+      "ecommerce_route": "not-applicable",
+      "manual_ecommerce_fields": [],
+      "evidence": [
+        "SYNTHETIC approved policy and native container inspection"
+      ],
+      "consent_topology_ids": [
+        "GA4-CONSENT"
+      ]
+    },
+    {
+      "tag_object_key": "web::tag::GA4 - Event - sign_up",
+      "requirement_ids": [
+        "SIGNUP"
+      ],
+      "lifecycle_role": "event-driven",
+      "consent_mode": "strict-basic",
+      "blocking_trigger_keys": [
+        "web::trigger::Block - CMP - GA4 denied"
+      ],
+      "blocking_event_scope": "regex:.*",
+      "built_in_consent_checks": [
+        "analytics_storage",
+        "ad_storage",
+        "ad_user_data",
+        "ad_personalization"
+      ],
+      "additional_consent_checks": [],
+      "firing_option": "once-per-event",
+      "may_precede_cmp": true,
+      "pre_cmp_policy": "drop-unconsented-occurrence",
+      "page_view_capable": false,
+      "page_view_destinations": [],
+      "page_view_occurrences": [],
+      "ecommerce_route": "not-applicable",
+      "manual_ecommerce_fields": [],
+      "evidence": [
+        "SYNTHETIC approved policy and native container inspection"
+      ],
+      "consent_topology_ids": [
+        "GA4-CONSENT"
+      ]
+    }
+  ]
+}

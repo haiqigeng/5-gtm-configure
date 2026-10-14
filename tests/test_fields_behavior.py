@@ -1,5 +1,7 @@
 """Behavioral tests owned by fields."""
 
+import pytest
+from gtm_configure.domain.fields import validate_native_mappings
 from support import field_binding as fixture_field_binding
 from support import phase_contracts as fixture_phase_contracts
 from support import transport_and_state as fixture_transport_and_state
@@ -136,3 +138,43 @@ class TestTransportAndState(fixture_transport_and_state.UtilityEvolutionTestFixt
             fixture_transport_and_state.ContractValidationError, "differs from approved"
         ):
             fixture_transport_and_state.validate_document(contract)
+
+
+@pytest.mark.parametrize("status", ["pending", "blocked"])
+@pytest.mark.parametrize(
+    "invalid", ["unknown", "requirement", "namespace", "field", "paused", "variable"]
+)
+def test_unresolved_bindings_validate_owner_before_mapping_proof(status, invalid):
+    mapping = {
+        "requirement_id": "A",
+        "field_scope": "configuration",
+        "destination_field": "custom_config",
+        "status": status,
+        "native_binding": {"object_key": "GOOGLE", "field": "custom_config"},
+    }
+    owner = {
+        "object_key": "GOOGLE",
+        "resource_family": "tag",
+        "action": "create",
+        "requirement_ids": ["A", "B"],
+        "intended": {"type": "googtag"},
+    }
+
+    def fail(message):
+        raise ValueError(message)
+
+    validate_native_mappings([mapping], [owner], fail)
+    if invalid == "unknown":
+        mapping["native_binding"]["object_key"] = "MISSING"
+    elif invalid == "requirement":
+        owner["requirement_ids"] = ["B"]
+    elif invalid == "namespace":
+        owner["intended"]["type"] = "gaawe"
+    elif invalid == "field":
+        mapping["native_binding"]["field"] = "different"
+    elif invalid == "paused":
+        owner["intended"]["paused"] = True
+    else:
+        owner["resource_family"] = "variable"
+    with pytest.raises(ValueError, match="native mapping"):
+        validate_native_mappings([mapping], [owner], fail)

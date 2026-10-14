@@ -21,12 +21,14 @@ from gtm_configure.core.model import (
 )
 from gtm_configure.core.privacy import redact_for_persistence
 from gtm_configure.core.public_identifiers import public_identifier_paths
+from gtm_configure.core.schemas import definition_validator
 from gtm_configure.core.validation import canonical_sha256
 from gtm_configure.domain.resources import (
     ResourceRegistryError,
     required_baseline_families,
     validate_target_family,
 )
+from gtm_configure.runtime.readiness import operation_readiness
 from gtm_configure.runtime.validation import transition_allowed, validate_document
 from gtm_configure.runtime.verification import (
     build_pre_write_comparison,
@@ -306,15 +308,9 @@ def build_target_baseline(
         not isinstance(item, dict) for item in preexisting_workspace_changes
     ):
         raise RunValidationError("baseline workspace changes must be an array of objects")
-    if not isinstance(capture_evidence, dict) or set(capture_evidence) != {
-        "captured_by",
-        "source_identity",
-        "resource_pagination",
-        "workspace_changes_pagination",
-    }:
-        raise RunValidationError("baseline capture_evidence has missing or unexpected fields")
-    if capture_evidence.get("captured_by") != "authenticated-adapter-runtime":
-        raise RunValidationError("baseline must be captured by the authenticated adapter runtime")
+    error = next(definition_validator("baselineCapture").iter_errors(capture_evidence), None)
+    if error is not None:
+        raise RunValidationError(f"baseline capture_evidence: {error.message}")
     source_identity = capture_evidence.get("source_identity")
     expected_identity = {
         field: target[field]
@@ -327,22 +323,6 @@ def build_target_baseline(
     resource_pagination = capture_evidence.get("resource_pagination")
     if not isinstance(resource_pagination, dict) or set(resource_pagination) != set(resources):
         raise RunValidationError("baseline pagination receipts must cover exactly the resources")
-    receipts = [
-        *resource_pagination.items(),
-        ("workspace changes", capture_evidence.get("workspace_changes_pagination")),
-    ]
-    for family, receipt in receipts:
-        if (
-            not isinstance(receipt, dict)
-            or set(receipt) != {"pages_read", "exhausted"}
-            or not isinstance(receipt.get("pages_read"), int)
-            or isinstance(receipt.get("pages_read"), bool)
-            or receipt["pages_read"] < 1
-            or receipt.get("exhausted") is not True
-        ):
-            raise RunValidationError(
-                f"baseline pagination receipt for {family!r} must prove positive pages and exhaustion"
-            )
     container_type = target["container_type"]
     # References to credentials may cross families or pages. Classify the collected
     # graph together, before any baseline resource or workspace-change persistence.
@@ -496,7 +476,8 @@ def checkpoint_validated_operation(
     operation = find_operation(value, operation_id)
     current = operation["state"]
     if state in {"in_progress", "saved", "verified"}:
-        blockers, waiting = _operation_readiness(operation, _execution_context(value))
+        readiness = operation_readiness(value)[operation_id]
+        blockers, waiting = readiness["blocked"], readiness["waiting"]
         if blockers or waiting:
             raise RunValidationError(
                 "execution requires resolved fields, complete baseline and every dependency verified: "
@@ -632,6 +613,7 @@ def reopen_failed_operation(
 
 
 def derive_live_status(document: dict[str, Any]) -> None:
+    readiness = operation_readiness(document)
     for result in document["target_results"]:
         operations = [
             item for item in document["object_changes"] if item["target_id"] == result["target_id"]
@@ -649,8 +631,12 @@ def derive_live_status(document: dict[str, Any]) -> None:
             result["status"] = "Partial" if verified else "Blocked"
         elif "skipped" in states:
             result["status"] = "Partial" if verified else "Deferred"
-        elif states <= {"verified"} and operations:
-            result["status"] = "In progress"
+        elif any(
+            readiness[item["operation_id"]]["blocked"]
+            for item in operations
+            if item["state"] == "planned"
+        ):
+            result["status"] = "Partial" if verified else "Blocked"
         else:
             result["status"] = "In progress"
     statuses = {item["status"] for item in document["target_results"]}
@@ -693,65 +679,16 @@ def inspect_document(document: dict[str, Any]) -> dict[str, Any]:
     return inspect_validated_document(validate_document(document))
 
 
-def _execution_context(document):
-    field_blockers = {}
-    for row in document["payload_mappings"]:
-        if row["status"] in {"pending", "blocked"}:
-            field_blockers.setdefault(row["requirement_id"], []).append(
-                f"field {row['field_scope']}::{row['destination_field']} is {row['status']}"
-            )
-    for pipeline in document["pipelines"]:
-        for row in pipeline["field_flows"]:
-            if row["status"] != "proved":
-                for requirement in row["requirement_ids"]:
-                    field_blockers.setdefault(requirement, []).append(
-                        f"pipeline field {row['destination_field']} is {row['status']}"
-                    )
-    return {
-        "states": {item["operation_id"]: item["state"] for item in document["object_changes"]},
-        "missing_baselines": {
-            item["target_id"]
-            for item in document["container_baselines"]
-            if item.get("complete") is not True
-        },
-        "authentication_blocked": {
-            item["target_id"]
-            for item in document["object_changes"]
-            if item["state"] in {"failed", "uncertain"}
-            and item.get("journal")
-            and str(item["journal"][-1].get("error", "")).startswith("authentication_required:")
-        },
-        "field_blockers": field_blockers,
-    }
-
-
-def _operation_readiness(operation, context):
-    blockers = []
-    if operation["target_id"] in context["missing_baselines"]:
-        blockers.append("complete target baseline required")
-    if operation["target_id"] in context["authentication_blocked"]:
-        blockers.append("target authentication requires revalidation")
-    for requirement in operation["requirement_ids"]:
-        blockers.extend(context["field_blockers"].get(requirement, []))
-    states = context["states"]
-    blockers.extend(
-        key
-        for key in operation["dependencies"]
-        if states[key] in {"failed", "uncertain", "skipped"}
-    )
-    waiting = [key for key in operation["dependencies"] if states[key] != "verified"]
-    return sorted(set(blockers)), waiting
-
-
 def inspect_validated_document(value: dict[str, Any]) -> dict[str, Any]:
-    context = _execution_context(value)
+    readiness = operation_readiness(value)
     ready: list[str] = []
     waiting: dict[str, list[str]] = {}
     blocked: dict[str, list[str]] = {}
     for operation in value["object_changes"]:
         if operation["state"] != "planned":
             continue
-        blockers, dependencies = _operation_readiness(operation, context)
+        row = readiness[operation["operation_id"]]
+        blockers, dependencies = row["blocked"], row["waiting"]
         if blockers:
             blocked[operation["operation_id"]] = blockers
         elif dependencies:

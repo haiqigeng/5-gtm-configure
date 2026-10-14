@@ -26,6 +26,7 @@ INCLUDED = (
     "tests/fixtures/folder-request.json",
     "tests/fixtures/client-request.json",
     "tests/fixtures/web-request.json",
+    "tests/fixtures/shared-events-request.json",
     "tests/fixtures/pipeline-request.json",
 )
 

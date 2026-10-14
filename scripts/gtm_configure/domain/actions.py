@@ -149,14 +149,7 @@ def validate_action_contract(
 
     if action in MUTATING_ACTIONS:
         approval = item.get("approval")
-        if not isinstance(approval, dict) or set(approval) != {
-            "grade",
-            "locator",
-            "object_key",
-            "action",
-            "requirement_ids",
-            "payload_sha256",
-        }:
+        if not isinstance(approval, dict):
             fail(f"{path}.approval must bind the exact approved mutation")
         else:
             expected = build_mutation_approval(item, str(approval.get("locator", "")))

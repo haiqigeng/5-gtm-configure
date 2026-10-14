@@ -1,203 +1,123 @@
 # Data contract and transformations
 
-For documented value conversion, read [transformation patterns](transformations.md).
-
-## Contents
-
-- [Establish the source event contract](#establish-the-source-event-contract)
-- [Keep mapping layers distinct](#keep-mapping-layers-distinct)
-- [Validate before transforming](#validate-before-transforming)
-- [Prefer the least-complex mapping](#prefer-the-least-complex-mapping)
-- [Preserve arrays and object schemas](#preserve-arrays-and-object-schemas)
-- [Write narrow Custom JavaScript](#write-narrow-custom-javascript)
-- [Separate configuration completeness from runtime data quality](#separate-configuration-completeness-from-runtime-data-quality)
-- [Statically verify transformations](#statically-verify-transformations)
-- [Handle browser event IDs narrowly](#handle-browser-event-ids-narrowly)
+This file owns source-to-destination mapping decisions. Use [transformation patterns](transformations.md)
+for implementation and static vectors, and [transport](../pipeline/transport-data-contract.md) when
+fields cross a web/server boundary.
 
 ## Establish the source event contract
 
-For every business action, record:
-
-- exact dataLayer `event` name;
-- moment the push occurs and whether it can repeat;
-- source object paths and dataLayer variable version;
-- expected type, format, cardinality, and null behavior;
-- sample payloads for relevant edge cases;
-- whether values are event-scoped or can persist from a previous push;
-- evidence grade for the event, timing, shape, and representative payload;
-- source owner and required site change when a field is absent.
-
-Use the Custom Event as the normal trigger. Do not infer a success event from a click, URL, DOM message, or form submission when a reliable business dataLayer event exists.
+For each business action establish the exact source event, push timing/repeatability, source paths,
+dataLayer version, type/shape/cardinality, null behavior and state lifetime/reset. Retain source
+provenance and the owner of any required site change. Request representative payloads when they
+resolve an actual shape ambiguity. A reliable business dataLayer event owns the normal Custom Event
+trigger; other observed interactions establish success only when the approved source contract says so.
 
 ## Keep mapping layers distinct
 
-Create a traceable map:
-
-| Layer | Example role |
+| Layer | Meaning |
 | --- | --- |
-| dataLayer key | Actual site-owned source path. |
-| GTM variable | DLV, constant, table, or transformation that resolves a value. |
-| Template field | Field visible in the installed tag template. |
-| Destination parameter | Official network/platform contract. |
+| Source key | Actual site-owned path or approved literal. |
+| GTM variable | DLV, constant, table or transformation resolving that source. |
+| Template field | Installed template's native input. |
+| Destination field | Applicable product's collection contract. |
 
-Do not rename the source key to look official. Name the DLV after the actual key and map it to the correct official destination field.
-
-Before mutation, record the approved source authority and complete source/destination shapes beside
-the selected GTM method. A vendor brief or template field such as `PRODUCT_LIST`, `content_ids`, or
-`contents` identifies a terminal field, not an identically named dataLayer source. When no approved
-source path or literal exists, keep the row `blocked`; do not create a speculative DLV.
+Name a DLV for its actual source and map it to the exact destination field. A destination label
+establishes the terminal field, not its source path. Record approved source authority and complete
+source/destination shapes before selecting the GTM method. An absent approved source leaves the
+mapping blocked. [The field registry](../core/authoring.md#collection-field-model) distinguishes event,
+user, item, configuration, unresolved and implementation-only fields.
 
 ## Validate before transforming
 
-Require the approved source contract to place the value on the same GTM event that fires the tag, or to document its retained state and reset behavior. Check:
+Establish that the value is available on the firing event, or document retained state and reset
+behavior. Check type, object/array cardinality, empty/zero/false/null/undefined, decimal/currency
+formatting, catalog/feed identity, stale ecommerce state and SPA timing where applicable.
 
-- string versus number versus Boolean;
-- object versus array;
-- empty string, zero, false, null, and undefined;
-- decimal and currency formatting;
-- item identifiers and explicit catalog/feed alignment;
-- duplicate or stale ecommerce state;
-- SPA navigation timing.
+Use a direct mapping for a compatible complete terminal shape. Otherwise declare the required
+projection and its approved conversion rule. Each distinct terminal shape has its own output even
+when inputs are shared. Identifier equivalence, coercion, derived totals, defaults and normalization
+need approved source semantics and applicable destination support. Preserve valid zero and `false`.
 
-If a critical required value is unavailable or incompatible, block the affected tag design and specify the required dataLayer change. Do not develop the site within this skill.
-
-Use a direct DLV/template field only when the complete terminal shape is compatible. For example,
-a scalar currency string may map directly, while an analytics item-object array must be projected
-before a destination can receive an identifier array or vendor-specific object array. Record each
-different terminal shape separately even when the projections share one input.
-
-Do not assume that an analytics `item_id` is the identifier used by a media catalog or feed. Do not
-coerce a numeric string, derive a total, choose a default currency, or synthesize `content_type`
-unless the approved source/media requirement and current destination documentation establish that
-rule.
+Analytics mappings cover the approved field set. A documented mandatory field missing from that set
+requires an approved amendment; optional improvements remain advisory under [evidence](../core/evidence.md).
 
 ## Prefer the least-complex mapping
 
-Select the target mapping from the approved collection contract, applicable skill playbook, and
-current official/template documentation before considering local container patterns. Use this order:
+Choose the supported target pattern before evaluating existing container reuse:
 
-1. direct template field or DLV for an already compatible approved source;
-2. constant for a stable configuration value or approved fixed semantic value;
-3. supported settings variable for a coherent set of genuinely shared fields;
-4. lookup/regex table for a real deterministic multi-scenario mapping when it makes environment,
-   destination, currency, event, or other configuration logic clearer than repeated conditions;
-5. Custom JavaScript for a required destination transformation that built-in variables cannot express cleanly.
+1. direct native template input or DLV for compatible approved source data;
+2. named constant for a stable configuration/semantic value when it improves clarity or reuse;
+3. supported settings variable for a coherent shared field set;
+4. lookup/regex table for a real deterministic multi-scenario mapping;
+5. one-purpose Custom JavaScript for a required conversion native mechanisms cannot express cleanly.
 
-After selecting the target pattern, reuse an existing variable only when it implements that pattern
-and passes current source, type/shape, null, timing, consumer, consent, environment, and static
-acceptance checks. Do not preserve or reproduce a helper merely because the container already uses
-that pattern. Harmless naming debt can remain; functional debt cannot become the new architecture.
+Reuse an existing object when its source, shapes, missing behavior, timing, consumers, consent and
+environment match that pattern. Naming debt can remain if function is correct. Repeated identifiers
+benefit from clear shared references; a single obvious literal can remain inline.
 
-Do not hard-code a measurement ID, pixel ID, conversion label, currency, or repeated semantic value when a clear named reference improves maintenance. Do not create a constant for a one-off literal when it adds no clarity or reuse.
-
-Do not use Custom JavaScript to reinterpret routine CMP vendor consent when the documented CMP state can be tested directly in a native trigger condition. An undocumented or invalid CMP shape is a source-contract blocker, not a transformation requirement.
-
-For analytics, do not create a mapping for a destination field absent from the approved collection
-contract. A documented required field missing from the plan is a blocking discrepancy, while a
-recommended or optional field remains omitted unless the analyst explicitly amends the input.
+CMP eligibility belongs to the inspected consent contract and its native predicate under
+[web consent](../consent/web.md). A source conversion serves payload mapping; it does not own consent.
 
 ## Preserve arrays and object schemas
 
-For ecommerce and content arrays:
-
-- verify whether the destination expects one object, an array of IDs, or an array of objects;
-- return an array for one item when the destination requires an array;
-- map all in-scope items;
-- retain documented event-level versus item-level fields;
-- preserve exact number/string types and allowed enums;
-- calculate totals only from the documented source and rule;
-- define behavior for empty arrays and missing required item fields;
-- test zero-item, one-item, and multi-item payloads.
-
-Do not silently select item zero or filter an item because a field is missing. Preserve the
-configured projection contract and record malformed runtime items as a site/dataLayer dependency for
-recette. Add an item-level firing rule only when the explicit brief or current official browser
-documentation requires it.
+Preserve the required output shape for zero, one and multiple items, every approved item and its
+order, exact field scope/types/enums, and documented missing-item behavior. Derive totals only from
+an approved rule. Malformed runtime items remain visible source-data dependencies unless an explicit
+approved or mandatory product rule changes that occurrence's collection behavior.
 
 ## Write narrow Custom JavaScript
 
-Use one output purpose per variable. Make the function:
+Each variable has one destination output purpose, deterministic behavior, explicit approved
+conversions and documented missing/invalid output. It handles null, undefined and wrong types
+without inventing values. Keep it free of network calls, DOM mutation and dataLayer pushes; make
+contract failures visible. Catch only an anticipated error with a defined outcome.
 
-- deterministic and free of side effects;
-- guarded for null, undefined, and wrong input type;
-- explicit about string/number conversion;
-- free of network calls, DOM mutation, dataLayer pushes, and invented values;
-- able to return `undefined` when a critical source contract is not met;
-- validated with representative inputs.
-
-Name it `CJS - <Vendor> - <output>`, for example `CJS - Meta - contents`.
-
-Avoid a broad `try/catch` that hides contract defects. Catch only a specifically anticipated error and preserve a visible validation failure.
+Name the variable `CJS - <Vendor> - <output>` and implement it using the applicable
+[projection pattern](transformations.md).
 
 ## Separate configuration completeness from runtime data quality
 
-A transformation output does not control tag firing by itself. Returning `undefined`, `{}`, or `[]`
-can still let the approved event tag execute. Treat that as a mapping fact, not as a reason to create
-a generic eligibility layer.
+Configuration readiness depends on a known approved source and supported destination mapping.
+A dynamic source that can be empty at runtime can still have a complete configuration contract.
+Record its missing, empty, wrong-type and malformed-array cases for the site owner and recette.
 
-- Block configuration when a required design-time field has no approved source, no supported
-  template field, or no valid transformation.
-- Configure the direct mapping when the approved source exists, even if the value can be missing at
-  runtime.
-- Record missing, empty, wrong-type, and malformed-array cases as site/dataLayer dependencies for
-  the recette workflow.
-- Add a payload-related firing condition only when the explicit requirement or current official
-  browser contract requires it. Prefer a native trigger condition; use one narrow CJS condition only
-  when native filters cannot express the required rule.
-- Never combine consent logic with payload validation.
-
-Do not create names such as `CJS - Ecommerce - AddToCart Eligible` as routine infrastructure.
-
-## Statically verify transformations
-
-Use supplied non-sensitive payloads as small static vectors for each transformation actually
-created. This is configuration verification, not a test mode or runtime recette. Check at least:
-
-| Input case | Required check |
-| --- | --- |
-| Missing source | No invented value; affected field/tag follows the approved missing-data rule. |
-| Empty array | Output matches documented empty behavior. |
-| One item | Required array/object shape and types remain correct. |
-| Multiple items | Every item is retained and correctly mapped. |
-| Zero value/quantity | Zero is not mistaken for missing. |
-| Invalid type | Transformation fails safely and visibly. |
-
-Do not claim that these static vectors prove browser execution or add an automatic firing guard
-because a vector is invalid.
+Mapping output and tag firing are separate decisions: `undefined`, `{}` or `[]` can still accompany
+an executing tag. Payload-related firing conditions require an explicit approved requirement or an
+applicable mandatory product rule. Prefer a native condition; use narrow CJS only when native
+filters cannot express that rule. Keep consent enforcement with its own owner.
 
 ## Handle harmful invalid values explicitly
 
-Google explicitly warns that an empty GA4 `transaction_id` can collapse unrelated purchases during
-[deduplication](https://support.google.com/analytics/answer/12313109). Do not treat that known harm as
-a harmless optional field. Reject a design that deliberately supplies the empty literal; for a
-dynamic source, establish the approved invalid-value policy (fix the source, omit only the invalid
-field when technically valid, or suppress/recover the affected occurrence). If suppression changes
-approved measurement timing or coverage, resolve that decision before saving. Prefer a native,
-narrow condition; do not silently add a general payload gate or fabricate a replacement ID. Record
-the remaining source correction and runtime acceptance cases, including valid zero and repeated orders.
+Apply documented harmful-value rules through an approved invalid-value policy: correct the source,
+omit the affected field where supported, or suppress/recover the affected occurrence. Resolve any
+change to approved timing or coverage before saving the affected owner. Keep the rule specific to
+the documented field and retain remaining source corrections and runtime acceptance cases.
+
+For example, Google's [purchase deduplication guidance](https://support.google.com/analytics/answer/12313109)
+warns that an empty GA4 `transaction_id` can collapse unrelated purchases. Reject an intentionally
+empty literal and establish the policy above for a dynamic source, preserving valid zero and
+repeated-order acceptance cases. Occurrence identity comes from the approved source rather than a
+fabricated replacement.
+
+## Statically verify transformations
+
+Use non-sensitive input vectors for each transformation actually created. [Required static vectors](transformations.md#required-static-vectors)
+owns the case matrix and expected checks. Record outcomes as static configuration evidence;
+independent recette establishes browser/runtime behavior.
 
 ## Handle browser event IDs narrowly
 
-Do not invent a transaction-based deduplication map or a `gtm.start`/`gtm.uniqueEventId` Custom
-JavaScript generator in a web-only request. An
-explicit media brief may authorize mapping a supplied browser `event_id` when current official
-browser documentation and the installed template support that exact field. For a server or
-pipeline request, resolve its owner through the pipeline and server references; do not borrow the
-browser field name. Approved non-purchase shared generation is a pipeline capability governed by
-[shared ID generation](../pipeline/browser-server-deduplication.md#configure-shared-id-generation).
-Load [Transformations](transformations.md) when the same source-to-destination projection pattern recurs,
-especially ecommerce item arrays, destination identifier arrays, scalar validation, or explicit
-mapping vectors. The pattern reference standardizes the function contract but current official
-destination documentation still establishes every output field.
+An explicit media brief can authorize a supplied browser `event_id` when current documentation and
+the installed template support that field. Server/pipeline requests use their own transport and
+destination bindings. [Deduplication](../pipeline/browser-server-deduplication.md) owns overlapping
+occurrences and [shared generation](../pipeline/browser-server-deduplication.md#configure-shared-id-generation)
+owns approved non-purchase generated IDs. Apply that mechanism only within its authorized route.
 
 ## Prove transport survivability
 
-For every transported field, record source, web resolved value, wire key/encoding, claiming Client,
-generated Event Data key/type, server owner, template field/type, missing behavior, and runtime verification note.
-The standard GA route documents `items` as an array and `user_data` as an object with nested paths.
-Do not generalize that into “only two arrays” or assume another nested dataLayer object survives.
-
-If a required shape is unsupported, block unless an explicitly approved serialization and named
-server parse owner exist. Never silently stringify, flatten, truncate, drop invalid items, or use a
-first-item shortcut. A server destination's `contents` or `content_ids` projection remains a
-destination mapping, not a dataLayer eligibility test.
+For transported fields, bind source, web value, wire encoding, claiming Client, Event Data path/type,
+server owner, destination shape and missing behavior. Prove each complete shape against its actual
+protocol/Client; the standard GA `items` array and `user_data` object are specific supported shapes.
+An incompatible shape needs an explicitly approved serialization and named parse owner or remains
+blocked. Preserve item cardinality and product meaning under the
+[transport contract](../pipeline/transport-data-contract.md).

@@ -14,8 +14,7 @@
 ## Purpose
 
 Use this reference after identifying the actual CMP product, deployment path, template/version, and
-client-approved category/vendor/purpose policy. These patterns reduce repeated discovery but never
-replace current official CMP documentation or legal decisions.
+client-approved category/vendor/purpose policy. These discovery patterns are interpreted through current official CMP evidence and client policy.
 
 ## Common state contract
 
@@ -29,9 +28,8 @@ For every CMP, establish from current documentation and container evidence:
 - page-to-page and SPA lifetime;
 - template fields, permissions, defaults, and Google consent mapping when used.
 
-For strict/basic gating, use the documented state variable directly and make every non-granted
-state block. Independent required grants use OR-denial across the smallest reusable set of blocks.
-Do not create a generic consent Custom JavaScript helper.
+Apply [web consent](web.md) for native eligibility composition and [lifecycle](lifecycle.md) for
+initial/later opportunities. This guide supplies product-specific signal discovery.
 
 ## OneTrust
 
@@ -45,8 +43,7 @@ Official entry points:
 - https://my.onetrust.com/articles/en_US/Knowledge/UUID-d81787f6-685c-2262-36c3-5f1f3369e2a7
 
 Reconcile auto-blocking, site-deployed scripts, the CMP template, GTM additional-consent checks, and
-manual blocking. Do not create parallel default/update paths. Treat region mappings and category
-ownership as approved CMP inputs.
+manual blocking around one default/update owner. Region/category mappings are approved CMP inputs.
 
 ## Didomi
 
@@ -61,8 +58,7 @@ and deployed value format; readiness alone is not a grant.
 Source: https://developers.didomi.io/cmp/web-sdk/third-parties/tags-management/events-and-variables
 
 Inspect the current Didomi web SDK, direct-site versus GTM deployment, documented readiness/change
-events, vendor/purpose variables, and exact vendor identifiers. Prefer documented Didomi state
-variables and events; do not parse a consent string with custom code when a direct variable exists.
+events, vendor/purpose variables, and exact vendor identifiers. Use the documented direct Didomi state variables and events.
 
 Official entry points:
 
@@ -98,9 +94,8 @@ Verify the current documented readiness/update events, authorized-service state 
 `axeptio_authorized_vendors`, and exact service identifiers from the client's widget rather than
 copying example values. Prefer the direct documented dataLayer state when one native GTM predicate
 expresses the grant. Keep service-level Axeptio gating separate from Google Consent Mode signals:
-under strict/basic behavior, prevent the service tag before its grant; use advanced Google behavior
-only when explicitly requested, and do not add Additional Consent Checks or exceptions that create
-an unproved double gate.
+apply the selected [web eligibility](web.md) and [Google state](google.md) owners to the actual
+service and Google execution units.
 
 For page-load tags, select the documented Axeptio readiness/grant opportunity that supports initial
 and later consent without duplicate initialization. For business-event tags, retain the business
@@ -113,8 +108,7 @@ every consumer.
 For Cookiebot, Commanders Act/TrustCommander, Usercentrics, or Quantcast, use the common state
 contract and reopen the selected CMP's current official GTM and consent documentation. Confirm its
 installed template, deployment owner, initialization and update lifecycle, exact grant state,
-Google consent mapping, and revocation behavior. These products remain supported but do not borrow
-the dedicated implementation details of OneTrust, Didomi, or Axeptio.
+Google consent mapping, and revocation behavior. Their own verified signals supply the common contract.
 
 ## Other CMPs
 

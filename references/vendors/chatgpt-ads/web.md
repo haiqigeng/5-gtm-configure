@@ -14,12 +14,11 @@ approved content item and quantity; `group_id` and `variant_dict` are CAPI-only.
 
 Inspect and reuse a compatible installed template before the
 [official OpenAI web template](https://github.com/openai/ads-measurement-pixel-gtm-template).
-Bind its observed native type, fields, exact source/version and permissions. Import/update authority
-is separate from using an installed template. Do not invent a native short code or bypass an
-unsupported template with Custom HTML.
+Bind its observed native type, fields, exact source/version and permissions. The [template lifecycle](../../templates.md) owns import/update authority; native identity
+and compatibility come from the inspected installed surface.
 The official source's static injectScript cache key is not authentication. If its credential-shaped
 constant name needs classification, use the exact inspected-source provenance described in
-[template governance](../../templates.md); never exempt the whole source from secret detection.
+[template governance](../../templates.md); classification remains bound to its exact inspected bytes.
 
 The inspected official template initializes in each event tag; a separate base tag is optional.
 `sendEvent: false` means initialization only. Defaults send `page_viewed`, so explicitly select
@@ -31,9 +30,8 @@ unsupported cardinality rather than truncate items or modify vendor code without
 `optOut` is event metadata, not consent enforcement. The inspected template issues no consent
 command and uses `measure`, not an isolated `measureSingle` route. The Pixel defaults to allowed
 unless denial is set/stored; denial suppresses future events, later grant does not replay them,
-and revocation removes its cookies. Establish the authorized CMP gate and an actually supported
-consent-lifecycle owner. Do not claim the stock template handles that lifecycle. Multi-Pixel
-dispatch also needs an inspected route, not assumed isolation.
+and revocation removes its cookies. Establish the authorized CMP gate and a separately supported consent-lifecycle owner.
+Multi-Pixel dispatch requires an inspected isolation route.
 
 Matching requires explicit scope and account-behavior inspection. Browser manual user data is
 initialization-scoped; the template's fields do not cover every SDK field. Inspect normalization

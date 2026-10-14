@@ -13,11 +13,40 @@ loader checks structure before domain predicates inspect meaning. `Configuration
 contract keys or durable run IDs once into the domain's operation graph. `runtime/state.py` owns
 materialization and transitions; `runtime/engine.py` executes through the adapter protocol.
 Adapters supply authenticated evidence and transport, while comparison owns native normalization.
-The renderer reads durable evidence and produces the human view.
+The renderer reads durable evidence and the public state inspection to produce the human view.
+It presents readiness/recovery without reclassifying operation state or dependency blockers.
 
 Core imports core. Domain imports core and domain. Higher-level coordinators compose those layers.
 Shared functions use public names; private functions belong to their defining module. The static
 release gate rejects reversed core/domain dependencies, cycles and private cross-module access.
+
+## Instruction ownership
+
+The entrypoint routes work and summarizes the outcome. Core references own distinct decisions;
+consumers link to the defining rule and add only their local application.
+
+| Decision | Instruction owner | Consumers / deterministic counterpart |
+| --- | --- | --- |
+| Scope, priorities, target authority, boundaries | `references/core/authority.md` | workflow, authoring, feature guides; contract/domain authority validators |
+| Source research, currency, discrepancy classification | `references/core/evidence.md` | product guides and authoring; evidence schema and domain checks |
+| Task sequence and which owner to consult | `references/core/workflow.md` | SKILL entrypoint; CLI/runtime lifecycle |
+| Declarations, field namespaces and mechanical compilation | `references/core/authoring.md` | feature guides; schemas, intake and domain fields |
+| Writes, recovery, readiness, privacy and finalization transition | `references/core/execution.md` | adapter/pipeline guides; runtime and core privacy |
+| Verdict meanings and human/machine handoff | `references/core/acceptance.md` | workflow, authoring and renderer |
+| Source/destination mapping and runtime-data boundary | `references/data/mapping.md` | authoring and product guides; fields, shapes and native validators |
+| Projection implementation and static input vectors | `references/data/transformations.md` | mapping and destination-specific projections |
+| Adapter evidence/caching and quota mechanics | `references/adapters/custom.md`, `quotas.md` | execution and host guides; adapter/runtime implementation |
+| Google field placement | `references/analytics/google-fields.md` | GA4, Ads and identity guides; native field registry/resolver |
+| GA4 collection ownership | `references/analytics/ga4-ownership.md` | page views, automatic events, consent lifecycle; domain page-view predicates |
+| Identity feature, source and hash lifecycle | `references/data/identity.md` | browser/server product guides; first-party-data domain checks |
+| Web eligibility, lifecycle and product classification | `references/consent/web.md`, `lifecycle.md`, `product-capabilities.md` | product-specific signal guides; consent/execution predicates |
+| Media declarations and product-specific application | `references/media/common.md`, `server.md`, `references/vendors/` | common owners linked from product guides; feature/native validators |
+| Reuse, naming and destination selection | `references/organization.md`, `routing.md` | web/server resources; native graph and target validation |
+| External rollout order | `references/pipeline/architecture-and-workflow.md` | acceptance and pipeline handoff; publication dependency records |
+
+Product, consent, identity, web/server and routing guides retain their feature-specific mechanics.
+Static checks verify links and code ownership; independent scenario review checks whether the
+instructions guide the agent to the appropriate owner without losing required safeguards.
 
 ## Owners across the complete skill
 
@@ -47,7 +76,7 @@ release gate rejects reversed core/domain dependencies, cycles and private cross
 | Writes, recovery and quota discipline | `runtime/engine.py` | adapter protocol and adapters | execution, transport and quota tests |
 | Host transport and discovery | `adapters/`, `scripts/mcp_relay.js` | MCP CLI commands and adapter references | MCP transport and SDK/relay fixtures |
 | Native and semantic comparison | `comparison/` | preparation, conformance, runtime verification | native comparison, GA4 intake and conformance tests |
-| Human report | `render.py` | acceptance reference and CLI run | report behavior and injection scenarios |
+| Human report | `render.py` | acceptance reference, public state inspection and CLI run | blocker/recovery parity and report injection scenarios |
 | CLI interface | `scripts/configure_gtm.py`, `cli/` | documented commands | CLI behavior and extracted-package help checks |
 | Package and release | `tools/`, `.github/workflows/` | VERSION, pyproject, README, changelog | architecture, packaging and release tests |
 | Reusable synthetic test graphs | `tests/support/`, `tests/fixtures/` | behavior-owner test modules | full suite; producer-bound fixture bytes remain unchanged |
@@ -63,7 +92,6 @@ release gate rejects reversed core/domain dependencies, cycles and private cross
 | CG-68 | One canonical JSON hash function and representation | core validation/model, common schema, state/verification | Unicode/type/hash regression; current contract/run/verification schemas |
 | CG-69 | Semantic link labels and derived CLI usage/version checks | references, router, release checker | stale-label synthetic regression; every packaged command help |
 | CG-70 | Test files follow behavior owners; fixture graphs live in support | tests/support, behavior suites, architecture and ownership suites | all original test methods retained; branch coverage measured on both tags |
-
 | CG-71 | Field ownership is distinct from inherited requirement attribution; blockers propagate through the operation graph | runtime readiness/state, native namespace owner, field binding validation | packaged two-event shared consent scenario; independent shared settings/configuration and recovery replay |
 | CG-72 | Closed schema records own structural keys, including public declaration APIs; local copies are detected | common/run/contract schemas, core schema loader, runtime validation/state, field/consent/public-identifier APIs, architecture gate | existing malformed-record tests, independent schema probes, local two/five-key mutation tests |
 

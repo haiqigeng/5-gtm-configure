@@ -1,111 +1,62 @@
 # Official source policy
 
-## Contents
-
-- [Principle](#principle)
-- [Authority by decision](#authority-by-decision)
-- [Research procedure](#research-procedure)
-- [Run record](#run-record)
-- [Official entry points](#official-entry-points)
-- [Conflict and failure](#conflict-and-failure)
-
 ## Principle
 
-Current official evidence supports each changed product or collection requirement.
-Folder-only organization uses the inspected native capability, approved target, and container
-evidence. This route cannot authorize product, consent, or collection changes.
+Use current primary documentation for the changed product, surface and feature, together with the
+inspected installed template/Client. An official API establishes protocol behavior; GTM capability
+requires the corresponding native or installed-template support. Unofficial material can help locate
+primary evidence. [Authority](authority.md#requirement-authority) owns business inputs and approval.
 
-Use current primary documentation at execution time. Never rely on memory, analogy, an old tag, or
-an informal label for a vendor event, field, type, template capability, Client claim,
-Transformation, consent behavior, CMP signal, dedup identifier, or identity. Unofficial sources
-are discovery aids, never sole authority for a write.
-
-Approved analytics decisions control collection semantics; current documentation validates
-technical feasibility. A media brief controls business intent; current official product
-documentation controls the browser and server destination schemas. The inspected installed
-template/version controls what GTM can actually store and send. An official API does not prove that
-an official or compatible GTM server template exists.
-
-Do not freeze event or parameter catalogues in this skill. Reuse concise prior evidence when its
-product, feature, template/version and decision still apply; reopen the relevant official section
-to check currency. Do not reread whole vendor manuals for unchanged fields. Carry the source record
-into the current contract with the supported requirement IDs and decision; retain its true access
-date unless the page was actually revisited. The 365-day validator ceiling is not a guarantee that
-guidance remains current for a year. Recheck changed, ambiguous or time-sensitive rules directly.
-
-## Authority by decision
-
-| Decision | Primary evidence |
-| --- | --- |
-| Analytics meaning, fields, source, timing | Approved tracking plan or exact direct decision |
-| Analytics validity, limits, and documented appropriateness | Current official analytics/GTM/template documentation |
-| Media objective and destination identity | Explicit current media brief |
-| Browser/server media event and fields | Current official platform documentation for the exact product |
-| Source, wire, and Event Data shape | Approved source mapping plus current sender protocol and claiming Client documentation |
-| GTM mechanics | Current GTM/API documentation plus inspected native or installed template |
-| Client consent policy | Explicit approved client input |
-| Product/CMP consent capability | Current official product/CMP documentation and target-container evidence |
-| Existing integration and reuse | Complete target workspace evidence; never architecture authority |
+Folder-only organization uses approved target authority and inspected native/container capability.
+Product or collection changes require applicable current technical evidence.
 
 ## Research procedure
 
-For every applicable product and CMP:
+1. Open the exact official feature page and verify its publisher/product relationship.
+2. Inspect the installed template/version, permissions, hosts, fields, defaults, automatic mapping,
+   secrets and response behavior relevant to the change.
+3. For server ingress, establish request class, intended Client, claim criteria/priority and generated
+   Event Data from sender/Client documentation and native evidence.
+4. Extract the required types, shapes, enums, cardinality, conditional behavior, consent and identity
+   rules. Map each media destination independently under its own schema.
+5. Classify findings: an invalid or unsupported required implementation is `blocking-error`; a valid
+   alternative recommendation is `advisory`; mechanical guidance is an `implementation-note`.
+6. Record the source and applied decision against the affected requirements and objects.
 
-1. Open the official page for the exact web, server, or pipeline feature during the run.
-2. Confirm product, surface, current template/version, publisher, permissions, network hosts,
-   defaults, automatic mapping, secret fields, response behavior, and dedup ownership.
-3. For server ingress, prove the request class, intended claiming Client, claim criteria/priority,
-   and generated Event Data. Do not infer Event Data from the web dataLayer.
-4. Extract only the event/field requirement, type, shape, enum, cardinality, conditional rule,
-   consent behavior, and identifier needed for the approved implementation.
-5. For analytics, classify differences as `blocking-error`, `advisory`, or
-   `implementation-note`; never silently modify valid approved semantics.
-6. For media, map the approved objective independently to the exact browser and/or server product;
-   never borrow another vendor's schema or assume that similarly named fields are equivalent.
-7. For consent, establish signal lifecycle, transport behavior, event coverage, and the one
-   effective destination enforcement mechanism without making a legal decision.
-8. Retain URL, title, access date, affected requirement/object, and the supported decision.
+The reasoning chain is **official guidance → applicable recommendation → installed capability →
+implementation → saved proof**. Distinguish mandatory, conditional, recommended and optional fields.
+Only an unmet applicable requirement blocks the affected work; optional match-quality improvements
+remain advisory. A documented native schema bridge is usable when its exact mapping and installed
+fields fit the approved semantics.
 
-For each configuration capability, answer **official guidance → applicable recommendation →
-installed capability → coherent implementation → saved proof**. Distinguish a mandatory field,
-conditional requirement, recommended improvement, optional feature, and unsupported assumption.
-Only a missing applicable requirement blocks. An optional match-quality improvement is an advisory,
-not a reason to withhold a valid conversion setup.
+Vendor setup examples may include broad imports, automatic collection, publication or account work.
+Apply their technical mechanics within the approved timing, consent and scope. A playbook entry
+routes research; support is established for the actual product/template used.
 
-Mark support honestly: `documented`, `template-confirmed`, `statically-verified`, or
-`runtime-unverified` as evidence descriptions, not new completion statuses. A vendor name in this
-library is a research route, not certification of every product or template. If an official GTM
-guide exists, use it before reconstructing an implementation from an API guide. When docs are
-unavailable, identify the exact missing decision and continue independent supported work.
+## Reuse current evidence
 
-Vendor setup guides may include All Pages, automatic collection, broad imports, publication, or
-account changes. Those examples describe product mechanics; adapt them to approved timing/consent
-and the skill's authority. Do not copy a turnkey setup's unrequested side effects. Conversely, a
-documented native schema bridge is not "mapping by analogy": use it when its explicit mapping
-matches the approved destination semantics and all installed fields are inspected.
+Reuse concise evidence when product, feature, template/version and decision still apply. Reopen the
+relevant official section to check currency, focusing on changed, ambiguous or time-sensitive rules.
+Preserve the actual access date unless revisited. The validator's 365-day ceiling is an artifact
+validity bound, not a promise that guidance stays current for a year. Resolve event/field catalogues
+from their official source during the task rather than treating stored examples as a fixed catalogue.
 
 ## Run record
 
-Keep source dataLayer/configuration key, web variable, wire field, claiming Client/Event Data path,
-server owner, template UI field, and vendor request parameter distinct. Record provenance where it
-governs a write: exact product/template, approved locator, type/shape, consent, dedup, discrepancy,
-and unresolved conflict. Never persist credentials or raw PII in the evidence record.
+For each included product/collection requirement, retain an `official-current` source with HTTPS URL,
+page title, actual access date, supported requirement IDs and a concise `decision` describing the
+rule applied. Record approved source, container and sample provenance separately where they establish
+mapping or implementation facts. Keep source, variable, wire, Client/Event Data, template and vendor
+field identities distinct; [mapping](../data/mapping.md) owns that model.
 
-An `official-current` evidence record must use the exact authoritative vendor/CMP documentation
-host, record an access date that is neither future-dated nor older than 365 days, and list the
-specific included requirement IDs it supports. Every included requirement needs such coverage.
-Record the page title and a concise `decision` explaining the exact rule applied to those
-requirements. A dataLayer guide can support source timing; it cannot by itself establish GA4
-page-view defaults, Google Ads enhanced-conversion fields, or another product's deduplication.
-The static validator checks locator/date/link/decision presence. The agent must read and assess
-the actual page for product, surface, feature, and installed-version relevance before mutation.
-Official evidence proves current product mechanics; only approved input authorizes mutation.
-Verify the documentation's publisher and official product relationship through current primary
-sources. The entry points below aid discovery; they are not a closed host allowlist. A newly
-verified official host does not require changing the installed skill or obtaining another release.
-The validator requires a credential-free HTTPS locator and complete traceability, not a claim of
-authenticated publisher identity. Arbitrary HTTPS pages and aggregators remain insufficient
-technical authority even when their URL is structurally valid.
+Schema checks enforce credential-free HTTPS, complete traceability and the access-date range.
+The agent establishes publisher authenticity, source relevance and installed-version applicability
+under [evidence limits](authority.md#evidence-and-validation-limits). The source indexes below aid
+discovery; a newly verified official host can be used without changing the skill.
+Apply [persistence privacy](execution.md#handle-secrets-without-false-equality) to the record.
+
+Mark evidence strength as `documented`, `template-confirmed`, `statically-verified` or
+`runtime-unverified`; completion statuses remain owned by [acceptance](acceptance.md).
 
 ## Official entry points
 
@@ -136,13 +87,12 @@ more specific links.
 | OneTrust, Didomi, Axeptio | Use the exact official links in [Cmp patterns](../consent/cmp-patterns.md). |
 
 For an unlisted product, CMP, or template, locate and cite its current official documentation.
-Lack of a dedicated playbook never permits inference.
+Establish the same product, installed-capability and source evidence before implementing it.
 
 ## Conflict and failure
 
-When sources disagree, confirm product, surface, version, and date. Preserve a technically valid
-approved analytics choice and report alternatives as advisory. Stop an invalid, reserved,
-missing-required, incompatible, or unsupported requirement until its owner amends it. Prefer the
-directly applicable current official page over local precedent. If critical evidence remains
-unavailable or contradictory, mark only the affected dependency subtree `Blocked`; do not fill the
-gap from memory or stop independent safe work.
+Resolve disagreements by product, surface, version and date, using the directly applicable current
+primary source. Preserve technically valid approved analytics choices and report alternatives as
+advisory. Invalid/reserved names, missing required fields, incompatible shapes and unsupported
+capability require an amended approved decision or implementation. Record the exact missing fact
+and continue independent supported work through [dependency readiness](execution.md#contain-failures-by-dependency).

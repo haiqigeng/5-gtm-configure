@@ -4,7 +4,7 @@
 
 Use the current Snap CAPI version and an inspected installed server template. Record Pixel ID,
 endpoint/version, event name/time/source, click ID, hashed match data, custom data, items, token,
-consent, and response. Do not use deprecated CAPI fields from an older version.
+consent, and response. Use fields supported by that current selected version.
 
 For Pixel+CAPI overlap, current Snap guidance distinguishes browser `client_dedup_id` from server
 `event_id`. Purchase also distinguishes browser `transaction_id` and server

@@ -1,40 +1,17 @@
 # Operational configuration contract
 
-## Contents
-
-- [Purpose and priority](#purpose-and-priority)
-- [Keep business and implementation authority separate](#keep-business-and-implementation-authority-separate)
-- [Use configuration-contract 10.0](#use-configuration-contract-100)
-- [Map requirements and targets](#map-requirements-and-targets)
-- [Map target-scoped object actions](#map-target-scoped-object-actions)
-- [Map pipeline flow](#map-pipeline-flow)
-- [Map consent and deduplication](#map-consent-and-deduplication)
-- [Validate and materialize](#validate-and-materialize)
-
 ## Purpose and priority
 
-Before the first write, create one concise requirement-to-object contract. It controls authority,
-mutation, saved comparison, idempotency, and the configuration result; it is not a planning deliverable.
-
-Resolve conflicts in this order: data/consent safety, approved semantic fidelity, current technical
-validity, smallest maintainable architecture, compatible reuse and organization, then saved
-completion. Never weaken a higher priority to make a graph look complete.
-
-## Keep business and implementation authority separate
-
-| Layer | Authority | Contents |
-| --- | --- | --- |
-| Approved analytics | Tracking plan or exact direct analytics decision | Meaning, event, fields/literals, source, success timing, filters, and repeatability |
-| Approved media | Explicit media brief plus current official destination schema | Product, business action, destination identity/use, source authorization, and exact vendor mapping |
-| GTM implementation | Applicable playbook, current documentation, inspected templates/Clients, consent, and target evidence | Workspaces, object actions, fields, dependencies, trigger/consent/dedup topology, and readback |
-
-Technical infrastructure must serve approved requirements. A field does not gain analytics or media
-authority merely because an implementation object supports it.
+Before mutation, represent the approved change as one requirement-to-object contract. Use the
+[authority contract](authority.md) for scope, priorities and approval and the
+[evidence policy](evidence.md) for current technical support. This file owns declaration meaning
+and preparation; schemas own structural keys and types.
 
 ## Use configuration-contract 10.0
 
-Every new mutation map uses `"schema_version": "10.0"` and
-[`configuration-contract.schema.json`](../../schemas/configuration-contract.schema.json):
+Use `"schema_version": "10.0"` and
+[the contract schema](../../schemas/configuration-contract.schema.json). Preparation and execution
+consume this current model through the same domain validators.
 
 | Section | Contents |
 | --- | --- |
@@ -56,28 +33,20 @@ Every new mutation map uses `"schema_version": "10.0"` and
 | `evidence` | Approved, official-current, container-confirmed, and sample provenance |
 | `external_dependencies` | Structured work outside the saved GTM graphs: `id`, affected `requirement_ids`, `owner`, `action`, and `status` (`open`, `resolved`, or `accepted`) |
 
-Only version 10.0 is accepted. Older and unversioned inputs cannot authorize mutation.
-
 ## Map requirements and targets
 
-Every requirement has a stable ID, exact source locator, and approved authority. Every analytics
-parameter, user property, and item field needs approved provenance; official documentation
-validates but cannot authorize an addition. For media, official documentation can authorize the
-destination schema while objective, identity, and actual source remain approved input.
+Every requirement has a stable ID, approved source locator and field provenance. Split requirements
+when destination, consent route, source timing, environment, owner or change path is independently
+configurable. Record exact source paths/literals, source/destination shapes, missing behavior,
+business timing and filters using [data mapping](../data/mapping.md).
 
-Use one requirement record per independently configurable destination, consent route, source
-timing, environment, owner, or change path. Record source path/literal, type and complete shape,
-destination field/shape, missing behavior, business timing, and filter. Preserve valid zero and
-`false`. Do not create an identically named DLV from a destination field unless approved input
-proves that exact source.
-
-Every target record names its `target_id`, authoritative container type, account/container/workspace
-IDs, and approved-input authority. Web authority does not imply server authority. In pipeline mode,
-at least one authorized web sender and server receiver are required.
+Each target declares `target_id`, authoritative container type, account/container/workspace IDs and
+approved-input authority. Pipeline mode requires authorized sender and receiver targets. Source
+review and any additional approval follow [target authority](authority.md#target-authority).
 
 ## Collection field model
 
-The schema's field registry owns the destination namespaces. Use exact destination names as map keys:
+The shared schema registry owns destination namespaces. Use exact destination names as map keys:
 
 | Requirement collection | Meaning | Binding scope |
 | --- | --- | --- |
@@ -96,223 +65,143 @@ Pipeline wire cardinality uses its separate `scalar`/`array`/`object` model.
 
 ## Organization route
 
-Use `route: organization` for folder creation, rename, and inspected reuse only.
-Retain named-target approval, container evidence, complete native snapshots, and the normal
-execution/readback engine. Fresh product research is required when collection or product
-semantics change; do not fabricate an official source record for a folder-only operation.
-Organization requirements cannot carry events or collection fields or authorize tags.
+`route: organization` covers folder creation, rename and inspected reuse. It carries target authority,
+container evidence and complete native snapshots through the normal execution/readback engine.
+Collection changes use their corresponding route and technical evidence.
 
 ## Map target-scoped object actions
 
-Represent each semantic object once under:
+Represent each semantic object once as `<target-id>::<resource-family>::<semantic-name>`. Record its
+action, existing stable ID where applicable, full intended state, dependencies, requirements,
+justification, evidence and risk. Resource subtypes remain in the native fields.
 
-`<target-id>::<resource-family>::<semantic-name>`
+| Action information | Declaration |
+| --- | --- |
+| Delta | `object_id` and non-empty complete `pre_change`; native `type` for typed resources. |
+| Executing, reuse or untouched object | Non-empty `intended` compatibility target, including applicable native `type`. |
+| Rename | `new_name` in addition to delta evidence. |
+| Replace | Same-identity governed replacement plus reason and authority. |
+| Template mutation | Reviewed permission delta. |
+| Any mutation | Approval record bound to source locator, action, object key, requirements and exact mutation payload hash. |
 
-Record the action, stable ID when existing, intended fields/references, dependencies, requirement
-IDs, justification, evidence, risk, and exact pre-change state for every delta. Use `create`,
-`update`, `replace`, `rename`, `pause`, `unpause`, `reuse`, `untouched`, or explicitly authorized
-`remove`. `replace` is one governed same-identity action, never remove plus create.
+Use the schema's action/resource vocabulary. A complete snapshot supports comparison even when the
+adapter accepts patches. Google settings-variable changes include consumers of both old and new
+types. Compatible Client reuse records native type/priority and reviewed claim semantics in
+`assertions.client_claim`; see [server assertions](../server/native-assertions.md).
 
-Every delta requires `object_id` and a non-empty `pre_change`. Every executing target action and
-every `reuse`/`untouched` action requires a non-empty `intended` compatibility target. `rename`
-also requires `new_name`. Every mutating action requires an `approval` record that binds the
-approved-input locator, action, object key, requirement IDs, and exact mutation payload hash;
-`replace` requires a reason; and every template mutation records its permission delta. These are
-validation rules, not optional documentation conventions.
-
-Keep the approval record consistent with the reviewed implementation. Changes to action, identity,
-requirements, intended/pre-change state, rename, replacement, permission, or assertions invalidate its
-hash. Reconcile the change with the original approved source before rebuilding the record; request
-new authority only when existing authority does not cover it. The record provides traceability and
-change detection, not independent proof of user approval. Follow the
-[evidence and validation limits](authority.md#evidence-and-validation-limits).
-
-For typed resources (tags, triggers, variables, Clients, and Transformations), retain `type` in
-every applicable intended and pre-change snapshot. Use complete snapshots, even when the adapter
-accepts a patch. A Google settings-variable change must account
-for consumers of its old and new type, including a type change or removal.
-
-Web resource families are the complete supported surface: tag, trigger, variable, built-in variable,
-folder, template, zone, environment, destination, Google tag configuration, container setting, and
-workspace. Server families are Client, tag, trigger, variable, folder, template, Transformation,
-container setting, and workspace. Subtypes remain in intended fields.
-
-High-impact authority is required for deletion/replacement, shared Client claim/priority change,
-broad Transformation, template import/upgrade/permission expansion, settings, Zone/environment,
-and live endpoint cutover. A compatible existing Client may be reused routinely after authoritative
-claim readback; its prevalence alone is not best-practice evidence. A Client reuse row must record
-the native Client type and priority in `intended`, with its reviewed claim behavior in `assertions.client_claim`. See [native server assertions](../server/native-assertions.md). Saved readback compares native fields; the assertion records reviewed semantics, not runtime claim certification.
-
-Every create/update has a current approved or documented constraint. Reject duplicate actions,
-collisions, missing/cyclic dependencies, and cross-target families that do not exist on that target.
-A rerun against final state must resolve completed objects to `reuse` or `untouched`.
+Reconcile changes to the approved source before rebuilding approval records. The record provides
+traceability and drift detection under [evidence limits](authority.md#evidence-and-validation-limits).
+The graph validator checks identity uniqueness, dependency closure and target capability. Final
+convergence proves completed intentions need no further mutations.
 
 ## Map pipeline flow
 
-Each pipeline records sending target IDs, receiving server target, request class, transport owner,
-endpoint reference, exactly one intended claiming Client and its criteria, and the initial-page-load
-transport owner with explicit effective `send_page_view`. The full web decision surface remains
-occurrence-scoped in `page_view_decisions`.
+Declare sender target(s), receiving target, request class, transport owner, endpoint and intended
+claiming Client with criteria. Bind initial-page-load transport and effective `send_page_view`;
+`page_view_decisions` distinguishes occurrence roles.
 
-The endpoint reference must resolve to the endpoint saved on the transport owner. Every linked
-consent topology lists the actual web tags that can emit its event occurrences. Each listed sender
-must either own that same endpoint directly or bind the same destination identity as the transport
-owner and therefore inherit its endpoint. An unrelated tag that merely shares a requirement ID is
-not a proved transporter.
+Every emitting tag either owns the saved endpoint directly or inherits it through the same bound
+destination identity. Link actual emitters in the consent topology. Event flows bind approved
+requirement/source events to transported events and receiver tags. Field-flow identities are
+`(requirement_id, field_scope, destination_field)` and cover each mapped field exactly once:
 
-Each event-flow row binds an approved requirement/source event to the transported event and every
-receiver tag. Every mapped field has exactly one pipeline identity composed of `requirement_id`,
-`field_scope`, and `destination_field`; missing or duplicate identities fail. Each field-flow row resolves:
+`approved source → web variable → wire field/shape → Client proof → Event Data path/shape →
+server owner → template/destination field/shape → missing behavior → runtime verification note`
 
-`approved source -> web variable -> wire field/shape -> claiming Client proof -> Event Data
-path/shape -> server owner -> template field -> destination field/shape -> missing behavior ->
-runtime verification note`
-
-Prove every field, including scalar fields. `items` is an array and `user_data` is an object; never
-encode a universal two-array rule. If shapes change, name the template-local mapper, supported
-server variable, or scoped Transformation owner. Never silently flatten, stringify, truncate, or
-drop a required value or item. A missing design-time source blocks; possible runtime absence is a
-site/dataLayer and recette dependency, not a payload-eligibility CJS or trigger.
-
-The pipeline operation dependencies must include the Client and all receiver consumers. A live
-sender endpoint cutover is high impact and must depend transitively on every required receiver
-operation. Configure and read back the receiver before cutover.
+Use [transport declarations](../pipeline/transport-data-contract.md) for protocol and shape proof,
+and [pipeline ordering](../pipeline/architecture-and-workflow.md#build-receiver-first) for receiver
+and cutover dependencies. The contract records the mechanism; feature guides own its selection.
 
 ## Map consent and deduplication
 
-For new strict/basic gates, the preferred convention is CMP lifecycle/business triggers plus vendor
-blocks, with Additional Consent Checks empty. This is a local default, not the only vendor-supported
-pattern. Preserve a proved existing firing-condition or Additional Consent Checks convention using
-the explicit fields in [CMP consent](../consent/web.md#existing-consent-conventions). Do not stack
-equivalent gates. Built-in template checks remain intrinsic product behavior.
+Populate consent/execution topology fields from the selected [web consent](../consent/web.md),
+[server consent](../consent/server.md) and applicable lifecycle/product guides. Record the exact
+mechanism, signal authority, unknown/denied behavior, transport behavior, event coverage and native
+owner bindings. Built-in template behavior remains distinct from custom enforcement.
 
-An explicitly approved ungated web policy uses `client-policy-ungated` in both consent and execution
-topologies, with `signal_authority: none`, `unknown_state_behavior: explicit-policy`,
-`transport_behavior: always-transported`, server mechanism `none` and no server/transporter bindings.
-`web_enforcement` is `{"mechanism":"none","client_policy":{"grade":"approved-input","locator":"exact client instruction","scope":"approved site, audience and destination scope"}}`.
-Its tag has no blocking triggers or Additional Consent Checks and no pre-CMP behavior. Absence of a
-CMP or a country label never supplies this authority. Report the client policy without asserting a
-legal exemption. Pipeline/server ungated policy is not implemented by this route.
+An approved ungated web policy is represented by `client-policy-ungated` in consent and execution,
+`signal_authority: none`, `unknown_state_behavior: explicit-policy`, `transport_behavior:
+always-transported`, server mechanism `none`, and empty server/transporter bindings. Its declaration is:
 
-For each pipeline destination, record `consent_mode`, `transport_behavior`, exact web mechanism,
-exact server mechanism, signal source, denied/unknown behavior, and event coverage. Server mechanism
-is exactly one of incoming Google-native consent, server-template-native consent, supported server
-Additional Consent Check, server blocking trigger, or none. A destination blocked before transport
-must not receive an equivalent server gate unless intentional double gating is explicitly justified.
+```json
+{"mechanism":"none","client_policy":{"grade":"approved-input","locator":"exact client instruction","scope":"approved site, audience and destination scope"}}
+```
 
-Record dedup only when the same destination occurrence can arrive twice. A `dual-shared-id` route
-binds browser and transporter to one occurrence source, transports it unchanged, and maps exact
-current browser/server field names and companion fields. Purchase uses approved transaction/order
-identity when the product supports it; do not replace it with a generated per-page occurrence ID.
+The native tag has no custom gate or pre-CMP policy under this web-only route. The policy is an
+explicit client decision, with its legal interpretation outside configuration scope.
 
-Other dual events may use an approved supplied identity or the reviewed `generated-event-id`
-route. Generated IDs require an installed-template review, exact consumer field bindings and one
-direct source event without sequencing. See
-[shared generation](../pipeline/browser-server-deduplication.md#configure-shared-id-generation) for
-the `generation` fields and preconditions. Do not create independent browser/server generators.
+For overlapping delivery, use [deduplication](../pipeline/browser-server-deduplication.md) to declare
+one occurrence source and exact browser/transporter/server bindings. Approved shared generation
+uses its documented `generation` structure and installed-template evidence. Purchase and other-event
+identity choices stay with that feature owner.
 
 ## Validate and materialize
 
-Run `scripts/configure_gtm.py validate-contract` before mutation. For analytics, also use
-`scripts/configure_gtm.py conformance` to prove identical requirement IDs, events, timing/filters,
-declared outgoing field set, and approved sources/literals. The scoped native event-parameter checks below
-connect supported implementation fields to that declaration; other structures and automatic
-product behavior remain inspected ownership decisions.
+Run `scripts/configure_gtm.py validate-contract` before mutation. For analytics, run
+`scripts/configure_gtm.py conformance` to check requirement IDs, events, timing/filters, outgoing
+fields and approved source/literal equality. Review current source evidence as well as validator output.
 
-The validated contract deterministically materializes active `configuration-run@8.0` sections.
-Do not hand-edit requirements, pipelines, immutable operation intention/dependencies, payload maps,
-consent topologies, dedup contracts, or publication dependencies; section fingerprints detect
-drift. Adapters may populate baselines, journals, readbacks, comparisons, and results only.
+The contract materializes its active sections into run 8.0. Resolve implementation decisions in the
+contract; [execution](execution.md#materialize-deterministically) owns durable state and fingerprints.
+Each `implementation.field_bindings` row records identity, status, shape compatibility, method,
+GTM resolution, template field and missing behavior. The approved requirement supplies source,
+provenance and shapes; the binding records implementation of those facts.
 
-Resolve field implementation in the contract, not by editing the materialized run. Each
-`implementation.field_bindings` row requires `requirement_id`, `field_scope`,
-`destination_field`, `status`,
-`shape_compatibility`, `mapping_method`, `gtm_resolution`, `template_field`, and `missing_behavior`.
-Deterministic native mapping proof covers explicit scalar GA4 Event (`gaawe`) event parameters
-and Google tag (`googtag`, `gaawc`) configuration settings, excluding `native-template` mappings.
-These require
-`native_binding: {"object_key": "target::tag::name", "field": "lead_type"}`.
-The owner must be an active tag for the requirement. `field` must equal the approved destination
-exactly, including case and punctuation. Configuration bindings resolve local/shared configuration
-settings; event settings cannot establish configuration equality. Native `eventSettingsTable` LIST rows containing
-`parameter` / `parameterValue` MAP cells establish event-parameter equality.
-Shared event settings via native `eventSettingsVariable` / `inheritedEventSettings` references
-are resolved with exact-name local overrides. Configuration tables, metadata, user properties,
-and item fields cannot supply event-parameter proof. The effective value must equal `gtm_resolution`;
-a `direct-dlv` reference must resolve to a represented native `v` variable whose `parameter[name]`
-equals the approved source, with version 2 and no value transformation. Use a scalar value/reference,
-not prose, in `gtm_resolution`.
+### Native mapping proof
 
-User-property and item-parameter scopes, other tag/template structures, automatic `native-template`
-fields, and whole ecommerce payloads remain supported as **agent-reviewed mapping declarations**.
-They do not require a fabricated scalar native binding. Inspect their exact destination namespace,
-source routing, and actual native product/template structure before marking them mapped; record
-that review in the mapping rationale. A supplied binding still requires an exact destination name
-and active owning tag, but does not confer field-equality or source-routing proof outside the
-supported scope. The rendered handoff labels this limitation even when a binding is present.
-Do not fabricate duplicate parameter rows for automatic values or ecommerce passthrough.
-Use the existing payload-mapping enums. The approved requirement supplies source, provenance, and
-source/destination shapes; a binding cannot rewrite them. For example, the Ads carrier maps
-`user_data` with `native-template`, `compatible`, the actual UPD variable reference, the documented
-template field, and explicit omission behavior. Unbound fields are rejected before execution; they
-must not remain pending until finalization. An explicit external/omission decision uses the existing
-mapping status and supporting evidence, rather than an invented binding.
+Deterministic proof covers explicit scalar GA4 Event (`gaawe`) event parameters and Google tag
+(`googtag`, `gaawc`) configuration settings, excluding `native-template` mappings. Supply:
 
-Use only the canonical statuses in [Acceptance](acceptance.md). External site/dataLayer, CMP,
-analytics/media account, credentials, catalog/feed, cloud/DNS, publication, and recette work remains
-separate. Open publication dependencies do not make a saved verified setup `Blocked`.
+```json
+{"object_key":"target::tag::name","field":"lead_type"}
+```
+
+as `native_binding`. The owner is an active tag for the requirement and supported namespace; `field`
+matches the approved destination exactly, including case and punctuation. Provided bindings undergo
+ownership validation at every status before mapped-value proof.
+
+Configuration bindings resolve local/shared configuration tables. Event bindings resolve native
+`eventSettingsTable` LIST rows with `parameter`/`parameterValue` MAP cells, including shared
+`eventSettingsVariable`/`inheritedEventSettings` references and exact-name local overrides. The
+effective native value equals `gtm_resolution`. A `direct-dlv` binding resolves to a represented
+native `v` variable with version 2, exact approved `parameter[name]` and untransformed value.
+Use an actual scalar/reference as `gtm_resolution`.
+
+### Inspected mapping declarations
+
+User/item scopes, other templates, automatic `native-template` fields and whole ecommerce payloads
+use **agent-reviewed mapping declarations**. Inspect exact destination namespace, source routing
+and native product/template structure and record the rationale. A supplied binding establishes its
+owner/name, while field-equality/source proof remains limited to the supported native scope above.
+The rendered handoff preserves that distinction.
+
+Automatic values and ecommerce passthrough use their inspected native mechanism. For example,
+Ads `user_data` uses `native-template`, `compatible`, the UPD variable reference, documented template
+field and explicit omission behavior. External/intentional omission decisions use existing mapping
+statuses with evidence. Pending/blocked fields hold their owners through
+[dependency readiness](execution.md#contain-failures-by-dependency); other ready requirements can proceed.
 
 ## Compact input
 
-`scripts/configure_gtm.py prepare` expands mechanical fields into this same current contract.
-Use it before `scripts/configure_gtm.py run init`; there is no alternate execution or weaker validation.
+Use `scripts/configure_gtm.py prepare` before `run init`. Supply `mode`, `route`, targets, approved
+requirements, evidence and objects, plus the applicable pipeline, consent/execution, page-view,
+first-party-data, inventory, deduplication and field-binding declarations.
 
-Supply `mode`, `route`, `targets`, approved `requirements`, `evidence`, and `objects`. Supply applicable
-consent/execution topologies, page-view decisions, first-party-data routes, pipelines and dedup as
-usual; empty unused sections are generated. `field_bindings` and `execution_mode` are top-level in
-compact input. The default execution mode is `isolated-durable`.
-
-Each object still supplies its action, native intended fields, rationale (`justification`), evidence,
-and risk. Deltas supply exact `object_id` and `pre_change`. The compiler derives `object_key`, binds
-mutation approval hashes to existing requirement authority, and fills target/requirement IDs only
-when there is exactly one possible choice. Multi-target or multi-requirement ambiguity stays explicit.
-It never infers approval, event meaning, consent or a product field.
-
-Execution topologies explicitly carry `consent_topology_ids` linking their destination's
-consent decisions. Page-view decisions explicitly carry `target_id`, even for a single
-target; the compiler cannot infer the owner of a page-view policy. For analytics pipelines,
-`source_event` preserves the approved source trigger and `transported_event` preserves the
-approved destination `event_name`. A declared flow cannot rename that approved event.
-
-Optional `reuse_candidates` holds inspected, redacted, compatible object records in the same shape,
-with action `reuse`. Only candidates reachable through explicit dependencies, semantic references or
-named variable references are included. Retained candidates use the same runtime verification as
-other objects. Candidate input is discovery material, not an authenticated runtime baseline. Raw
-opaque references still need exact resolution; missing semantics fail normal contract validation.
-
-With a [preparation inventory](../adapters/discovery.md), pass
-`--inventory inventory.json` and omit `intended` from explicitly selected `reuse_candidates`.
-Keep each candidate's exact `resource_family`, `name`, target when ambiguous, justification,
-evidence and risk. Include referenced candidate dependencies as usual. The compiler matches the
-approved target identity, requires an exhausted family listing and a unique object, resolves
-native IDs through the inventory, and retains all non-metadata native fields. It does not fill
-mutation bodies, choose consent, declare evidence, or supply missing policy. A supplied `intended`
-remains explicit. Redacted inventory fields remain presence-only evidence; they do not prove
-secret equality or supply credentials. Runtime verification rejects stale compatibility targets.
+Supply each object's scope justification. The compiler derives object keys, binds approval hashes to existing
+requirement authority and fills target/requirement IDs only when unambiguous. It resolves native
+references into dependency keys and materializes explicit `reuse_candidates`. With `--inventory`,
+`reuse_keys` select exact inspected inventory definitions. Supplied intentions and semantic decisions
+remain explicit; redacted values carry presence evidence rather than credentials.
 
 ```powershell
 python "<skill-dir>/scripts/configure_gtm.py" prepare request.json -o contract.json
 python "<skill-dir>/scripts/configure_gtm.py" run init --contract contract.json --run-id RUN-001 --source-locator "Approved input" --output configuration-run.json
 ```
 
-For inventory-assisted preparation, add `--inventory inventory.json` to the first command.
+Add `--inventory inventory.json` for inventory-assisted preparation. Review the compiled delta
+against the approved scope and execute through the same runtime.
 
-Review the compiled delta against the user's approved scope, then execute with the same adapter
-runtime. Existing authorization covers routine mechanical materialization; a hash is not new consent.
-
-The compiler fills source-event trigger declarations only for a sole native `{{_event}} equals X`
-condition matching the linked approved source event. Direct scalar DLV binding fields require a unique
-approved source through an explicit V2 DLV without formatValue transformations, matching shapes,
-and explicit missing behavior. Ambiguous, transformed, consent,
-lifecycle, destination and cross-target decisions remain explicit. New Google settings variables are
-not high-impact solely by type; current consumer analysis still applies.
+Mechanical inference covers a sole native `{{_event}} equals X` matching the approved source event,
+and direct scalar bindings through one explicit untransformed V2 DLV with compatible shapes and
+explicit missing behavior. Ambiguous source, consent, lifecycle, destination and cross-target
+choices require declarations. A new settings variable is assessed by its action and consumer impact.

@@ -1,16 +1,11 @@
 # Analytics tags
 
-For linker and cross-domain changes, read [linker guidance](../web/linker-cross-domain.md).
-
-Implement the approved analytics event names, exact outgoing fields, source mappings, literals and
-timing. Current official documentation establishes technical validity; a valid alternative is an
-advisory, not permission to redesign the plan. See
-[intake and conformance](intake-and-conformance.md).
+Use [intake and conformance](intake-and-conformance.md) for exact approved analytics semantics.
+This route coordinates Google/GA4 feature owners.
 
 ## Read by changed feature
 
-- For every GA4 event: the safety gate and event procedure below, plus
-  [ga4 validity](ga4-validity.md).
+- For every GA4 event: [ga4 validity](ga4-validity.md).
 - For field placement/inheritance: [google fields](google-fields.md).
 - When changing Google configuration, connected destinations, page views, automatic collection,
   diagnostic fields or transport: [ga4 ownership](ga4-ownership.md).
@@ -21,42 +16,14 @@ advisory, not permission to redesign the plan. See
 - For naming and shared values: [organization](../organization.md).
 - For multiple environments/destinations: [routing](../routing.md).
 
-## Apply the GA4 safety gate
 
-Load [Ga4 validity](ga4-validity.md) for every Google tag or GA4 event. Before mutation, validate current
-official names, reserved prefixes, required fields, types, limits, final outgoing parameter/user-
-property counts, item scope, and PII risk. Count inherited Event Settings fields as part of each
-event's outgoing payload.
+## Configure and verify the event
 
-Classify a valid recommendation difference as advisory and preserve the approved contract. Stop an
-invalid or unsafe requirement. Never silently truncate a value, coerce a type, delete a parameter,
-or add a field to remain within a limit.
+Resolve the exact official event classification and its approved event/item field contract through
+[GA4 validity](ga4-validity.md). [Mapping](../data/mapping.md) establishes actual source keys and
+terminal shape; [Google fields](google-fields.md) establishes native placement. Apply the changed
+feature guides above and [linker guidance](../web/linker-cross-domain.md) when attribution/domain
+behavior is affected.
 
-## Configure events from the official schema
-
-For each GA4 event:
-
-1. Open the current GA4 event reference.
-2. Confirm automatic, enhanced-measurement, recommended, ecommerce, or custom classification and compare it with the approved event without substituting it.
-3. Extract each parameter's exact name, requirement status, type, scope, cardinality, and limits.
-4. Compare the approved parameter set with required, recommended, optional, and conditional findings. Block a missing required field; report other differences as advisories and preserve the approved field set.
-5. Validate event-level and item-level placement.
-6. Map each approved destination parameter to a named GTM variable or documented transformation.
-7. Validate a representative resolved event, including all ecommerce items.
-8. Apply the fidelity chain in [tracking-plan conformance](intake-and-conformance.md#prove-exact-conformance).
-9. Retain the current official-source manifest and approved locator for every outgoing field.
-
-When a source key is misspelled, verify that the approved source contract uses that exact key. Name the DLV for the actual source key, then map it to the correctly spelled official GA4 parameter. Do not propagate source typos into destination fields.
-
-Treat `value` and `currency`, transaction identifiers, and `items` according to the exact event reference. Never infer an item parameter from a similarly named event parameter.
-
-## Verify the saved analytics setup
-
-Re-read the saved Google tag, event tags, variables, settings, normal and blocking triggers, folders,
-and all references. Confirm the exact approved event, timing, filter, field set, source/literal, item
-scope, DLV versions, `send_page_view`, consent route, firing option, connected destinations, and
-idempotent rerun through the runtime, following the same fidelity chain.
-
-Keep custom definitions, key-event designation, Enhanced Measurement, data-stream, Google tag
-destination, and publication work separate from the GTM completion claim. Do not claim browser or
-GA4 reporting behavior from saved configuration.
+Carry approved semantics through reviewed native intent, saved comparison and no-op convergence.
+[Acceptance](../core/acceptance.md) separates saved proof from external administration and runtime QA.

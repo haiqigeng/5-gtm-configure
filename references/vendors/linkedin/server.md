@@ -4,8 +4,7 @@
 
 Use LinkedIn Conversions API current official schema and an inspected compatible GTM server
 template. Record conversion rule/account identity, event time, source, user identifiers/hashing,
-click identity, consent, authentication, and request diagnostics. Do not infer the server event from
-the Insight Tag label alone.
+click identity, consent, authentication, and request diagnostics. The current CAPI contract establishes its server event semantics.
 
 For browser/server overlap, verify current LinkedIn dedup requirements and one occurrence-level
 `eventId` across the relevant routes. Checked 2026-09-29: create a separate conversion rule for each

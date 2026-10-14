@@ -1,50 +1,14 @@
 # Client-side GTM object surface
 
-## Contents
+## Identify applicable resources
 
-- [Purpose](#purpose)
-- [Classify the container and adapter](#classify-the-container-and-adapter)
-- [Cover the complete applicable web surface](#cover-the-complete-applicable-web-surface)
-- [Apply mutation authority by risk](#apply-mutation-authority-by-risk)
-- [Handle workspace and shared-object integrity](#handle-workspace-and-shared-object-integrity)
-- [Keep non-web resources outside a web-only route](#keep-non-web-resources-outside-a-web-only-route)
-- [Verify the saved surface](#verify-the-saved-surface)
+Discover the web resource families that supply, control, group, restrict or conflict with the approved
+requirements. Verify account/container/workspace/type/environment and adapter capabilities through
+[discovery](../adapters/discovery.md). Absent resources and unsupported reads are distinct states.
+[Execution](../core/execution.md) owns complete baseline capture for applicable families and safe
+freshness/recovery. Discovery establishes integration evidence; authority establishes mutations.
 
-## Purpose
-
-Treat expert client-side GTM configuration as more than tag creation. Discover every web-container
-object type that can supply, control, group, restrict, or conflict with the requested setup. Load
-this reference whenever the work involves a GTM element beyond an ordinary tag, trigger, or
-user-defined variable, or when adapter coverage is uncertain.
-
-Do not inventory the whole container. Inspect only the applicable object types and the individual
-objects that can affect the requested requirements.
-
-## Classify the container and adapter
-
-Before designing objects:
-
-1. prove the stable account, container, workspace, container type, and environment identity;
-2. confirm that the target is a client-side web container;
-3. discover the adapter's read, create, update, revert, and pagination capability per object type;
-4. distinguish an absent object from an unsupported read operation;
-5. block a required object family when authoritative saved-state readback is unavailable.
-
-Never route a web requirement through server-container clients or Transformation resources merely
-because an API exposes those endpoints.
-
-A web Google tag that sets `server_container_url` remains a client-side object in scope: inspect
-and preserve its browser transport field, measurement/destination identity, consumers, page-view
-owner, and consent topology. The setting routes the browser request to the supplied endpoint; it
-does not by itself create a second independent client request to the normal Google endpoint. The
-receiving server container's clients, transformations, tags, routing, and deduplication remain
-external in a `web`-only run. For an explicitly authorized `pipeline` run, load the server and
-pipeline references and model those receiving objects as a separate target; web authority never
-grants receiver authority implicitly.
-
-## Cover the complete applicable web surface
-
-Use this inventory as a routing checklist, not as permission to mutate every family:
+## Cover the applicable web surface
 
 | Surface | Configuration responsibility |
 | --- | --- |
@@ -58,66 +22,24 @@ Use this inventory as a routing checklist, not as permission to mutate every fam
 | Google tag configuration | Discover Google tag configuration/settings objects and their connected consumers before changing fields. |
 | Google destinations | Read linked destinations and reconcile shared execution and consent. Treat destination linking or movement as high impact and capability-gated. |
 | Zones | Inspect restrictions when they can block the implementation. Configure a zone only with explicit zone authority. |
-| Environments | Inspect environment identity and destination isolation. Create or update an environment only with explicit environment authority; never publish to it. |
+| Environments | Inspect environment identity and destination isolation. Use explicit environment authority under [target authority](../core/authority.md#target-authority). |
 | Container settings | Change consent overview or another container-level setting only when it is directly required and explicitly authorized. |
 
-Use the current official GTM UI/API and container state to determine which rows actually exist for
-the target. Do not assume that MCP, API, export/import, and UI expose identical fields.
+Use current native UI/API/container evidence for actual fields and availability. Readback capability
+is required for each affected family. [Authority](../core/authority.md#target-authority) owns high-impact
+actions and workspace scope; [organization](../organization.md) owns shared-object compatibility;
+[templates](../templates.md) owns template lifecycle.
 
-## Apply mutation authority by risk
+## Keep target ownership explicit
 
-Routine configuration authority covers required tags, triggers, variables, built-ins, folders, and
-compatible installed-template use inside the dedicated workspace. The following high-impact
-families require separate explicit authority:
-
-- creating or changing a Zone, linked-container restriction, or security boundary;
-- creating, reauthorizing, or changing an Environment;
-- linking, moving, or detaching a Google destination;
-- importing or upgrading a template that changes code or permissions for existing consumers;
-- authoring or changing custom-template code;
-- changing a container-level setting with effects outside the requested object graph;
-- removing any object.
-
-If the requested setup depends on one of these actions and authority is absent, keep independent
-routine work judgeable and mark only the affected family `Blocked`.
-
-## Handle workspace and shared-object integrity
-
-Before updating a shared object, enumerate its relevant consumers and prove compatibility for
-destination, source, consent route, environment, template version, automatic behavior, and future
-change ownership. Synchronize workspace state and resolve conflicts only when the resolution is
-fully in scope and preserves unrelated changes.
-
-Do not use a container-wide object listing as a cleanup opportunity. A Zone, environment, template,
-or destination discovered during configuration is integration evidence, not automatic mutation
-scope.
-
-## Keep non-web resources outside a web-only route
-
-In a `web`-only run, do not configure:
-
-- server-container clients or server Transformation objects;
-- receiver-side tags, Conversions API processing, and receiver deduplication;
-- account users and permissions;
-- website snippets or application code;
-- container versions, approvals, Submit, or publication;
-- another container merely because it is linked by a Zone or destination.
-
-Authorized browser event-ID generation and sender bindings remain web-side configuration.
-Use [browser/server deduplication](../pipeline/browser-server-deduplication.md) for sender-only
-preparation, and record the receiver as an external dependency. A web save does not prove
-receiver processing or end-to-end deduplication.
+[Google fields](../analytics/google-fields.md#treat-browser-transport-as-client-side-configuration)
+owns web endpoint placement. Authorized [sender ID preparation](../pipeline/browser-server-deduplication.md)
+remains a web action. Receiver Clients/Transformations/tags belong to an authorized server target
+or an external dependency. Use [server ingress](../server/ingress.md) for that surface and target-scoped
+semantic identity for equally named objects.
 
 ## Verify the saved surface
 
-For every touched or reused object family, read back stable identity, full stored fields, references,
-folder, consent, consumers, environment scope, template/version, and fingerprint when available.
-Confirm that required built-ins are enabled, every reference resolves, high-impact families remain
-untouched unless explicitly authorized, and an identical recomputation is a no-op.
-
-## Keep the server surface separate
-
-This file remains authoritative for web containers. For a server target, load
-[Ingress](../server/ingress.md): Clients and Transformations are server families, server
-triggers evaluate Event Data, and browser built-ins/DOM/dataLayer lifecycle objects do not exist.
-Use target-scoped identity so equally named web and server tags never collide.
+Read back stable identity, full fields, references, folders, consent, consumers, environment,
+template/version and available fingerprints. Confirm required built-ins, supported references,
+authorized scope and no-op convergence through [execution](../core/execution.md).

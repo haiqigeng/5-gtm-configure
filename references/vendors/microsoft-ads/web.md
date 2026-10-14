@@ -1,126 +1,46 @@
 # Microsoft Advertising browser tags
 
-## Contents
+Apply the [media contract](../../media/common.md) and its linked implementation owners.
 
-- [Treat Bing Ads as Microsoft Advertising](#treat-bing-ads-as-microsoft-advertising)
-- [Complete the media brief](#complete-the-media-brief)
-- [Research current UET semantics](#research-current-uet-semantics)
-- [Design the UET object graph](#design-the-uet-object-graph)
-- [Map fields exactly](#map-fields-exactly)
-- [Apply consent](#apply-consent)
-- [Verify the saved Microsoft setup](#verify-the-saved-microsoft-setup)
-- [Official entry points](#official-entry-points)
+## Resolve UET semantics
 
-## Treat Bing Ads as Microsoft Advertising
+Bing Ads/Bing UET refers to Microsoft Advertising unless another product is specified. Preserve
+recognizable compatible existing names; use current terminology for new objects. Establish UET ID,
+account/environment, conversion goal, source action, page-load/custom-event method, required
+category/action/label/value/revenue/currency and dynamic remarketing/feed fields.
 
-Interpret references to Bing Ads or Bing UET as Microsoft Advertising unless the analyst identifies another product. Use current Microsoft terminology in new objects while preserving recognizable existing names when reuse is safer.
+Inspect current official custom-event, parameter, template and remarketing contracts. UET template
+labels, JavaScript parameters and platform goal conditions have distinct meanings. The installed
+Microsoft template/API owns UET initialization, events and consent. The approved deployed CMP
+contract supplies actual lifecycle events. Goal creation remains platform work.
 
-## Complete the media brief
+## Coordinate base, events and fields
 
-Confirm or derive:
+Reuse one compatible base and a stable UET-ID constant where useful. Separate requested custom
+events, actual source actions and necessary dynamic remarketing projections. The base's inherent
+page-load event counts as the page-load owner. Reconcile automatic SPA collection with manual/history
+views. Revenue/currency must satisfy both the browser schema and goal; order identity uses the
+supported browser field when required. Browser and offline/server fields retain separate contracts.
 
-- UET tag ID and advertising account/environment;
-- requested conversion goal and exact business action;
-- page-load versus custom-event measurement;
-- event category, action, label, value, revenue, and currency fields required by the current goal/schema;
-- dynamic remarketing/product-audience requirements and feed identifiers;
-- basic versus explicitly approved advanced UET Consent Mode;
-- separate UET and Clarity consent decisions when Clarity integration or another Microsoft product coupling is present.
+## Resolve UET and Clarity consent separately
 
-Do not assume that sending a UET event creates the Microsoft Advertising conversion goal. Record any platform-side goal configuration as a separate requirement outside GTM unless it is explicitly authorized and tool access exists.
+The [capability map](../../consent/product-capabilities.md) owns behavior classification. Checked
+2026-09-29: [UET guidance](https://learn.microsoft.com/en-us/advertising/msa-help/hlp_ba_conc_uet_consent)
+requires signals in EEA/UK/Switzerland with denied default where enforced. Verify the current rules,
+state inherited at first load, updates after acceptance and later changes/pages. A tag loaded after
+choice needs its installed template's documented page-load inheritance so first dispatch sees the
+current `ad_storage`. Approved basic/advanced policy determines eligibility.
 
-## Research current UET semantics
+Clarity can be standalone or UET-integrated and has its own authorized scope/policy.
+[Consent API V2](https://learn.microsoft.com/en-us/clarity/setup-and-installation/clarity-consent-api-v2)
+uses case-sensitive `analytics_Storage` and `ad_Storage`; regional enforcement began 2025-10-31.
+Its approved advanced route uses documented limited cookieless execution. Assess each execution
+unit against the separate UET and Clarity decisions.
 
-Open the current official UET custom-event, parameter-table, GTM-template, consent, and dynamic remarketing documentation. Verify:
+## Verify
 
-- UET base/page-load behavior;
-- custom-event syntax and supported parameters;
-- conversion revenue and currency fields;
-- product and feed parameter requirements;
-- official GTM template fields/version;
-- Consent Mode settings and default behavior;
-- automatic SPA tracking or other template options.
-
-Do not map GA4 event names or parameters directly to UET without a documented Microsoft field map.
-
-Use Microsoft's current supported UET GTM template and its saved fields. If it is not installed,
-follow the authorized supported-template install path; do not replace it with Custom HTML. Block
-when template install/update authority is unavailable.
-
-Never implement Microsoft Advertising consent defaults, updates, base code, or events with
-`gtag(...)`. Google Consent Mode commands do not configure UET. Use Microsoft's current UET
-template/API fields and the CMP's verified lifecycle; do not invent a
-`microsoft_ads_consent_granted` dataLayer event unless the approved site contract explicitly
-defines that exact event.
-
-## Design the UET object graph
-
-Use a verified constant such as `CST - Microsoft Ads uet_tag_id` when the UET ID is reused.
-
-Configure:
-
-1. one UET base tag when the current architecture requires it;
-2. separate UET custom-event tags for the requested business actions;
-3. vendor-neutral Custom Event triggers;
-4. the shared Microsoft Advertising consent block under the default basic route;
-5. documented dynamic remarketing transformations when applicable.
-
-The UET base tag can have an inherent documented page-load event. Treat that as a vendor-specific exception to the normal no-page-view base-tag preference, document it, and do not add a duplicate manual page-load event.
-
-Inspect automatic SPA tracking before adding history-based or manually generated page-load events.
-
-## Map fields exactly
-
-Build a field-level map from the media request and dataLayer to the current UET parameters. Keep
-template labels, UET JavaScript parameter names, and Microsoft conversion-goal conditions distinct.
-For each field record required/conditional/approved-optional status, type/cardinality, source, GTM
-resolution, installed-template field, consent, and whether it belongs to the browser UET request or
-only to a server/offline API. Do not place server-only fields into the browser tag.
-
-Use the current UET parameter table to determine accepted types and conditional requirements. Do not invent an event category/action hierarchy merely to resemble Universal Analytics.
-
-For revenue conversions, verify the exact revenue/value and currency fields expected by both the UET event and the platform-side goal. Use an actual order ID only where the current browser schema supports and requires it.
-
-Require every design-time required source before mutation, then map runtime values directly. Do not
-add an `Eligible` Custom JavaScript variable, suppress an empty runtime payload speculatively, or
-invent fallback values. Runtime missing data remains a site/dataLayer and recette dependency.
-
-## Apply consent
-
-Checked 2026-09-29 against [Microsoft UET consent guidance](https://learn.microsoft.com/en-us/advertising/msa-help/hlp_ba_conc_uet_consent):
-Microsoft enforces consent signals in the EEA, UK and Switzerland, with denied as the default where
-enforced. Missing a granted update after acceptance can lose conversions. Confirm inherited/current
-consent when UET first loads after a choice, and updates on later pages and changes. Microsoft
-recommends advanced mode; this does not override an approved basic collection policy.
-Clarity has separate consent settings: its [regional enforcement began 2025-10-31](https://learn.microsoft.com/en-us/clarity/setup-and-installation/clarity-consent-api-v2).
-
-Default to basic UET Consent Mode/strict gating:
-
-- block the UET base and event tags until the required vendor consent is granted;
-- fire a page-load/base tag from the verified CMP readiness/grant event and a business tag from its
-  approved Custom Event;
-- use `Block - <CMP> - Microsoft Ads denied`;
-- prove from the static trigger graph that unknown and denied states are expected to keep UET tags blocked.
-
-For a UET tag loaded after the page's consent state has already been established, inspect and use
-the current template's documented page-load consent inheritance option so its first dispatch sees
-the current `ad_storage` state. Do not rely only on a future consent-update event.
-
-Use advanced UET Consent Mode only when explicitly requested and approved. Verify the current official `ad_storage` behavior and official GTM template options, set the documented denied default before events, send updates from the CMP, and remove/avoid a blocking trigger or Additional Consent Check that would defeat approved anonymized denied-state collection.
-
-Do not infer Google Consent Mode's full consent-type set or behavior for UET. Follow Microsoft's current documentation.
-
-If Clarity is present, do not treat it as merely part of UET. Inspect whether it is standalone or enabled through UET and follow current Clarity Consent Mode documentation. Under an explicitly approved Clarity advanced route, its script loads under denied consent and operates with documented limited cookieless behavior. Verify the current case-sensitive Consent API V2 fields, including `analytics_Storage` and `ad_Storage`, and keep Clarity's decision separate from Microsoft Advertising's UET `ad_storage` decision.
-
-Under strict/basic policy, apply the separately approved Clarity block. Under advanced Clarity behavior, do not attach that block merely because UET is blocked. Do not broaden a Microsoft Advertising request into new Clarity collection without explicit scope and approval.
-
-## Verify the saved Microsoft setup
-
-Re-read the UET base and event tags, destination constant, variables, triggers, consent blocks or
-approved defaults/updates, installed-template fields, automatic SPA option, firing settings, and
-references. Confirm the base's inherent page-load behavior has no manual duplicate and an identical
-rerun is a no-op. Keep Microsoft Advertising goals and any separate Clarity configuration outside
-the GTM completion claim.
+Check UET destination, goal/event fields, inherited consent, update timing, automatic SPA and
+page-load ownership. Record platform goals and separately scoped Clarity work in the handoff.
 
 ## Official entry points
 
@@ -133,6 +53,5 @@ the GTM completion claim.
 
 ## Server route
 
-When the exact Microsoft Conversions API product is requested, load
-[Server](server.md). Inspect the supported server template and ID Sync dependency; do
-not copy UET fields or invent a consent-grant dataLayer event.
+For the exact Microsoft Conversions API product, load [Server](server.md). Inspect the supported
+server template, ID Sync dependency and its independent field/consent contract.

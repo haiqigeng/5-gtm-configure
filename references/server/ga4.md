@@ -22,8 +22,7 @@ saved readback. Only expand platform coverage after this stage is green.
 
 The Google Analytics Client is installed by default in new server containers and often needs no
 changes. Verify its type, priority, activation paths/IDs, claim behavior, and generated data.
-Changing priority or activation is high impact. Do not create a second GA4 Client merely for one
-web event tag.
+Changing priority or activation is high impact. Reuse a compatible Client across its request class.
 
 ## Preserve client identification
 
@@ -38,9 +37,8 @@ server-managed identification is suitable. See Google's [GA4 Client setup](https
 For an approved Google tag gateway request, distinguish CDN serving from serving through the
 tagging server. Configure only the authorized GTM portion exposed by the installed Client: current
 Google guidance uses the **Google Tag Manager: Web Container** Client with allowed web container
-IDs, a distinct tag-serving path, and supported compression settings. Do not append that script
-path to `server_container_url`, broaden allowed IDs, or change the GA4 event-ingress Client by
-analogy. Inspect claim/path conflicts and preserve unrelated serving settings.
+IDs, a distinct tag-serving path, and supported compression settings. Tag serving keeps its own path, approved allowlisted IDs and Client independently of the event
+ingress endpoint. Inspect claim/path conflicts and preserve unrelated serving settings.
 
 The website snippet, DNS, CDN/load balancer, server capacity and publication remain external
 dependencies. Serving scripts first-party does not prove collection routing or consent behavior;
@@ -51,7 +49,7 @@ read back GTM settings and hand off separate script/network checks. See the
 
 Preserve the approved analytics event name and field semantics. Decide which measurement identity
 the server tag sends to, whether it inherits Event Data automatically, and any controlled override.
-Do not use server routing to silently redesign the tracking plan. Record GA4 property/admin work as
+[Conformance](../analytics/intake-and-conformance.md) preserves the approved analytics contract. Record GA4 property/admin work as
 external.
 
 ## Handle additional data
@@ -65,8 +63,7 @@ when its scope is intended. `items` and nested `user_data` require exact path/sh
 
 Set Consent Mode in the web container and let consent-aware Google server tags process transported
 signals. Reconcile automatic/manual page view, Enhanced Measurement, and direct-browser GA4 hits so
-one occurrence is not sent through two routes accidentally. Do not invent a generic CAPI `event_id`
-rule for GA4.
+one occurrence is not sent through two routes accidentally. Use Google's product-specific occurrence/duplication contract.
 
 Official entry points:
 

@@ -6,19 +6,18 @@ object graph, preserves approved measurement semantics and consent, and never pu
 
 ## Current release
 
-**[v13.0.1](https://github.com/haiqigeng/5-gtm-configure/releases/tag/v13.0.1)** corrects partial
-execution across shared consent and settings dependencies. Unresolved fields block their actual
-native owner and its dependents; complete shared objects remain available to ready requirements.
-Inspection, checkpoints and execution share that decision. Closed record structure has one schema
-owner, including direct declaration APIs. See the [changelog](CHANGELOG.md) and
-[offline evaluation](docs/release-13.0.1-validation.md).
+**[v13.1.0](https://github.com/haiqigeng/5-gtm-configure/releases/tag/v13.1.0)** consolidates the
+instruction system around explicit rule owners. Core and vendor guides describe required target
+states and link to shared mapping, identity, consent and execution mechanics. Human reports now
+show the same blocker and recovery frontier as machine inspection. See the
+[changelog](CHANGELOG.md) and [offline re-audit](docs/release-13.1-validation.md).
 
 Only `configuration-contract@10.0` and `configuration-run@8.0` are supported. Create fresh contracts
 and runs from approved inputs. Obsolete commands and schema migrations are intentionally absent.
 
 ## Install
 
-Download `configure-gtm-v13.0.1.zip` from the release and extract its `configure-gtm` folder into your
+Download `configure-gtm-v13.1.0.zip` from the release and extract its `configure-gtm` folder into your
 host's skills directory. Replace the previous skill folder completely so removed paths do not remain.
 Keep any active run artifacts separately; they are not installation files.
 
@@ -101,13 +100,13 @@ python -m pip install -e ".[dev]"
 python -m ruff format --no-cache --check scripts tests tools
 python -m ruff check --no-cache scripts tests tools
 python -B -m pytest tests -q -p no:cacheprovider
-python tools/check_release.py --tag v13.0.1
-python tools/build_skill_package.py --output dist/configure-gtm-v13.0.1.zip
+python tools/check_release.py --tag v13.1.0
+python tools/build_skill_package.py --output dist/configure-gtm-v13.1.0.zip
 git diff --check
 ```
 
 CI runs on Linux/Python 3.11 and Windows/Python 3.13, with Node.js 22 and PowerShell 7 for relay tests.
-Tagging the checked commit `v13.0.1` triggers release validation and deterministic archive creation.
+Tagging the checked commit `v13.1.0` triggers release validation and deterministic archive creation.
 The workflow publishes the current changelog section, archive and SHA-256 checksum. The archive
 contains the skill and its self-contained regression suite, excluding repository-only tooling and
 the broader development fixtures.

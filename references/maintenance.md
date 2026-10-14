@@ -27,6 +27,9 @@ references. Feature predicates live with execution, page views, first-party data
 `core/validation.py` owns canonical JSON hashing (`sha256:<hex>`) and typed accessors; raw delivery
 artifact hashes retain their producer-defined byte-hash format.
 Reference folders follow the task's decisions, with separate host and vendor surfaces loaded on demand.
+Feature guides link to shared instruction owners for mapping, consent, identity and execution.
+The renderer consumes the state inspector's execution frontier; report-specific presentation
+retains escaped values and the same readiness/recovery semantics.
 
 Repository maintainers run `tools/check_release.py` for architecture, schema versions, routed links,
 file labels, CLI usage and package checks. `tools/check_architecture.py --output ownership.json`
@@ -35,6 +38,6 @@ The gate detects literal copies of complete closed schema key sets in local or m
 Tests are grouped by behavior owner; reusable native graphs and
 adapters live in `tests/support`. Repository-only checks and fixtures stay outside the installed skill.
 
-Current release is 13.0.1, contract 10.0, run 8.0. No old entry points, schema migrations or
+Current release is 13.1.0, contract 10.0, run 8.0. No old entry points, schema migrations or
 compatibility fallbacks are shipped. Re-author a pending change with the current model; retain
 historical executed artifacts as evidence and resolve uncertain writes before starting another run.

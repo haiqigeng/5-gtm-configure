@@ -1,22 +1,9 @@
 # Naming and reuse
 
-## Contents
-
-- [Follow type, owner, and purpose](#follow-type-owner-and-purpose)
-- [Name source and destination independently](#name-source-and-destination-independently)
-- [Reuse by semantic equivalence](#reuse-by-semantic-equivalence)
-- [Prefer references over repeated literals](#prefer-references-over-repeated-literals)
-- [Use lookup tables only when applicable](#use-lookup-tables-only-when-applicable)
-- [Organize folders clearly](#organize-folders-clearly)
-- [Add notes where they preserve non-obvious decisions](#add-notes-where-they-preserve-non-obvious-decisions)
-
 ## Follow type, owner, and purpose
 
-Use an explicit analyst naming decision when supplied. Otherwise use the skill patterns below.
-Preserve an existing container convention only as a presentation choice when it is consistent within
-the relevant object family, clearly communicates type/owner/purpose, and does not weaken the skill
-standard. Do not infer a global convention from a few legacy objects or let naming determine the
-technical architecture.
+Use the explicit analyst naming choice, otherwise a coherent clear convention across the relevant
+object family, otherwise these patterns. Naming presents the selected architecture.
 
 | Object type | Pattern | Example |
 | --- | --- | --- |
@@ -31,100 +18,46 @@ technical architecture.
 | Regex lookup table | RLT - purpose | `RLT - environment by hostname` |
 | Google settings variable | Vendor - setting type | `GA4 - Config Setting`, `GA4 - Event Setting` |
 
-Keep vendor/platform first for tags and vendor-owned special settings. Keep variable type first for ordinary variables. Use snake_case for source event names and field-oriented values. Preserve official destination event casing when the vendor requires another form.
-
-Use a short stable acronym only when the full type/vendor name is unwieldy and the container recognizes it. Do not invent prefixes such as `GCS` for GA4 configuration.
-
-## Name source and destination independently
-
-Name a DLV after the actual source key, including an intentional source typo if that is the real contract. Use the official destination name in the tag field, not in a misleading DLV rename.
-
-Name a vendor transformation after its output, not its input. For example, use `CJS - Meta - contents` for the Meta-formatted result.
+Tags and vendor-owned settings lead with vendor; ordinary variables lead with type. Source events
+and field values use snake_case while destination casing follows the official product. Stable
+recognized acronyms can shorten unwieldy labels. A DLV names the actual source key, including a
+contractual typo; a transformation names its destination output.
 
 ## Reuse by semantic equivalence
 
-Select the target implementation from the applicable skill playbook and current official/template
-documentation before adopting local patterns. Then inspect candidates and all their consumers.
-Classify each candidate as:
+Select current reference architecture before evaluating existing candidates and all consumers.
+Classify them as `conformant`, `conformant-with-naming-debt`, `nonconformant`, `conflicting` or `unknown`.
+Reuse either conformant class when type/output, business/vendor owner, shape/missing behavior,
+timing/scope, firing/consent, template/destination, environment and expected change lifecycle align.
+Harmless naming debt can remain until an authorized rename.
 
-- `conformant`: passes the selected reference architecture and every applicable static criterion;
-- `conformant-with-naming-debt`: functionally conformant, with only harmless naming inconsistency;
-- `nonconformant`: uses an outdated, brittle, over-complex, unsupported, or incorrect pattern;
-- `conflicting`: would duplicate, suppress, broaden, or otherwise interfere with the target design;
-- `unknown`: critical behavior or consumers cannot be established.
-
-Reuse only `conformant` or `conformant-with-naming-debt` candidates, and only when these dimensions align:
-
-- object type and terminal output;
-- business and vendor ownership;
-- data type, shape, and null behavior;
-- source timing and event scope;
-- normal and consent firing behavior;
-- template/version and destination compatibility;
-- environment/hostname scope;
-- expected future change path.
-
-Matching names or values alone are insufficient. Existing prevalence is not evidence of best
-practice. Two IDs with the same current string can require separate constants when they belong to
-different destinations or owners. Conversely, do not duplicate a fully conformant object merely
-because its name is imperfect; reuse it and report naming debt unless renaming is authorized.
-
-Do not reuse a nonconformant or unknown object. Do not add a clean parallel implementation around a
-known conflicting tag, trigger, consent path, or automatic event. Update or disable the conflicting
-object only when the authorized scope permits it; otherwise block the affected requirement and state
-the exact decision needed. This is safe integration, not container cleanup.
+Independent owners can require separate constants even for equal current strings. Conflicting or
+unsupported existing paths require an authorized update/disable or a blocker on the affected
+requirement. This integration decision applies to the requested scope.
 
 ## Prefer references over repeated literals
 
-Use a constant or settings variable when it makes a stable value visible, reusable, and safer to change. Typical candidates include measurement IDs, pixel IDs, UET IDs, conversion IDs/labels, and a genuinely fixed currency.
-
-Do not force a constant for every literal. Keep an event-specific value on the tag when a reference adds indirection without reuse or clarity.
-
-## Use lookup tables only when applicable
-
-Actively evaluate a LUT/RLT whenever multiple environments, hostnames, destinations, currencies,
-event families, product groups, or other real inputs map deterministically. Create one when:
-
-- multiple real input scenarios exist;
-- the mapping is deterministic;
-- default/no-match behavior is safe and explicit;
-- it reduces duplication or clarifies environment/vendor mapping;
-- representative cases can be tested.
-
-Apply the same rule to analytics and media. Do not use a table for a single mapping or force unrelated scenarios together.
-
-Never use a production analytics or media destination as the table's default/no-match result. Load
-the multi-destination routing playbook when destination identity, environment, brand, region, or
-consent varies; separate tags when a table would hide incompatible ownership or behavior.
+Constants/settings expose stable values where reuse or clarity justifies the reference. Event-specific
+literals stay local when that is the clearest ownership. LUT/RLT represents multiple real deterministic
+scenarios with explicit safe no-match behavior and representative tests.
+[Routing](routing.md) owns destination/environment selection and compatible consumer boundaries.
 
 ## Organize folders clearly
 
-Follow an existing folder model only when it is coherent and compatible with the selected
-best-practice architecture. For a configuration that creates or owns several related objects,
-create or reuse one shallow folder by vendor/platform or implementation workstream. Keep tags,
-triggers, and variables together when one workstream owns them unless the coherent container model
-separates object families.
+Reuse a coherent folder model or one shallow vendor/workstream folder for related owned objects.
+Keep its tags/triggers/variables together unless the compatible existing model separates families.
+An isolated object can remain without a new folder. The approved organization scope determines
+membership; record and verify native folder references.
 
-Do not create a folder for one isolated object when it adds no clarity. Do not create deep nesting,
-duplicate an equivalent folder, or move unrelated existing objects merely to make the workspace
-look tidy; that is cleanup scope. Record the intended folder in the configuration map before
-mutation and verify the saved folder reference.
+## Preserve non-obvious decisions
 
-## Add notes where they preserve non-obvious decisions
-
-Use object notes/descriptions when supported to record a critical source event, vendor schema decision, consent exception, template dependency, or temporary blocker. Keep notes concise and free of client secrets or personal data.
-
-Do not duplicate the entire configuration result inside every object.
+Concise supported notes capture material source, schema, consent, template or blocker decisions.
+The run remains the complete result; notes follow its privacy rules.
 
 ## Name target ownership without duplicating semantics
 
-Keep existing web naming defaults. For server objects, make the family and destination role clear,
-for example `Client - GA4 - Web transport`, `EDV - transaction_id`, `Server - Meta - Purchase`, or
-`Transformation - Meta - Item projection`. Use target-scoped semantic keys internally rather than
-forcing target IDs into every visible name.
-
-Reuse one compatible Client for a request class and one Event Data variable for an identical path;
-do not create one Client per web tag. Use a shared endpoint Constant/LUT only when it provides real
-reuse or environment routing, and LUT/RLT for deterministic routing rather than decorative
-machinery. Keep folders shallow and destination-oriented. Never reuse a broad Transformation or
-secret-bearing template merely because its name looks compatible.
+Server names identify family/destination, for example `Client - GA4 - Web transport`,
+`EDV - transaction_id`, `Server - Meta - Purchase`, `Transformation - Meta - Item projection`.
+Internal semantic keys carry target scope. Reuse compatible Clients per request class and Event
+Data variables per identical path under the same equivalence analysis, including Transformation
+consumer scope and secret/template ownership.

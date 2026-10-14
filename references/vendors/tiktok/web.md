@@ -1,86 +1,38 @@
 # TikTok Pixel browser tags
 
-## Complete the media brief
+Apply the [media contract](../../media/common.md) and its linked implementation owners.
 
-Confirm or derive:
+## Resolve TikTok semantics
 
-- TikTok Pixel ID, Ads account, and environment;
-- requested business action and optimization/reporting/audience use;
-- current standard event or justified custom event;
-- catalog/product-ID convention and shopping objective;
-- required value, currency, content fields, order ID, and item arrays;
-- Event Builder, automatic events, or existing partner integration;
-- automatic/manual Advanced Matching request;
-- CMP and strict/basic consent policy or explicitly requested TikTok Pixel cookie-consent behavior.
+Establish Pixel/account/environment, business action and optimization/reporting/audience use,
+current standard/custom event, catalog/SKU/item-group convention, shopping objective and selected
+matching scope. Research event code/meaning, conditional fields, types/enums, custom-name limits,
+base/event dependencies, catalog/ROAS/Video Shopping requirements and installed template capability.
+Current sources supply the event catalogue at implementation time.
 
-## Research current TikTok events and parameters
+## Coordinate collection owners
 
-Open the current official TikTok standard-events page, parameter reference, custom-event rules, GTM event-tag guide, and installed template documentation. Extract:
+Reconcile the existing base, site/partner paths and installed automatic behavior. A reused
+`CST - TikTok pixel_id` can own stable identity. Event tags use approved source Custom Events, also
+recommended in TikTok's GTM guidance. A base template's inherent page event counts as its occurrence
+owner. Inspect current Events Manager automatic/website features, Event Builder, partner/CMS and SPA
+collection before selecting manual events; changes to existing owners retain their own authority.
 
-- exact standard event code and meaning;
-- recommended, required, and conditionally required parameters for the selected objective;
-- accepted type, enum, currency, array, and object shape;
-- reserved custom-event names and naming limits;
-- Pixel base/event dependency and template fields;
-- catalog/ROAS/Video Shopping requirements;
-- current cookie, consent, and Advanced Matching behavior.
+## Map TikTok commerce and consent
 
-Use the current supported TikTok Pixel template when available. If it is absent, follow the
-authorized supported-template install path; do not substitute Custom HTML or remembered pixel code.
-Block when installation/update authority is unavailable.
+Treat `content_id`, `content_ids`, `contents`, `content_type`, value, currency and order fields as
+separate TikTok contracts. Objective-specific rules determine exact shape, enum, catalogue identity
+and complete item projection. Matching follows [identity](../../data/identity.md), including
+approved automatic collection scope and data-sharing terms.
 
-Do not rely on a static list in this skill. TikTok revises its events and parameters.
+TikTok cookie controls are classified by the
+[product capability owner](../../consent/product-capabilities.md). A selected native route requires
+its documented request, storage, data-use and revocation behavior in the approved policy.
 
-## Design the Pixel object graph
+## Verify
 
-Use a verified `CST - TikTok pixel_id` when appropriate. Ensure one compatible Pixel initialization path exists, reusing a compatible GTM base tag, site code, partner integration, or template behavior. Create a new GTM base tag only when initialization is in scope and no compatible path exists. Configure requested event tags separately and use the vendor-neutral Custom Event trigger; TikTok's current GTM guidance also recommends a GTM custom event for event tags.
-
-Do not make the base tag send a page-view event by default. Configure a separate official page-view event only when requested and after inspecting Event Builder, automatic event detection, partner/CMS integrations, existing Pixel code, and automatic SPA behavior. If the current official base code or selected template inherently sends a page view, document that vendor exception and prevent a duplicate separate or history-based page view.
-
-## Map commerce and content fields exactly
-
-Treat `content_id`, `content_ids`, `contents`, `content_type`, value, currency, and order fields as separate contracts. Verify the current page because requirements can vary by objective.
-
-When the current schema requires arrays:
-
-- preserve every approved product ID;
-- return the documented array/object structure even for one item;
-- map the catalog's actual SKU or item-group convention;
-- preserve exact types and allowed enums;
-- test empty, one-item, and multi-item cases.
-
-Do not assume Meta's field shapes are valid for TikTok merely because some parameter names are similar.
-
-## Avoid automatic and manual duplicates
-
-Inspect the current TikTok Events Manager automatic/website event features, partner installations,
-and existing GTM tags using the terminology and controls visible now. Choose one browser collection
-source for the action. If an automatic rule and a proposed manual event overlap, do not add the
-manual event until the media owner selects the intended source and any removal or disablement of the
-overlap is separately authorized. Do not preserve dated feature labels as a static capability
-catalogue. For authorized browser sender preparation, follow the
-[browser/server deduplication route](../../pipeline/browser-server-deduplication.md). Receiver-side
-implementation and end-to-end deduplication verification remain external to web-only work.
-
-## Configure Advanced Matching only explicitly
-
-Do not enable automatic or manual Advanced Matching by default. Require explicit approval, verify accepted identifiers, source, normalization, hashing, automatic field scanning, and data-sharing terms from current official documentation. Follow the first-party-data reference.
-
-## Apply consent
-
-Use strict/basic CMP gating by default for the Pixel base and all event tags. Attach the complete approved TikTok block set and prove from the static trigger graph that Pixel tags are expected to remain blocked for unknown or denied consent.
-
-TikTok documents a Pixel cookie-consent mode and cookie enable/disable controls. Classify that first as `native cookie-control`, not automatically as advanced denied-state measurement. Cookie suppression does not prove which events, fields, identifiers, or requests continue, nor that TikTok applies an advertiser-specific model.
-
-Use a TikTok-native limited-data route only when explicitly requested and current official product/template documentation establishes the complete denied-state request, storage, data-use, and revocation behavior approved by the client. Otherwise retain the strict/basic block. Do not assume that enabling Google Consent Mode alone gates or changes a third-party TikTok template.
-
-## Verify the saved TikTok setup
-
-Re-read the Pixel base/event tags, template version and fields, destination constant, ecommerce
-mapping, normal and blocking triggers, advanced-matching settings, current automatic-event overlap,
-firing options, folders, and references. Confirm one initialization path, every
-required item, and an idempotent rerun. Keep platform-side Event Builder, catalog, optimization, and
-publication work separate.
+Review saved Pixel/event identities, fields, complete projections, automatic/SPA ownership,
+matching and consent. Record Event Builder, catalog and optimization work as external dependencies.
 
 ## Official entry points
 
@@ -95,6 +47,5 @@ publication work separate.
 
 ## Server route
 
-For TikTok Events API, load [Server](server.md). Prefer and inspect the vendor-generated GTM
-web/server integration when applicable; otherwise prove one shared dedup owner across the exact
-browser and server templates.
+For TikTok Events API, load [Server](server.md). Inspect the vendor-generated web/server integration
+when applicable and prove the shared occurrence owner across the exact templates.

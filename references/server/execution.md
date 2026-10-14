@@ -14,8 +14,7 @@ Use [native assertions](native-assertions.md) for the exact native/review bounda
 ## Trigger from Event Data
 
 Use server Custom Event triggers or exact server variable conditions against generated Event Data.
-Do not copy web click, form, DOM-ready, history, scroll, timer, visibility, YouTube, or dataLayer
-trigger logic. A server all-events trigger is acceptable only for a destination designed to process
+The server event model comes from the claiming Client. A server all-events trigger is acceptable only for a destination designed to process
 all claimed events; a vendor conversion tag normally uses the exact transported event and any
 approved filter.
 
@@ -24,8 +23,7 @@ approved filter.
 Prefer automatic event-data mapping when the native/template tag documents it. Otherwise use a
 direct Event Data variable for one key path, a supported template mapping table for a destination
 projection, or a narrow server variable template. Constants are appropriate for stable IDs and
-safe references, not literal credentials. Never assume a nested dataLayer object survives the
-claiming Client.
+safe references, not literal credentials. Prove nested shape through the claiming Client's Event Data contract.
 
 ## Configure tags from their own schema
 
@@ -39,4 +37,4 @@ template exists.
 
 Bind semantic trigger and variable references to the exact saved tag fields. Read back returned
 IDs, translate them into target-scoped semantic references, and compare the whole intended object.
-Do not synthesize web built-in trigger IDs in a server graph.
+Use authoritative server native IDs for every reference.

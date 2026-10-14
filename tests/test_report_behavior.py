@@ -245,3 +245,57 @@ class TestTransportAndState(fixture_transport_and_state.UtilityEvolutionTestFixt
                 run, operation_id=operation["operation_id"], state="skipped", note="Not implemented"
             )
         self.assertEqual(run["run"]["status"], "Deferred")
+
+
+def test_report_surfaces_field_blocker_before_object_details():
+    from copy import deepcopy
+
+    from gtm_configure.runtime.state import create_from_contract, inspect_document
+    from support.contracts import with_complete_baselines
+    from support.identity import user_id_contract
+
+    contract = user_id_contract()
+    requirement = contract["requirements"][0]
+    field = deepcopy(requirement["configuration_fields"]["user_id"])
+    field["destination"] = "other"
+    requirement["unresolved_fields"] = {"destination_pending": field}
+    run = with_complete_baselines(
+        create_from_contract(contract, run_id="REPORT", source_locator="synthetic")
+    )
+    inspection = inspect_document(run)
+    assert inspection["blocked_operations"]
+    output = fixture_durable_evidence.render_markdown(run)
+    summary = output.split("## Targets and baseline")[0]
+    assert "destination_pending" in summary
+    for operation in inspection["blocked_operations"]:
+        assert f"Blocked {operation}:" in summary
+    assert "Ready operations: none" in summary
+    assert "Resumable: true" in summary
+
+
+def test_report_tracks_uncertain_write_frontier_through_saved_recovery():
+    run = fixture_durable_evidence.materialize(fixture_durable_evidence.valid_web_contract())
+    operation = next(item for item in run["object_changes"] if not item["dependencies"])
+    for state in ("in_progress", "uncertain"):
+        run = fixture_durable_evidence.checkpoint_operation(
+            run,
+            operation_id=operation["operation_id"],
+            state=state,
+            note="Synthetic dispatched write with unresolved outcome",
+        )
+    summary = fixture_durable_evidence.render_markdown(run).split("## Targets and baseline")[0]
+    assert "Resumable: false" in summary
+    assert f"Readback required {operation['operation_id']}" in summary
+    assert "before replay" in summary
+    recovered = fixture_durable_evidence.checkpoint_operation(
+        run,
+        operation_id=operation["operation_id"],
+        state="verified",
+        note="Fresh authoritative readback matched",
+        saved=fixture_durable_evidence.expected_graph(operation),
+    )
+    summary = fixture_durable_evidence.render_markdown(recovered).split("## Targets and baseline")[
+        0
+    ]
+    assert "Resumable: true" in summary
+    assert "Readback required" not in summary

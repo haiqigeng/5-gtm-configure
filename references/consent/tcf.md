@@ -5,8 +5,7 @@
 Load this route only when the approved CMP/site architecture uses IAB Europe TCF for the
 client-side web container. Verify the applicable framework/policy version, effective dates, CMP
 support, and deployed signal contract from current primary sources. An announced newer version or
-transition deadline does not by itself prove that this deployment must already use it. Do not
-freeze a "current" version in configuration instructions or implement a remembered mapping.
+transition deadline does not by itself prove that this deployment must already use it. Current deployment evidence determines the applicable version and mapping.
 
 This skill connects a confirmed CMP signal to saved GTM configuration. It does not decide whether
 TCF applies, select legal bases, choose purposes/special features, approve vendors, certify the CMP,
@@ -34,15 +33,13 @@ missing or contradicts current product requirements, mark only the affected rout
 4. Make unknown, unavailable, malformed, and incomplete required state block under the basic route.
 5. Keep the block event scope compatible with every consumer's normal trigger.
 6. If Google Consent Mode is also used, map the approved CMP state to Google defaults/updates through
-   the supported CMP template; do not infer one system's values from the other.
+   the supported CMP template with explicit approved cross-system bindings.
 7. Pass Google Additional Consent only through the documented CMP/Google path when it is actually
    part of the approved implementation.
-8. Apply change and revocation behavior to future executions; do not claim GTM can unload a vendor
-   script that already ran.
+8. Apply [revocation lifecycle](lifecycle.md#handle-revocation) to future invocations and already-loaded code.
 
-Do not parse a TC string in Custom JavaScript, reconstruct it, store it in a constant, or create
-purpose/vendor decisions from a generic cookbook. Do not equate a present TC string with permission
-for the destination.
+The supported CMP owns TC-string production, interpretation and lifecycle. Destination eligibility
+uses its approved exposed vendor/purpose predicate, including every required state component.
 
 ## Readback
 

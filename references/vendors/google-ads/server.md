@@ -12,8 +12,7 @@ Only when enhanced conversions are explicitly in scope, map approved `user_data`
 server Event Data. Record normalization/hash ownership and external Google Ads activation. Prefer
 the narrowest documented consumer and timing: an event override for conversion-page data, a
 User-Provided Data Event route for approved earlier-page capture, or tag-wide collection only when
-the current Google tag setup explicitly authorizes that wider lifecycle. Enumerate every effective
-consumer; never widen user data merely because one destination can consume it.
+the current Google tag setup explicitly authorizes that wider lifecycle. Enumerate every effective consumer under the approved feature scope.
 
 For earlier-page capture, configure the native UPD variable on the actual capture-event sender
 when its value first becomes available. The documented event-level `user_data` override can carry
@@ -24,10 +23,9 @@ and [Google event-override guidance](https://support.google.com/google-ads/answe
 
 Treat conversion tracking and remarketing as separate native server tag routes. For remarketing,
 prove the current Google Ads Remarketing tag, conversion ID, GA4 Client/Event Data input, trigger,
-and browser-tag migration disposition. Do not silently reuse conversion parameters as remarketing
-parameters or retain an identical browser remarketing tag without an explicit overlap decision.
+and browser-tag migration disposition. Remarketing uses its own native parameter contract and an explicit browser-overlap disposition.
 
-Google server migration guidance owns duplication: do not add a generic CAPI event ID. Reconcile or
+Google server migration guidance owns duplication and its exact occurrence fields. Reconcile or
 remove an equivalent browser conversion tag only with explicit disposition authority. Consent Mode
 is configured web-side and processed by consent-aware Google server tags.
 

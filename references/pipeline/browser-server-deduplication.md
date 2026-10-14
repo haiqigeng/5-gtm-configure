@@ -12,8 +12,7 @@
 
 Create a dedup contract when the same destination event can reach the same platform through more
 than one ingestion route. Choose `single-channel`, `server-replaces-browser`, `dual-shared-id`,
-`platform-native`, or `not-applicable` from current product evidence. Never add `event_id` merely
-because another CAPI vendor uses it. A generic `dual-shared-id` contract is invalid for Google Ads
+`platform-native`, or `not-applicable` from current product evidence. The exact product contract determines its occurrence fields. A generic `dual-shared-id` contract is invalid for Google Ads
 or Floodlight: use their current product-specific replacement/duplication mechanism and fields.
 
 ## Choose one occurrence identity
@@ -35,8 +34,8 @@ For `dual-shared-id`, use one value everywhere:
 4. If none meets the occurrence and delivery contract, keep overlap blocked or use the approved
    single delivery channel.
 
-The source value may map to different browser and server field names. Do not reuse a session/user
-ID across occurrences, generate a second server ID, or create independent random generators.
+The source value may map to different browser/server fields. One occurrence has one shared stable
+identity, distinct from user/session identity and preserved unchanged through retries and receivers.
 
 A template-native source qualifies only when its reviewed behavior produces one shared value for
 the exact occurrence and execution paths. Two references to a variable do not themselves prove
@@ -72,7 +71,7 @@ template over writing a random Custom JavaScript function. Stape's
 not a universal requirement or Google endorsement. Inspect its current code/version, permissions,
 missing-event behavior, window state and collision limitations. Its current implementation combines
 page state with the GTM event index; it is not a guaranteed UUID or a stable business/order ID.
-Do not invent another algorithm from `gtm.start` or assume randomness on every evaluation is shared.
+The inspected generator contract establishes per-occurrence stability across all consumer evaluations.
 
 Use `source_type: "generated-event-id"` with `strategy: "dual-shared-id"`. Its `generation` record
 applies even when the generator variable already exists; `template-native` is not a way to bypass
@@ -88,12 +87,11 @@ with the saved native type, and evidence that repeated reads on one event are st
 events receive distinct IDs. Include the installed template as a `reuse`/`untouched` operation with
 its authoritative `object_id` and full inspected `templateData`; the generator variable depends on
 it. If installation is needed, complete the separately authorized template import and readback
-first, then use its observed native type in the configuration contract. Do not guess an ID for a
-template not yet saved. Follow [template governance](../templates.md).
+first, then use its observed native type in the configuration contract. Its saved authoritative ID supplies the native type binding. Follow [template governance](../templates.md).
 
-Bind every browser and transporter consumer's actual native ID field to that one variable. They
-must use the same direct source-event triggers in one web container, once per event. Do not use
-this route with tag sequencing, consent replay, separate events/containers, or purchase identity.
+Bind every browser and transporter consumer's actual native ID field to that one variable. This generated-ID route covers the same direct source-event triggers in one web container, once
+per event. Sequencing, replay, cross-event/container and purchase routes require a supplied stable
+identity materialized upstream.
 Inspect the complete tag inventory for inbound setup/cleanup references as well. Stape's
 [sequencing warning](https://stape.io/blog/gtm-tag-sequencing-event-id-fix) documents a mismatch in
 sequenced paths. Those paths require an ID materialized upstream and then mapped as a supplied
@@ -109,8 +107,8 @@ browser execution, cross-request deduplication or random uniqueness.
 Open current official product guidance and the installed template. The source is vendor-neutral,
 but the destination fields, companion identifiers, event names, assets, and windows are not. For
 example, Snap currently distinguishes browser `client_dedup_id`, CAPI `event_id`, browser
-`transaction_id`, and CAPI `custom_data.order_id`; do not collapse those labels even when values
-match.
+`transaction_id`, and CAPI `custom_data.order_id`; retain each documented role independently of
+value equality.
 
 ## Prove runtime equality externally
 

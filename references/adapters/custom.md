@@ -8,8 +8,7 @@ pagination receipts, drift checks, write checkpoints, recovery, comparisons and 
 Adapters transport and normalize authenticated observations; they do not decide success.
 
 Identity is read from authenticated workspace and container metadata, including container type,
-and must match the authorized target at each execution boundary. Never substitute caller-assigned
-identity. Discover get/list/create/update/remove per family independently; unsupported actions
+and matches the authorized target at each execution boundary; the authenticated observation owns identity. Discover get/list/create/update/remove per family independently; unsupported actions
 block only their dependency subtree. Client and Transformation support does not follow from tag
 support. Scope is governed by [authority](../core/authority.md).
 
@@ -28,7 +27,7 @@ replaced by a targeted GET. A partial native body can use a targeted GET after i
 ### Protocol return shapes
 
 The protocol is defined in `scripts/gtm_configure/runtime/engine.py` and
-`runtime/adapter_protocol.py`. Return these structures; never print raw replies:
+`runtime/adapter_protocol.py`. Return these structures through the private adapter boundary; persisted diagnostics use sanitized evidence:
 
 | Method | Return value |
 | --- | --- |
@@ -41,7 +40,7 @@ The protocol is defined in `scripts/gtm_configure/runtime/engine.py` and
 In a readback graph annotate each native body with `target_id` and `object_type`, preserving
 its native `type`, native ID, and all material configuration fields. Include referenced trigger,
 folder, and sequencing objects needed to resolve IDs. A mutation receives the operation record;
-send only its native intended snapshot through the selected API, never its assertions or journal.
+send its native intended snapshot through the selected API. Assertions and journals remain runtime records.
 Register the adapter with `TargetAdapterRegistry.register(target, adapter, capabilities)` where
 capabilities map each inspected family to supported actions such as `{"folder": {"list": true,
 "get": true, "update": true}}`. These declarations do not replace authenticated discovery.
@@ -56,13 +55,15 @@ separately. Capture baseline evidence through the runtime rather than authoring 
 Analyze reuse and closure locally. Immediately before a write re-read the target; refresh shared
 consumers where applicable. After writing read back the object. A conflict, external change,
 authentication change or pagination anomaly can justify refreshing a family; avoid repeated full
-inventory reads during routine work. The current MCP adapter still relists the affected family
-before each create to establish fresh absence; it does not infer absence from a stale baseline.
+inventory reads during routine work. The MCP adapter establishes planned-create absence from its exhausted family cache, updated by
+successful current-run writes; an incomplete cache requires listing. Ambiguous dispatched creates
+use authoritative recovery reads. Final identity inventories detect concurrent name conflicts,
+so concurrent writers can leave partial unpublished changes before detection.
 Updates/removals use the fingerprint from the latest read, not the original planning snapshot.
 Identity is checked when registering a target, starting baseline capture, immediately before each
 mutation and once per target during final convergence. Baseline objects
-may supply IDs for reuse, followed by fresh scoped gets; they never substitute for current object
-contents, fresh create-absence proof, or the final no-op convergence pass.
+supply IDs for reuse, followed by fresh scoped gets. Delta contents and final convergence require
+current observations; planned-create absence uses the complete-view rule above.
 
 Annotate canonical records with `object_type`; preserve raw GTM `type`. Keep GTM Parameter `map`
 entries keyed and unique, and `list` entries ordered. Normalize only documented root metadata.
@@ -73,33 +74,25 @@ ID exactly; ambiguous or missing references block comparison.
 
 ## Writes, recovery and convergence
 
-The runtime performs fresh pre-write comparisons, journals `in_progress`, then saves and reads back.
-A create collision cannot become an overwrite. Never retry an ambiguous write until authoritative
-readback resolves it. Bounded retries apply only to documented non-applied rate limits; respect
-Retry-After. Authentication failure stops the affected target, not unrelated authorized targets. Repair that
-connection; never fall back to another visible account or container.
-Do not drop an unsupported intended field merely to make the tool accept the payload.
+Use [the run lifecycle](../core/execution.md) for pre-write comparison, journaling, recovery and
+convergence, and [quotas](quotas.md) for typed retry behavior. Adapters preserve exact authorized
+target identity and every intended field; unsupported native capability is an explicit failure.
 
 A malformed, missing-ID or scope-inconsistent mutation reply is also an ambiguous outcome after
 dispatch. Recover using a fresh authoritative read, retaining uncertainty if that read cannot prove
-the result. Response validation must not turn a potentially applied write into a non-applied failure.
+the result. Response validation preserves that uncertainty until authoritative outcome proof.
 Pre-write comparison canonicalizes keyed Parameter arrays/maps with the same rules as saved-state
 comparison; meaningful ordered lists, unknown fields and secret-presence checks remain enforced.
 
-Preserve pre-existing workspace changes. `workspaces.getStatus` is a view since the base version,
-not attribution to this run or proof of correctness. Use baseline status plus the operation journal
-for attribution, and saved-object comparisons plus fresh read-only convergence for acceptance.
-The runtime rechecks every required operation and derives Configured only on a complete no-op pass.
-
-Restore or remove only within existing explicit authority; a partial result needs a precise recovery
-boundary. Publication is never a way to make workspace changes visible. The
-[run reference](../core/execution.md) owns all state transitions.
+Use baseline workspace status plus the operation journal for change attribution. Saved comparisons
+and fresh convergence establish [acceptance](../core/acceptance.md); `workspaces.getStatus` describes
+changes since the base version. Restore/remove actions follow [target authority](../core/authority.md#target-authority).
 
 ## Import and UI
 
 An import must target the dedicated workspace, preserve the complete intended schema and avoid
 unapproved overwrite/deletion. In the UI verify account/container/workspace, save one logical object,
-reopen it, and report any unverified fields. Neither path may Submit, Publish or Create Version.
+reopen it, and report any unverified fields. Both paths stop at the saved-configuration [scope boundary](../core/authority.md#boundaries).
 Unavailable write or verification capability is a specific Blocked requirement, not a successful
 specification.
 

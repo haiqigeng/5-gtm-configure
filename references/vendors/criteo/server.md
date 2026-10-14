@@ -3,12 +3,11 @@
 ## Route
 
 Identify the exact Criteo product, market, account program, and documented server/API integration.
-Do not treat OneTag, Commerce Growth, Retail Media, an Event API, or another Criteo product as
-interchangeable. The media brief or account team must name the server product.
+OneTag, Commerce Growth, Retail Media and Event API each have their own product contract. The media brief or account team must name the server product.
 
 Then inspect the exact official schema and installed GTM server template: publisher/version,
 permissions/hosts, authentication, event/product identifiers, basket cardinality, user matching,
-consent, browser overlap, and outgoing response. Never infer a generic Criteo CAPI.
+consent, browser overlap, and outgoing response. Establish that exact product's server capability.
 
 Official discovery entry point: https://developers.criteo.com/
 

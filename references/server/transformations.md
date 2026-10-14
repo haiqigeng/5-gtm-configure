@@ -13,7 +13,7 @@ Use [native assertions](native-assertions.md) for the exact native/review bounda
 
 Choose, in order: native automatic mapping, direct Event Data, template mapping/projection, narrow
 server variable, scoped Transformation, then an explicitly authorized custom server template or
-HTTP route. Do not add a broad Transformation merely to reshape one destination's item list.
+HTTP route. Destination-local projection belongs to its supported tag/template.
 
 ## Classify blast radius
 
@@ -24,8 +24,7 @@ explicit authority before mutation.
 
 ## Preserve shapes and semantics
 
-Never flatten, stringify, coerce, truncate, or drop a non-scalar field without approved semantics
-and an explicit parser/owner. Use allowlists and redaction carefully: a field removed before a tag
+Every non-scalar conversion preserves approved semantics through its explicit conversion/parse owner. Use allowlists and redaction carefully: a field removed before a tag
 runs cannot be recovered by that tag. Keep destination-specific field names outside approved
 analytics semantics.
 

@@ -13,8 +13,7 @@ python "<skill-dir>/scripts/configure_gtm.py" mcp-host --host claude --config "<
 
 For Gemini, change `--host claude` to `--host gemini`. All file paths should be absolute. Select
 one already authorized `mcpServers` definition; the runner does not merge user/project/managed
-configuration scopes. Inspect applicable host restrictions before selecting it. Do not use a
-copied definition to bypass disabled servers, admin policy or project trust.
+configuration scopes. Select it within the effective host restrictions, admin policy and project trust.
 For Claude project `.mcp.json`, also pass `--approval-settings "<effective-approvals.json>"`
 containing the applicable settings already resolved by the trusted host. The runner requires
 `enabledMcpjsonServers` to include the selected name or `enableAllProjectMcpServers: true`;
@@ -46,10 +45,10 @@ support: credential-bearing object writes remain blocked without a verified secr
 A plain remote URL does not inherit the CLI's OAuth session. For an OAuth-backed server, use an
 already authorized self-authenticating stdio connection, such as an installed
 [mcp-remote](https://github.com/punkpeye/mcp-remote) proxy, and complete that proxy's sign-in in
-the host before running this noninteractive engine. It maintains its own authentication; do not
-copy CLI token caches. Alternatively, when the server supports it, configure an environment-backed
+the host before running this noninteractive engine. It owns its independently authorized authentication. Alternatively, when the server supports it, configure an environment-backed
 `headers` map such as `{"Authorization": "Bearer ${GTM_MCP_TOKEN}"}` on the HTTP/SSE definition.
-Do not put tokens into script arguments or saved run artifacts. Anonymous remote servers remain
+Credentials stay in the approved environment/secure provider; arguments and persisted artifacts
+contain safe references. Anonymous remote servers remain
 valid and are not rejected merely because their definitions omit headers.
 
 HTTP 401 is reported as authentication required; HTTP 403 as access denied. Timeout, transport,
@@ -68,7 +67,6 @@ Claude/Gemini model behavior, every authentication deployment or live GTM accept
 
 An app-managed Claude connector with no accessible local server definition cannot currently be
 used by this SDK runner. Seeing its tools in chat is not proof that the Python session can reach
-them. This route remains unverified until a real authenticated session completes. Do not bypass
-the engine with direct writes and claim its journal, recovery or convergence guarantees. A host
-tool bridge or an explicitly configured authenticated MCP connection must feed this same engine;
-do not extract another application's OAuth cache.
+them. This route remains unverified until a real authenticated session completes. A host tool bridge or
+explicitly configured authenticated connection feeds the same engine to provide its journal,
+recovery and convergence guarantees. The selected connection owns its authorization.

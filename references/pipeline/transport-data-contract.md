@@ -22,8 +22,8 @@ For every outgoing field, record:
 7. installed-template field and destination type;
 8. missing behavior and runtime verification note.
 
-Never infer a source from a destination field name. A browser dataLayer shape is not proof that the
-claiming Client will generate the same Event Data shape.
+Each source path and its claiming-Client/Event Data projection requires explicit provenance and
+shape evidence.
 
 ## Select the transport owner
 
@@ -35,7 +35,7 @@ routing, or ownership clarity justifies it; a literal owned field can be simpler
 Bind the pipeline endpoint to the saved endpoint field of that owner. In each linked consent
 topology, enumerate the actual web tags that can emit transported occurrences. A sender without a
 direct endpoint must bind the same destination identity as the owner so its inherited endpoint is
-provable. Shared requirement IDs alone never prove transport.
+provable. Native endpoint/destination bindings establish transport ownership.
 
 ## Govern shapes
 
@@ -45,8 +45,7 @@ nested paths. Prove any other non-scalar field through the exact sender protocol
 Event Data, and destination template.
 
 If a required nested shape cannot survive, set the field flow `blocked` unless an approved
-serialization method has a named server parse owner. Do not silently flatten, stringify, truncate,
-drop items, or assume one vendor's `contents` projection matches another vendor.
+serialization method has a named server parse owner. The approved shape/cardinality survives end to end through its named serialization/parse owners.
 
 Prefer native destination mapping, direct Event Data, a template mapping table/item projection, or
 a narrow server variable before a scoped Transformation. A broad Transformation is not a local
@@ -57,12 +56,11 @@ array converter for one media tag.
 For every measurement destination, decide whether page view comes from the Google tag, a dedicated
 event tag, another proven route, or intentionally nowhere. Reconcile automatic page view, Enhanced
 Measurement, SPA events, and any direct-browser destination before enabling server transport.
-Do not create one browser hit and one server-routed hit for the same occurrence accidentally.
+Assign the approved route one effective owner for each destination/occurrence.
 
 ## Route environments safely
 
-Use explicit hostname/environment mapping when endpoints differ. Unknown hosts must fail closed or
-use an intentionally non-production endpoint; they must never fall through to production. Record
+Use explicit hostname/environment mapping when endpoints differ. Unknown hosts resolve to a closed or intentionally non-production outcome. Record
 CSP and tagging-domain work as external infrastructure dependencies.
 
 ## Record the runtime boundary

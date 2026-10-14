@@ -33,19 +33,17 @@ upgrade, code edit, or permission expansion requires explicit authority.
 
 Map each business event and field from the approved source through wire and Event Data into the
 exact current server schema. Keep event names, time/action source, asset IDs, click/cookie IDs,
-matching data, ecommerce/item projections, consent, and missing behavior product-specific. Never
-translate GA4 `items` to `contents` by label alone.
+matching data, ecommerce/item projections, consent, and missing behavior product-specific. The selected product schema determines the complete item projection.
 
 ## Reconcile overlap
 
 Choose browser-only, server-only/replacement, dual delivery with one shared vendor-documented ID,
 or template-native dedup. Preserve current companion fields, assets, event names, and windows. The
-browser and server tags must consume one occurrence source; the server never regenerates it.
+browser and server tags consume the same occurrence source unchanged.
 
 In a server-only authorization, a pre-existing browser route remains an external dependency: record
 its owner, exact occurrence source/field, asset and event match, and required browser disposition.
-Do not claim a verified dual-delivery dedup contract or browser replacement without an authorized
-web target. Field-test that overlap only after the external owner confirms the matching browser
+Verified dual-delivery or browser replacement requires an authorized web target and its saved proof. Field-test that overlap only after the external owner confirms the matching browser
 configuration; otherwise hold the overlapping destination while independent server-only routes may
 continue.
 

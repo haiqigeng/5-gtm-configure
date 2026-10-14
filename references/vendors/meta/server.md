@@ -2,8 +2,7 @@
 
 ## Route
 
-Use Meta Conversions API official schema plus an inspected installed server template. Do not claim
-that Meta provides an official GTM server template unless current evidence proves it. Record Pixel
+Use Meta Conversions API official schema plus an inspected installed server template. Establish template publisher/official status from current evidence separately from CAPI support. Record Pixel
 ID, access-token owner, action source, event name/time/source URL, user-data fields/hashing, custom
 data, item cardinality, consent, and outgoing response cues.
 
@@ -13,8 +12,7 @@ item IDs match the catalog.
 
 For Pixel+CAPI overlap, follow current Meta dedup rules for matching event name and one shared
 `event_id`. Purchase normally has an approved transaction/order identity; current Meta guidance
-decides whether it is also the event ID or a companion custom-data field. The server never generates
-a second ID.
+decides whether it is also the event ID or a companion custom-data field. The server preserves the same occurrence ID.
 
 Official sources:
 

@@ -4,12 +4,11 @@
 
 Use the current X Ads web-conversion/Conversion API product and an inspected GTM server template.
 Record pixel/conversion-event identity, event time/source, click and user matching, item/value data,
-consent, credentials, endpoint, and response diagnostics. Do not infer API support from a browser
-Pixel implementation.
+consent, credentials, endpoint, and response diagnostics. Establish API and installed server support independently of browser Pixel capability.
 
 For browser and server overlap, verify current use of `conversion_id`, compatible event/conversion
-identity, and all companion fields. Use one occurrence source across routes and never persist API
-credentials.
+identity, and all companion fields. Use one occurrence source across routes and the existing [secret custody](../../data/server-identity.md)
+for API credentials.
 
 Official source: https://docs.x.com/x-ads-api/measurement/web-conversions
 

@@ -237,6 +237,7 @@ def _saved_object_id(operation: dict) -> Any:
 
 
 def render_markdown(document: dict[str, Any], *, embed_machine: bool = False) -> str:
+    from gtm_configure.runtime.state import inspect_validated_document
     from gtm_configure.runtime.validation import validate_document
 
     validate_document(document)
@@ -277,6 +278,8 @@ def render_markdown(document: dict[str, Any], *, embed_machine: bool = False) ->
         "| --- | --- | --- | --- | --- | --- | ---: |",
     ]
     types = {target["target_id"]: target["container_type"] for target in document["run"]["targets"]}
+    inspection = inspect_validated_document(document)
+    _render_readiness(inspection=inspection, lines=lines)
     alerts = []
     _render_target_summary(
         alerts=alerts, document=document, lines=lines, operations=operations, run=run
@@ -311,6 +314,28 @@ def render_markdown(document: dict[str, Any], *, embed_machine: bool = False) ->
             ]
         )
     return "\n".join(lines).rstrip() + "\n"
+
+
+def _render_readiness(*, inspection, lines):
+    """Present the same execution frontier as CLI inspection, without reclassifying it."""
+    summary = [
+        "## Execution readiness and recovery",
+        "",
+        f"- Ready operations: {_cell(', '.join(inspection['ready_operations']) or 'none')}",
+        f"- Resumable: {_cell(str(inspection['resumable']).lower())}",
+    ]
+    for operation, reasons in inspection["blocked_operations"].items():
+        summary.append(f"- Blocked {_cell(operation)}: {_cell('; '.join(reasons))}")
+    for operation, dependencies in inspection["waiting_operations"].items():
+        summary.append(
+            f"- Waiting {_cell(operation)}: {_cell(', '.join(dependencies))} must be verified."
+        )
+    for operation in inspection["unsafe_operations"]:
+        summary.append(
+            f"- Readback required {_cell(operation)}: resolve the write outcome with authoritative saved-state evidence before replay."
+        )
+    position = lines.index("## Targets and baseline")
+    lines[position:position] = [*summary, ""]
 
 
 def _render_target_summary(*, alerts, document, lines, operations, run):

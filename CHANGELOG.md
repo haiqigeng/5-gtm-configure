@@ -1,5 +1,43 @@
 # Changelog
 
+## 13.1.0
+
+Released 2026-10-14.
+
+### Why This Release Matters
+
+Shared instructions now have explicit owners across core, analytics, media, identity, consent,
+server, pipeline and adapter guides. A partial or uncertain run shows its execution blockers and
+recovery frontier before detailed object changes, using the same inspection result as the CLI.
+
+### What Changed
+
+- Consolidate repeated policy and implementation prose into positive invariants at existing owners.
+  Vendor guides retain their exact product differences and route to shared mechanics.
+- Align compiler guidance with required object justification and recovery guidance with the public
+  saved-readback checkpoint. Correct create-absence documentation to match complete adapter caches.
+- Render ready, waiting, blocked and readback-required operations from public runtime inspection;
+  preserve existing privacy, escaping and status derivation.
+- Expand instruction ownership mapping and independently replay folder, shared-consent partial
+  progress, uncertain-write recovery and pipeline external handoff scenarios.
+
+### What Users Should Do
+
+Replace the installed skill folder with this release. Contract 10.0 and run 8.0 remain current.
+Supply explicit scope justification and resolve uncertain writes through authoritative readback.
+Approved destination decisions still resolve `other` fields; independent ready branches can proceed.
+
+### Validation
+
+See [the complete offline re-audit](docs/release-13.1-validation.md) for instruction-cost comparisons,
+full file/rule mapping, behavioral checks, independent replay and package evidence.
+
+### Known Limits
+
+Live GTM validation remains deferred by the user. This release is prepared for an authorized field
+test of supported routes; it does not certify live authentication, native-template behavior,
+consent timing or vendor delivery. Setup/cleanup-only tag topology remains unsupported.
+
 ## 13.0.1
 
 Released 2026-10-14.

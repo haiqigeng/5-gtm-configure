@@ -4,7 +4,7 @@
 
 TikTok documents an Events Manager setup for GTM web and server containers. Inspect the exact
 generated/installed templates and all automatic tags, variables, permissions, hosts, and dedup
-behavior; do not reproduce the setup from memory. Record Pixel code, event, context, user matching,
+behavior from the actual generated integration. Record Pixel code, event, context, user matching,
 properties/items, access token, consent, and outgoing diagnostics.
 
 The vendor flow may configure Pixel and Events API together and automatically create an `event_id`.

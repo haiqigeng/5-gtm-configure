@@ -12,8 +12,7 @@
 ## Model the pipeline as a graph
 
 Use `pipelines[]`. A pipeline may have several web senders, one receiving server target for a
-request class, one intended claiming Client, and several downstream server consumers. Do not create
-one artificial Client per web tag or assume each incoming event has one destination.
+request class, one intended claiming Client, and several downstream server consumers. Client ownership follows request class; downstream consumers follow the generated events.
 
 For each request class, prove exactly one intended claiming Client and reachability from generated
 Event Data to every required destination. Keep the web and server object keys target-scoped:
@@ -21,11 +20,9 @@ Event Data to every required destination. Keep the web and server object keys ta
 
 ## Prove authority per target
 
-Record explicit approved target authority for each account, container, and workspace. A discovered
-`server_container_url`, custom domain, server container ID, or shared account is intake evidence,
-not permission to mutate. Routine authority may cover isolated tags, triggers, Event Data variables,
-folders, and reuse of a compatible Client. Client claim behavior, broad Transformations, template
-permission changes, live endpoint cutover, replacement, and removal remain high impact.
+Establish each sender/receiver's authority under [target authority](../core/authority.md#target-authority).
+A discovered endpoint is relationship evidence. Record the requested Client, Transformation,
+template and cutover changes explicitly so their impact is reviewed against that authority.
 
 ## Discover before design
 
@@ -52,23 +49,20 @@ The dependency order is receiver-first:
 7. Mandatory transport-owner cutover, last, whether the sender route is new or changes an existing endpoint.
 8. Readback of every target, static pipeline comparison, and identical-rerun no-op.
 
-Creating an isolated inactive sender earlier is harmless only when it cannot emit. Never point an
-active sender at an incomplete or unverified receiver.
+An active sender requires a complete verified receiver. Earlier isolated sender preparation remains
+inactive until that dependency is satisfied.
 
 ## Contain failures by dependency
 
-Stop a failed or uncertain operation and its transitive dependents. Continue independent ready
-subtrees when target authority, adapter state, and dependencies remain safe. A failed Client blocks
-all events it would claim and the cutover; a failed Meta tag does not block an independent verified
-GA4 subtree. Never retry an ambiguous mutation until readback establishes whether it saved.
-
-Record the last verified operation, uncertain frontier, blocked dependents, and next authoritative
-readback per target. Overall `Partial` must not hide a completely safe target result.
+Use [dependency readiness and recovery](../core/execution.md#contain-failures-by-dependency).
+The claiming Client is a prerequisite of its receiver consumers and cutover. Destination branches
+remain independent where their actual dependencies allow it. Keep recovery frontiers target-scoped
+so an overall partial result preserves each target's verified work.
 
 ## Separate saved configuration from publication
 
-Configuration success is saved and readback-verified state; open publication dependencies do not
-make it `Blocked`. Record the external order:
+The configuration verdict follows [acceptance](../core/acceptance.md). Record these separately owned
+rollout dependencies in order:
 
 1. run server Preview acceptance against the saved draft;
 2. run coordinated web/server Preview and end-to-end acceptance before deployment;
@@ -78,4 +72,5 @@ make it `Blocked`. Record the external order:
 Google supports testing workspace drafts in [Preview](https://support.google.com/tagmanager/answer/6107056)
 and inspecting the receiving pipeline in [server Preview](https://developers.google.com/tag-platform/tag-manager/server-side/debug).
 
-The skill never performs those steps or claims that either preview ran.
+These steps belong to the external rollout owners under [scope](../core/authority.md#boundaries).
+The configuration handoff records their pending or independently evidenced state.

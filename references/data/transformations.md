@@ -9,7 +9,7 @@
 - [Scalar validation pattern](#scalar-validation-pattern)
 - [Runtime missing-output behavior](#runtime-missing-output-behavior)
 - [Required static vectors](#required-static-vectors)
-- [Forbidden behavior](#forbidden-behavior)
+- [Projection contract](#projection-contract)
 
 ## Purpose
 
@@ -30,9 +30,8 @@ Before writing Custom JavaScript, record:
 - runtime missing-output and recette dependency;
 - expected output vectors.
 
-The transformation must be a pure, synchronous, side-effect-free function. It must not mutate the
-dataLayer, read arbitrary DOM state, make network calls, set consent, generate business values, or
-silently change the approved source contract.
+The transformation is a pure synchronous function of its declared approved source inputs, returning
+only the contracted output. State, consent and business-value creation retain their upstream owners.
 
 ## Use projection before free-form code
 
@@ -70,12 +69,11 @@ destination requires a number and the approved source contract permits that conv
 
 Apply the same disciplined projection for Meta `contents`/`content_ids`, TikTok/Snap/Pinterest/X
 item collections, and Google Ads/Floodlight dynamic remarketing only after reopening the exact
-official browser schema. Never treat the vendor names here as a cached field catalogue.
+official browser schema. Current product evidence owns the exact destination schema.
 
 Create separate outputs when one destination requires both an object array and an identifier array.
-Preserve original item order and every mapped item. Do not silently filter malformed items. Return
-the documented transformation result and record malformed runtime source data for recette unless
-the explicit brief or current browser contract defines another rule.
+Preserve original item order and cardinality under the documented output contract. Malformed input
+uses the approved missing/invalid behavior and remains a source field-test dependency.
 
 ## Scalar validation pattern
 
@@ -83,21 +81,14 @@ For currency, value, quantity, date, or identifier fields:
 
 1. preserve valid zero and `false`;
 2. reject `NaN`, infinity, invalid formats, and undocumented enum values;
-3. do not trim, truncate, round, lowercase, uppercase, hash, or coerce unless required by current
-   official documentation and authorized by the source contract;
-4. keep validation separate from an invented fallback;
-5. return a clearly missing/invalid result without inventing a fallback.
+3. apply only conversions established by current destination documentation and approved source semantics;
+4. return the documented missing/invalid result when validation fails.
 
 ## Runtime missing-output behavior
 
-A transformation returning `undefined`, `{}`, or `[]` does not prevent a tag from firing. Do not
-turn that fact into a routine Boolean eligibility helper. When the source mapping is approved,
-configure the business-event trigger and treat runtime missing or malformed data as a site/dataLayer
-dependency for recette.
-
-Only when the explicit brief or current official browser contract requires a firing rule, use a
-direct native condition. A narrow CJS condition is allowed only when native filters cannot express
-that required rule. It must not duplicate transformation parsing or consent logic.
+Apply [mapping completeness and runtime data quality](mapping.md#separate-configuration-completeness-from-runtime-data-quality).
+The projection defines output shape and missing/invalid results. The approved firing policy and
+consent owners govern whether an occurrence executes.
 
 ## Required static vectors
 
@@ -117,12 +108,12 @@ Record and statically evaluate at least:
 Keep vectors in the current-operation evidence. Runtime browser execution belongs to the separate
 recette skill.
 
-## Forbidden behavior
+## Projection contract
 
-Do not add generic truncation, automatic type coercion, first-item selection, default currency,
-fallback catalogue ID, partial-item filtering, hidden PII normalization, broad try/catch suppression,
-or one cross-vendor transformation object. A deterministic pattern reduces repeated coding; it does
-not authorize guessed business logic.
+Emit the approved destination fields with exact cardinality and explicit authorized conversions.
+Missing/invalid values follow the documented output contract. Keep each destination's projection
+and first-party-data normalization with its declared owner. A reusable function pattern supplies
+implementation structure; approved inputs and current product documentation supply its semantics.
 
 ## Choose the server owner narrowly
 
@@ -131,5 +122,5 @@ variable, installed-template mapping table or item projection, narrow supported 
 then a scoped Transformation. Use a broad Transformation only when the approved rule genuinely
 applies to all affected consumers and explicit high-impact authority covers its blast radius.
 
-Do not create one shared Transformation merely to convert GA4 `items` into one media vendor's
-schema. Keep platform-specific projection inside that destination tag/template when supported.
+A destination-local tag/template owns its supported product projection. A shared Transformation
+requires a distinct approved cross-consumer purpose.

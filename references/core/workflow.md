@@ -1,83 +1,66 @@
 # Operational implementation workflow
 
-Use one contract and the same execution engine for web, server and pipeline work. Product references
-are conditional: load only the product, fields, timing and consent behavior affected by this request.
-The [utility contract](authority.md) owns authority and scope;
-[run and recovery](execution.md) owns execution state.
+Use one contract and execution engine for web, server and pipeline work. Load the feature and host
+guides selected by the request. [Authority](authority.md) owns scope and approval;
+[evidence](evidence.md) owns research; [authoring](authoring.md) owns declarations;
+[execution](execution.md) owns state transitions; [acceptance](acceptance.md) owns the result.
 
-## 1. Resolve only blocking inputs
+## 1. Resolve the request
 
-Read the approved plan, brief or exact direct requirement. Record included, reference-only and
-excluded requirements. Discover target, adapter, template and CMP facts before asking for missing
-information. Do not infer source paths, destination identities, destructive authority or consent
-policy. Empty values possible at runtime do not authorize generic eligibility helpers. Resolve a
-documented harmful value through the scoped rule in [data contracts](../data/mapping.md#separate-configuration-completeness-from-runtime-data-quality).
+Read the approved plan, brief or direct requirement and classify included, reference-only and
+excluded requirements. Discover available target, adapter, template and CMP facts. Resolve the
+remaining [blocking inputs](authority.md#resolve-blocking-inputs) together.
 
-## 2. Create or reuse the workspace
+## 2. Establish the workspace
 
 Resolve stable account/container/workspace IDs and container type. Reuse the authorized dedicated
-workspace and preserve its existing edits. Avoid Default Workspace unless accepted. Capture status
-and conflicts before writes. A server endpoint does not grant access to its server container.
+workspace, inspect its status/conflicts and retain pre-existing edits. Establish authority for each
+target under [target authority](authority.md#target-authority).
 
-## 3. Research the product and installed template
+## 3. Establish technical feasibility
 
-For product or collection changes, use current official documentation for the exact changed feature and inspect installed template
-fields, defaults, automatic collection, permissions and secret fields. Preserve valid approved
-semantics; report an advisory without rewriting them. Hold a technically unsupported requirement.
-A missing supported template is not authorization for Custom HTML or arbitrary vendor API code.
-Folder-only organization needs inspected capability and container evidence, without fabricated product research. See [evidence](evidence.md).
+For changed product or collection behavior, inspect current official guidance and installed
+capability using [the research procedure](evidence.md#research-procedure). Classify discrepancies
+before implementation. Folder-only work uses native capability and container evidence.
 
-## 4. Inspect relevant container integration
+## 4. Inspect integration and reuse
 
-Select the supported architecture, then inspect reuse, conflicts and dependency closure. List each
-required family once through the authenticated runtime, exhausting pagination. Analyze consumers
-locally. An authorized refonte uses the complete inventory and ordered dispositions in
-[refonte](../refonte.md). Shared Google Configuration Settings changes always
-include all tag consumers. Refresh only where drift, changed identity, pagination anomalies or an
-affected shared consumer requires it. Do not treat all available families as relevant.
+Select the target architecture, then trace its dependencies and shared consumers. Capture each
+required family with exhausted pagination through the authenticated runtime; analyze the graph
+locally. Refonte uses the complete inventory and ordered dispositions in [refonte](../refonte.md).
+[The adapter contract](../adapters/custom.md) owns baseline, identity and refresh mechanics.
 
-## 5. Build the configuration map
+## 5. Compile the configuration map
 
-Use [authoring](authoring.md) and its compact-input compiler to derive
-object keys, source-bound approval records and explicit reuse dependencies. Keep business and
-implementation authority separate. Supply full intended snapshots and pre-change snapshots for existing-object changes; do not manufacture
-consent, page-view or first-party-data decisions. Required active-tag topologies remain explicit.
-A pipeline additionally needs transport, claiming Client, Event Data fields, receiver consumers,
-consent and any overlapping-delivery dedup contract.
+Use [compact input](authoring.md#compact-input) to derive mechanical identities, source-bound
+approval records and reuse dependencies. Supply complete intended snapshots, delta pre-change
+snapshots and the applicable field, execution, consent, page-view and first-party-data decisions.
+For pipelines, bind transport, claiming Client, Event Data, receivers and overlapping-delivery
+identity. The compiler preserves approved semantics and leaves judgment explicit.
 
-## 6. Design and preflight the object graph
+## 6. Preflight
 
-Validate the contract before materialization. Check source fidelity, current template capability,
-consent route, page-view ownership, first-party data, reference closure and dependency order. A
-contract hash records consistency, not authorization. The compact input uses the same semantic
-validator and does not bypass any acceptance check.
+Validate the contract and applicable analytics conformance. Review the compiled delta against its
+approved sources, installed capability and feature owners. Choose the least-complex supported
+mapping under [data mapping](../data/mapping.md); resolve policy or field decisions before executing
+the affected owners. Shared dependencies can serve ready requirements under
+[dependency readiness](execution.md#contain-failures-by-dependency).
 
-Choose direct mappings before helpers; justify each object by an approved requirement. Preserve
-all approved items and non-scalar shapes. Read [web](../consent/web.md) for grant timing,
-revocation and pre-CMP events, [google fields](../analytics/google-fields.md) for Google
-settings, and the pipeline references only for connected transport. Resolve an existing advanced
-route against the approved policy before writing; do not silently inherit or replace it.
+Give a concise change summary once discovery and validation are complete. Render a separate
+preflight preview when it helps review; routine already-authorized work can proceed from that summary.
 
-A separate rendered preflight preview is optional for already-authorized routine work. Give a
-concise change summary once discovery and validation are complete; render when it helps review.
+## 7. Execute
 
-## 7. Mutate in dependency order
+Bind the authenticated adapters from [adapter selection](../adapters/overview.md) and use the
+[durable lifecycle](execution.md). The runtime captures baselines, compares pre-change state,
+journals writes and verifies native results in dependency order. Resolve failure or uncertainty
+through its recorded recovery frontier. Pipeline cutover follows verified receiver dependencies.
 
-Bind authenticated adapters using [overview](../adapters/overview.md). The runtime captures the
-baseline, verifies pre-change state, journals the write boundary and compares each save using a
-complete native response or an authoritative read when the response is insufficient. Do not
-hand-edit active run state. Drift stops the affected operation. An ambiguous outcome requires
-readback before retry; independent safe dependencies may continue.
+For long runs, report meaningful progress and use [quota sizing](../adapters/quotas.md) to distinguish
+API requests, transport calls, local compute and recovery time.
 
-For pipelines, receiver dependencies must verify before the sender endpoint changes. Keep actual
-API calls separate from agent tool calls when measuring cost; batching transport is not evidence
-that fewer API operations occurred. Report progress during a long run without inventing an ETA.
+## 8. Converge and hand off
 
-## 8. Read back, correct, and hand off
-
-Use the runtime's fresh read-only convergence pass. A changed intended field requires correction;
-workspace status alone is insufficient. Finalization derives status only when all saved comparisons
-and applicable cross-target invariants pass. Render findings and changed fields first, unchanged
-counts second, with full machine evidence retained. Apply
-[acceptance](acceptance.md). Configuration does not prove
-browser execution, vendor receipt or reporting, and never includes publication or version creation.
+Run fresh read-only convergence, correct any changed intended state and derive the result through
+[acceptance](acceptance.md). Report findings and changed fields first, unchanged counts second,
+with full machine evidence and external owners retained.

@@ -13,7 +13,7 @@ template requires explicit authority and is permitted only when the partner cont
 and no safer supported template exists.
 
 For overlapping browser and server pixels, use the partner's documented replacement or shared
-identity rule. Never infer it from Meta, GA4, or another network.
+identity rule. The exact partner contract owns that decision.
 
 Without the exact official partner contract, credentials owner, supported GTM route, consent, and
 dedup expectations, fail closed for that partner while preserving independent destinations.

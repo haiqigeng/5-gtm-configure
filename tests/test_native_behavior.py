@@ -70,9 +70,9 @@ class TestGoogleSettingsGoogleTagInheritance(
         settings.update(name="Shared", intended={"type": "gtes", "parameter": [table]})
         value["reuse_candidates"].extend([base, settings])
         value["objects"][0]["depends_on"] = ["web-main::tag::Google tag"]
-        topology = fixture_google_settings.deepcopy(value["execution_topologies"][0])
+        topology = fixture_google_settings.deepcopy(value["tag_policies"][0])
         topology["tag_object_key"] = "web-main::tag::Google tag"
-        value["execution_topologies"].append(topology)
+        value["tag_policies"].append(topology)
         value["requirements"][0]["parameters"]["lead_type"]["missing_behavior"] = "omit when absent"
         value["field_bindings"] = []
         contract = fixture_google_settings.compile_request(value)
@@ -128,7 +128,7 @@ class TestGoogleSettingsGoogleTagInheritance(
                     )
                 compact = {
                     "requirements": contract["requirements"],
-                    "execution_topologies": [],
+                    "tag_policies": [],
                     "field_bindings": [],
                 }
                 compact["requirements"][0]["parameters"]["lead_type"]["missing_behavior"] = (
@@ -201,9 +201,8 @@ class TestGoogleSettingsBuiltInTrigger(fixture_google_settings.BuiltInTriggerTes
             row = {
                 "trigger_object_key": reference,
                 "role": "initialization-page-load",
-                "type": trigger_type,
             }
-            item = {"normal_triggers": [row]}
+            item = {"trigger_roles": [row]}
             target = {"firingTriggerId": [reference]}
             self.assertEqual(
                 fixture_google_settings.validate_normal_trigger_bindings(
@@ -219,11 +218,10 @@ class TestGoogleSettingsBuiltInTrigger(fixture_google_settings.BuiltInTriggerTes
         with self.assertRaises(ValueError):
             fixture_google_settings.validate_normal_trigger_bindings(
                 {
-                    "normal_triggers": [
+                    "trigger_roles": [
                         {
                             "trigger_object_key": "trigger::builtin::999",
                             "role": "initialization-page-load",
-                            "type": "initialization",
                         }
                     ]
                 },
@@ -468,7 +466,7 @@ class TestFieldBinding(fixture_field_binding.NativeMappingTestFixture):
             source_locator="approved",
         )
         self.assertIn(
-            "exact native event-parameter intention checked",
+            "exact native intention checked",
             fixture_field_binding.render_markdown(run),
         )
 
@@ -508,11 +506,9 @@ class TestFieldBinding(fixture_field_binding.NativeMappingTestFixture):
             )
 
     def test_native_template_is_agent_reviewed_even_with_binding(self):
-        for binding_present in (False, True):
+        for binding_present in (True,):
             value = fixture_field_binding.lead_request()
             value["field_bindings"][0]["mapping_method"] = "native-template"
-            if not binding_present:
-                value["field_bindings"][0].pop("native_binding")
             value["objects"][0]["intended"]["parameter"].pop()
             run = fixture_field_binding.create_from_contract(
                 fixture_field_binding.compile_request(value),
@@ -523,7 +519,7 @@ class TestFieldBinding(fixture_field_binding.NativeMappingTestFixture):
                 "agent-reviewed mapping declaration", fixture_field_binding.render_markdown(run)
             )
             self.assertNotIn(
-                "exact native event-parameter intention checked",
+                "exact native intention checked",
                 fixture_field_binding.render_markdown(run),
             )
 
@@ -595,22 +591,29 @@ class TestTransportAndState(fixture_transport_and_state.UtilityEvolutionTestFixt
             item for item in contract["implementation"]["objects"] if item["object_key"] == web_key
         )
         web_tag["requirement_ids"].append("REQ-ADS")
-        web_tag["intended"]["user_data"] = "{{UPD - Approved purchase}}"
         original_sender = next(
             item
             for item in contract["implementation"]["objects"]
             if item["object_key"] == "web-main::tag::Ads identity sender"
         )
-        original_sender["intended"].pop("user_data")
-        topology = next(
-            item for item in contract["execution_topologies"] if item["tag_object_key"] == web_key
+        user_data = next(
+            row
+            for row in original_sender["intended"]["parameter"]
+            if row["key"] == "eventSettingsTable"
         )
-        topology["requirement_ids"].append("REQ-ADS")
-        contract["consent_topologies"][0]["requirement_ids"].append("REQ-ADS")
-        contract["consent_topologies"][0]["event_coverage"].append("purchase")
+        original_sender["intended"]["parameter"].remove(user_data)
+        user_data["key"] = "configSettingsTable"
+        web_tag["intended"].setdefault("parameter", []).append(user_data)
+        web_tag["depends_on"].append("web-main::variable::UPD - Approved purchase")
+        contract["consent_policies"][0]["event_coverage"].append("purchase")
         route = contract["first_party_data_routes"][0]
         route.update(timing="tag-wide", consumer_object_keys=[web_key])
-        route["consumer_bindings"][0].update(object_key=web_key, tag_type="googtag")
+        route["consumer_bindings"][0].update(object_key=web_key)
+        next(
+            binding
+            for binding in contract["implementation"]["field_bindings"]
+            if binding["requirement_id"] == "REQ-ADS"
+        )["owner_object_key"] = web_key
         receiver = next(
             item
             for item in contract["implementation"]["objects"]

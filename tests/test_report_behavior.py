@@ -122,7 +122,7 @@ class TestDurableEvidence(fixture_durable_evidence.CurrentRegressionHardeningTes
             "## Executive summary",
             "## Analyst and developer object change log",
             "## Requirement, payload, and consent mapping",
-            "## Per-tag web execution topology",
+            "## Per-tag web execution policy",
             "## Client-to-server pipeline proof",
             "## External actions, publication, and recette",
         ):
@@ -259,6 +259,11 @@ def test_report_surfaces_field_blocker_before_object_details():
     field = deepcopy(requirement["configuration_fields"]["user_id"])
     field["destination"] = "other"
     requirement["unresolved_fields"] = {"destination_pending": field}
+    binding = deepcopy(contract["implementation"]["field_bindings"][0])
+    binding.update(
+        field_scope="unresolved", destination_field="destination_pending", status="blocked"
+    )
+    contract["implementation"]["field_bindings"].append(binding)
     run = with_complete_baselines(
         create_from_contract(contract, run_id="REPORT", source_locator="synthetic")
     )
@@ -267,8 +272,8 @@ def test_report_surfaces_field_blocker_before_object_details():
     output = fixture_durable_evidence.render_markdown(run)
     summary = output.split("## Targets and baseline")[0]
     assert "destination_pending" in summary
-    for operation in inspection["blocked_operations"]:
-        assert f"Blocked {operation}:" in summary
+    assert "Root " in summary
+    assert "dependent operations held" in summary
     assert "Ready operations: none" in summary
     assert "Resumable: true" in summary
 
@@ -285,7 +290,8 @@ def test_report_tracks_uncertain_write_frontier_through_saved_recovery():
         )
     summary = fixture_durable_evidence.render_markdown(run).split("## Targets and baseline")[0]
     assert "Resumable: false" in summary
-    assert f"Readback required {operation['operation_id']}" in summary
+    assert operation["operation_id"] in summary
+    assert "authoritative readback required" in summary
     assert "before replay" in summary
     recovered = fixture_durable_evidence.checkpoint_operation(
         run,
@@ -298,4 +304,4 @@ def test_report_tracks_uncertain_write_frontier_through_saved_recovery():
         0
     ]
     assert "Resumable: true" in summary
-    assert "Readback required" not in summary
+    assert "authoritative readback required" not in summary

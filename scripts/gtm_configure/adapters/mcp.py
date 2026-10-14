@@ -18,6 +18,7 @@ from gtm_configure.comparison.native import (
     SEQUENCING_KEYS,
 )
 from gtm_configure.core.json_io import loads_strict
+from gtm_configure.core.privacy import scrub_sensitive_text
 from gtm_configure.core.public_identifiers import public_identifier_paths
 from gtm_configure.domain.actions import validate_native_authoring
 from gtm_configure.runtime.adapter_protocol import (
@@ -71,13 +72,15 @@ def unwrap(response: Any, *, mutation: bool = False) -> Any:
     if not isinstance(response, dict):
         raise AdapterExecutionError("MCP result must be an object")
     if response.get("isError"):
+        texts = [
+            item.get("text")
+            for item in response.get("content", [])
+            if isinstance(item, dict)
+            and item.get("type") == "text"
+            and isinstance(item.get("text"), str)
+        ]
         details = response.get("structuredContent")
         if details is None:
-            texts = [
-                item.get("text")
-                for item in response.get("content", [])
-                if isinstance(item, dict) and item.get("type") == "text"
-            ]
             if len(texts) == 1:
                 try:
                     details = loads_strict(texts[0])
@@ -85,10 +88,15 @@ def unwrap(response: Any, *, mutation: bool = False) -> Any:
                     pass
         error = details.get("error") if isinstance(details, dict) else None
         code = error.get("code") if isinstance(error, dict) else None
+        diagnostic = error.get("message") if isinstance(error, dict) else None
+        if not isinstance(diagnostic, str):
+            diagnostic = "\n".join(texts)
+        diagnostic = scrub_sensitive_text(diagnostic, set()).strip()[:4000]
+        suffix = ": " + diagnostic if diagnostic else ""
         # Only structured endpoint rejection codes establish that a write was rejected.
         # Arbitrary prose, MCP transport errors and server failures remain ambiguous.
         if type(code) is int and code == 401:
-            raise AuthenticationError("MCP endpoint rejected authentication (401)")
+            raise AuthenticationError("MCP endpoint rejected authentication (401)" + suffix)
         reasons = error.get("errors") if isinstance(error, dict) else None
         if (
             type(code) is int
@@ -103,19 +111,23 @@ def unwrap(response: Any, *, mutation: bool = False) -> Any:
         ):
             # A full GTM sliding window, through the existing bounded retry policy.
             raise RateLimitError(
-                "MCP endpoint rejected the request (403 quota)",
+                "MCP endpoint rejected the request (403 quota)" + suffix,
                 retry_after_seconds=retry_after(response, details, error),
             )
         if type(code) is int and code == 429:
             raise RateLimitError(
-                "MCP endpoint rejected the request (429)",
+                "MCP endpoint rejected the request (429)" + suffix,
                 retry_after_seconds=retry_after(response, details, error),
             )
         if type(code) is int and code in {400, 403, 404, 409, 422}:
-            raise AdapterExecutionError("MCP endpoint rejected the request", code=f"http_{code}")
+            raise AdapterExecutionError(
+                "MCP endpoint rejected the request" + suffix, code=f"http_{code}"
+            )
         if mutation:
-            raise AmbiguousWriteError("MCP write outcome is unknown; read back before retry")
-        raise AdapterExecutionError("MCP read failed", code="read_failed")
+            raise AmbiguousWriteError(
+                "MCP write outcome is unknown; read back before retry" + suffix
+            )
+        raise AdapterExecutionError("MCP read failed" + suffix, code="read_failed")
     if "structuredContent" in response:
         return response["structuredContent"]
     if "content" in response:

@@ -40,9 +40,31 @@ def schema_record_keys(root):
     return owners
 
 
+def schema_vocabularies(root):
+    """Index complete structural vocabularies, excluding conditional restrictions."""
+    owners = defaultdict(list)
+
+    def visit(value, path):
+        if isinstance(value, dict):
+            values = value.get("enum", [])
+            if len(values) >= 2 and all(isinstance(item, str) for item in values):
+                owners[frozenset(values)].append(path)
+            for key, child in value.items():
+                if key not in {"if", "then", "else", "not", "allOf"}:
+                    visit(child, path + "/" + key)
+        elif isinstance(value, list):
+            for index, child in enumerate(value):
+                visit(child, path + "/" + str(index))
+
+    for path in (root / "schemas").glob("*.schema.json"):
+        visit(json.loads(path.read_text(encoding="utf-8")), path.relative_to(root).as_posix())
+    return owners
+
+
 def inspect_architecture(root=ROOT):
     modules = module_index(root)
     record_keys = schema_record_keys(root)
+    vocabularies = schema_vocabularies(root)
     errors, records = [], {}
     constants, bodies = defaultdict(list), defaultdict(list)
     referenced = set()
@@ -93,6 +115,20 @@ def inspect_architecture(root=ROOT):
                     errors.append(
                         f"{module}:{node.lineno}: duplicated schema record keys owned by {', '.join(record_keys[keys])}"
                     )
+            if isinstance(node, ast.Compare):
+                for operator, comparator in zip(node.ops, node.comparators):
+                    if not isinstance(operator, ast.NotIn) or not isinstance(
+                        comparator, (ast.Set, ast.List, ast.Tuple)
+                    ):
+                        continue
+                    try:
+                        values = frozenset(ast.literal_eval(comparator))
+                    except (ValueError, TypeError):
+                        continue
+                    if values in vocabularies:
+                        errors.append(
+                            f"{module}:{node.lineno}: duplicated structural vocabulary owned by {', '.join(vocabularies[values])}"
+                        )
         layer = module.split(".")[1]
         allowed = {"core": {"core"}, "domain": {"domain", "core"}}
         for imported in imports:
@@ -268,6 +304,8 @@ def schema_rules(document):
         "uniqueItems",
         "dependentRequired",
         "x-field-model",
+        "x-owner-paths",
+        "x-identity-key",
     }
 
     def visit(value, pointer):

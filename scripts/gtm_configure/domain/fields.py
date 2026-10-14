@@ -11,15 +11,19 @@ from gtm_configure.core.schemas import field_collections, validate_definition
 from gtm_configure.core.validation import (
     RunValidationError,
     array,
+    canonical_sha256,
     object,
     optional_text,
     text,
 )
 from gtm_configure.domain.native import (
+    CONFIGURATION_SETTINGS_TYPES,
+    EVENT_SETTINGS_TYPES,
     NATIVE_MAPPING_SCOPES,
     direct_dlv_source,
     native_mapping_scope,
     supports_native_mapping,
+    token,
     variable_name,
 )
 from gtm_configure.domain.shapes import collection_shape
@@ -183,6 +187,7 @@ def field_mappings(requirement: dict[str, Any]) -> list[dict[str, Any]]:
                     "requirement_id": requirement["id"],
                     "field_scope": field_scope,
                     "destination_field": field_name,
+                    "source_fingerprint": canonical_sha256(field),
                     "source": source,
                     "source_authority_grade": (
                         source_authority.get("grade") if source_authority else None
@@ -243,40 +248,40 @@ def validate_native_mappings(mappings, operations, fail):
     """Validate field ownership at every status, then prove supported mapped values."""
     by_key = {item.get("object_key"): item for item in operations}
     for mapping in mappings:
-        binding = mapping.get("native_binding")
-        if binding is None and mapping["status"] != "mapped":
+        owner_key = mapping.get("owner_object_key")
+        if not owner_key:
+            if mapping["status"] in {"mapped", "pending", "blocked"}:
+                fail("executable and blocked fields require an explicit owner_object_key")
             continue
-        if binding is None and not any(
-            mapping["requirement_id"] in item.get("requirement_ids", [])
-            and supports_native_mapping(
-                mapping, item.get("intended") or item.get("pre_change") or {}
-            )
-            for item in operations
-        ):
-            continue
-        if binding is None:
-            fail("mapped scalar native field requires native_binding object_key and field")
-            continue
-        validate_definition(binding, "nativeBinding", fail)
-        owner = by_key.get(binding["object_key"], {})
+        owner = by_key.get(owner_key, {})
         if (
-            (owner.get("resource_family") or owner.get("object_type")) != "tag"
+            not (
+                (owner.get("resource_family") or owner.get("object_type")) == "tag"
+                or (
+                    (owner.get("resource_family") or owner.get("object_type")) == "variable"
+                    and token(
+                        str(
+                            (owner.get("intended") or owner.get("pre_change") or {}).get("type", "")
+                        )
+                    )
+                    in CONFIGURATION_SETTINGS_TYPES | EVENT_SETTINGS_TYPES
+                )
+            )
             or owner.get("action") in web_model.NON_EXECUTING_TAG_ACTIONS
             or mapping["requirement_id"] not in owner.get("requirement_ids", [])
         ):
-            fail("native mapping owner must be an active tag for the approved requirement")
+            fail(
+                "field owner must be an active native consumer or shared settings variable authorized for the approved requirement"
+            )
             continue
         try:
             target = owner.get("intended") or owner.get("pre_change") or {}
-            if binding["field"] != mapping["destination_field"]:
-                raise ValueError(
-                    "native mapping field must identify the approved destination field"
-                )
             if target.get("paused") is True:
                 raise ValueError("native mapping owner is paused")
             scope = native_mapping_scope(target)
             if (
-                scope is not None
+                (mapping["status"] != "mapped" or supports_native_mapping(mapping, target))
+                and scope is not None
                 and mapping["field_scope"] in NATIVE_MAPPING_SCOPES.values()
                 and scope != mapping["field_scope"]
             ):

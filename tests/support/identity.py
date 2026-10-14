@@ -74,7 +74,7 @@ def user_id_contract():
             "template_field": "user_id",
             "missing_behavior": "omit before authentication; JavaScript null at logout; replace on account switch",
             "status": "mapped",
-            "native_binding": {"object_key": owner["object_key"], "field": "user_id"},
+            "owner_object_key": owner["object_key"],
         }
     )
     contract["first_party_data_routes"] = [
@@ -87,9 +87,6 @@ def user_id_contract():
                 {
                     "object_key": owner["object_key"],
                     "product": "ga4",
-                    "implementation": "native",
-                    "tag_type": "googtag",
-                    "template_identity": None,
                     "evidence": ["Synthetic native review"],
                 }
             ],
@@ -99,7 +96,6 @@ def user_id_contract():
             "fields": [
                 {
                     "name": "user_id",
-                    "source": "account.opaque_id",
                     "normalization": [],
                     "empty_behavior": "omit",
                 }

@@ -10,7 +10,6 @@ from gtm_configure.core.validation import (
     RunValidationError,
     array,
     object,
-    optional_text,
     text,
     unique_texts,
 )
@@ -63,41 +62,9 @@ def validate_inventory_dispositions(
             raise RunValidationError(f"duplicate inventory source_order {order}")
         orders.add(order)
         text(item.get("source_locator"), f"{path}.source_locator")
-        before_key = optional_text(item.get("before_object_key"), f"{path}.before_object_key")
-        before_name = optional_text(item.get("before_tag_name"), f"{path}.before_tag_name")
         disposition = text(item.get("disposition"), f"{path}.disposition")
         if disposition not in INVENTORY_DISPOSITIONS:
             raise RunValidationError(f"{path}.disposition has unsupported value {disposition!r}")
-        after_name = optional_text(item.get("after_tag_name"), f"{path}.after_tag_name")
-        if disposition == "added":
-            if before_key is not None or before_name is not None or after_name is None:
-                raise RunValidationError(
-                    f"{path}.added requires blank before identity and a non-empty after_tag_name"
-                )
-        else:
-            if before_key is None or before_name is None:
-                raise RunValidationError(
-                    f"{path}.{disposition} requires before_object_key and before_tag_name"
-                )
-            if before_key in before_keys:
-                raise RunValidationError(f"duplicate inventory before_object_key {before_key!r}")
-            before_keys.add(before_key)
-        if disposition == "remove" and after_name is not None:
-            raise RunValidationError(f"{path}.remove requires a null after_tag_name")
-        if disposition not in {"remove", "added"} and after_name is None:
-            raise RunValidationError(f"{path}.{disposition} requires after_tag_name")
-        if after_name is not None:
-            if after_name in after_names:
-                raise RunValidationError(f"duplicate inventory after_tag_name {after_name!r}")
-            after_names.add(after_name)
-        for field in (
-            "trigger_before",
-            "trigger_after",
-            "variable_changes",
-            "parameter_changes",
-            "consent_changes",
-        ):
-            unique_texts(item.get(field), f"{path}.{field}")
         text(item.get("rationale"), f"{path}.rationale")
         linked_operations = set(unique_texts(item.get("operation_ids"), f"{path}.operation_ids"))
         if linked_operations - operation_ids:
@@ -120,19 +87,19 @@ def validate_inventory_dispositions(
             raise RunValidationError(
                 f"{path}.{disposition} is incompatible with tag action {tag_operation['action']!r}"
             )
-        target = effective_target(tag_operation, path) if disposition != "remove" else None
-        target_name = target.get("name") if isinstance(target, dict) else None
-        if disposition == "added":
-            if after_name != target_name:
-                raise RunValidationError(f"{path}.after_tag_name differs from the created tag")
-        else:
-            if before_key != tag_operation["object_key"]:
-                raise RunValidationError(f"{path}.before_object_key differs from its tag operation")
-            pre_change = object(tag_operation.get("pre_change"), f"{path}.tag_operation.pre_change")
-            if before_name != pre_change.get("name"):
-                raise RunValidationError(f"{path}.before_tag_name differs from pre_change.name")
-            if disposition != "remove" and after_name != target_name:
-                raise RunValidationError(f"{path}.after_tag_name differs from the target tag")
+        if item["target_id"] != tag_operation["target_id"]:
+            raise RunValidationError(f"{path}.target_id must select the linked tag target")
+        if disposition != "added":
+            before_key = tag_operation["object_key"]
+            if before_key in before_keys:
+                raise RunValidationError(f"duplicate inventory source tag {before_key!r}")
+            before_keys.add(before_key)
+            object(tag_operation.get("pre_change"), f"{path}.tag_operation.pre_change")
+        if disposition != "remove":
+            target_name = effective_target(tag_operation, path).get("name")
+            if target_name in after_names:
+                raise RunValidationError(f"duplicate inventory target tag name {target_name!r}")
+            after_names.add(target_name)
         records.append(item)
     if execution_mode == "refonte-durable" and before_keys != in_scope_tag_keys:
         missing = sorted(in_scope_tag_keys - before_keys)
@@ -206,13 +173,6 @@ def validate_target_inventory(
         record = deepcopy(row)
         record.pop("operation_keys", None)
         record["operation_ids"] = local_ids
-        if record.get("before_object_key") is not None:
-            record["before_object_key"] = local_key(
-                record["before_object_key"],
-                target_id,
-                f"$.inventory_dispositions[{index}].before_object_key",
-                fail,
-            )
         local_inventory.append(record)
     local_scope = (
         {

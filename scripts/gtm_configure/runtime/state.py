@@ -13,6 +13,7 @@ from gtm_configure.contract import ContractValidationError
 from gtm_configure.contract import validate_document as validate_contract
 from gtm_configure.core.json_io import StrictJsonError, load_json
 from gtm_configure.core.model import (
+    DELTA_ACTIONS,
     MATERIALIZATION_METHOD,
     PUBLICATION_ORDER,
     SCHEMA_VERSION,
@@ -21,8 +22,9 @@ from gtm_configure.core.model import (
 )
 from gtm_configure.core.privacy import redact_for_persistence
 from gtm_configure.core.public_identifiers import public_identifier_paths
-from gtm_configure.core.schemas import definition_validator
+from gtm_configure.core.schemas import definition_validator, schema_resolver, validator
 from gtm_configure.core.validation import canonical_sha256
+from gtm_configure.domain.graph import served_requirements
 from gtm_configure.domain.resources import (
     ResourceRegistryError,
     required_baseline_families,
@@ -34,6 +36,7 @@ from gtm_configure.runtime.verification import (
     build_pre_write_comparison,
     build_verification_comparison,
     materialization_fingerprints,
+    materialization_projection,
     validate_verification_comparison,
 )
 
@@ -156,7 +159,9 @@ def create_from_contract(
                     public_identifier_paths=public_identifier_paths(item[optional], records=[item]),
                 )
         object_changes.append(record)
-        for requirement_id in record["requirement_ids"]:
+    serves = served_requirements({item["operation_id"]: item for item in object_changes})
+    for record in object_changes:
+        for requirement_id in serves[record["operation_id"]]:
             requirement_objects[requirement_id].append(record["object_key"])
     requirements = []
     for item in contract["requirements"]:
@@ -213,7 +218,11 @@ def create_from_contract(
                 "requirement_ids": requirement_ids,
                 "source_locator": source_locator,
                 "fingerprint": canonical_sha256(contract),
+                "requirement_fingerprints": {
+                    item["id"]: canonical_sha256(item) for item in contract["requirements"]
+                },
             },
+            "revisions": [],
             "publication": {"performed": False, "version_created": False},
             "materialization": {
                 "method": MATERIALIZATION_METHOD,
@@ -223,8 +232,8 @@ def create_from_contract(
                     "pipelines",
                     "object_changes",
                     "payload_mappings",
-                    "consent_topologies",
-                    "execution_topologies",
+                    "consent_policies",
+                    "tag_policies",
                     "page_view_decisions",
                     "first_party_data_routes",
                     "inventory_dispositions",
@@ -241,8 +250,8 @@ def create_from_contract(
         "pipelines": pipelines,
         "object_changes": object_changes,
         "payload_mappings": payload_mappings,
-        "consent_topologies": deepcopy(contract["consent_topologies"]),
-        "execution_topologies": deepcopy(contract["execution_topologies"]),
+        "consent_policies": deepcopy(contract["consent_policies"]),
+        "tag_policies": deepcopy(contract["tag_policies"]),
         "page_view_decisions": deepcopy(contract["page_view_decisions"]),
         "first_party_data_routes": deepcopy(contract["first_party_data_routes"]),
         "inventory_dispositions": inventory_dispositions,
@@ -257,6 +266,7 @@ def create_from_contract(
                 "resources": {},
                 "preexisting_workspace_changes": None,
                 "capture_evidence": None,
+                "supplemental_captures": [],
                 "fingerprint": None,
             }
             for target in targets
@@ -280,6 +290,198 @@ def create_from_contract(
     }
     run["run"]["materialization"]["section_fingerprints"] = materialization_fingerprints(run)
     return validate_document(run)
+
+
+def _verified_policy_projection(document, keys):
+    """Freeze records bound to verified native consumers by their semantic references."""
+    from gtm_configure.domain.graph import object_references
+
+    operations = {item["object_key"]: item for item in document["object_changes"]}
+    references = keys | {operations[key]["operation_id"] for key in keys}
+    projection = materialization_projection(document)
+
+    def shape_layers(shape, resolver):
+        layers = []
+        if "$ref" in shape:
+            resolved = resolver.lookup(shape["$ref"])
+            layers.extend(shape_layers(resolved.contents, resolved.resolver))
+        for layer in shape.get("allOf", []):
+            layers.extend(shape_layers(layer, resolver))
+        layers.append((shape, resolver))
+        return layers
+
+    def owned(value, shape, resolver, context):
+        layers = shape_layers(shape, resolver)
+        annotations = {key: child for layer, _ in layers for key, child in layer.items()}
+        owner_paths = annotations.get("x-owner-paths")
+        if owner_paths is not None:
+            owner_values = []
+            for path in owner_paths:
+                resolved = context
+                for part in path:
+                    resolved = resolved.get(part, []) if isinstance(resolved, dict) else []
+                owner_values.append(resolved)
+            return deepcopy(value) if object_references(owner_values) & references else None
+        if isinstance(value, list):
+            item_shape, item_resolver = next(
+                (
+                    (layer["items"], origin)
+                    for layer, origin in reversed(layers)
+                    if "items" in layer
+                ),
+                ({}, resolver),
+            )
+            items = [owned(item, item_shape, item_resolver, item) for item in value]
+            return [item for item in items if item is not None] or None
+        if isinstance(value, dict):
+            properties = {
+                key: (child, origin)
+                for layer, origin in layers
+                for key, child in layer.get("properties", {}).items()
+            }
+            result = {
+                key: selected
+                for key, child in value.items()
+                if (selected := owned(child, *properties.get(key, ({}, resolver)), value))
+                is not None
+            }
+            if result and annotations.get("x-identity-key"):
+                result[annotations["x-identity-key"]] = value[annotations["x-identity-key"]]
+            return result or None
+        return None
+
+    phase_schema = validator("run").schema
+    resolver = schema_resolver("run")
+    protected = {
+        name: owned(rows, phase_schema["properties"][name], resolver, rows) or []
+        for name, rows in projection.items()
+        if name not in {"object_changes", "requirements", "targets"} and isinstance(rows, list)
+    }
+    consent_ids = {item["consent_policy_id"] for item in protected["tag_policies"]}
+    protected["consent_policies"] = [
+        item
+        for item in document["consent_policies"]
+        if item["consent_policy_id"] in consent_ids or item in protected["consent_policies"]
+    ]
+    return protected
+
+
+def _event_consumer(document, operation):
+    """Event consumers own whole event semantics; shared field owners own field proofs."""
+    return operation["resource_family"] == "tag" and (
+        operation["container_type"] == "server"
+        or any(
+            row["tag_object_key"] == operation["object_key"]
+            and row["lifecycle_role"] == "event-driven"
+            for row in document["tag_policies"]
+        )
+    )
+
+
+def revise_from_contract(document, contract, *, expected_fingerprint, note, timestamp=None):
+    """Revise only the unsent graph while preserving verified current-run evidence."""
+    current = deepcopy(validate_document(document))
+    if canonical_sha256(current) != expected_fingerprint:
+        raise RunConflictError("Current run changed since revision inspection")
+    if not isinstance(note, str) or not note.strip():
+        raise RunValidationError("Revision requires a durable rationale")
+    if any(item["state"] not in {"planned", "verified"} for item in current["object_changes"]):
+        raise RunValidationError(
+            "Revision requires authoritative reconciliation of every dispatched operation"
+        )
+    now = timestamp or _utc_now()
+    revised = create_from_contract(
+        contract,
+        run_id=current["run"]["id"],
+        source_locator=current["run"]["contract"]["source_locator"],
+        timestamp=now,
+    )
+    if revised["run"]["contract"]["fingerprint"] == current["run"]["contract"]["fingerprint"]:
+        raise RunValidationError("Revision requires an approved change to the remaining graph")
+    old_targets = {item["target_id"]: item for item in current["run"]["targets"]}
+    new_targets = {item["target_id"]: item for item in revised["run"]["targets"]}
+
+    def identity(row):
+        return {key: value for key, value in row.items() if key != "adapter_capabilities"}
+
+    if {key: identity(value) for key, value in old_targets.items()} != {
+        key: identity(value) for key, value in new_targets.items()
+    }:
+        raise RunValidationError(
+            "Revision preserves the current run's authorized target identities"
+        )
+    old_specs = {
+        item["object_key"]: item for item in materialization_projection(current)["object_changes"]
+    }
+    new_specs = {
+        item["object_key"]: item for item in materialization_projection(revised)["object_changes"]
+    }
+    old_ops = {item["object_key"]: item for item in current["object_changes"]}
+    verified = {key for key, item in old_ops.items() if item["state"] == "verified"}
+    for key in verified:
+        if key not in new_specs or canonical_sha256(old_specs[key]) != canonical_sha256(
+            new_specs[key]
+        ):
+            raise RunValidationError(
+                "Verified operations retain their original intent and authority; use an authorized follow-on change"
+            )
+        consumer = _event_consumer(current, old_ops[key])
+        for req in old_ops[key]["requirement_ids"] if consumer else []:
+            if current["run"]["contract"]["requirement_fingerprints"][req] != revised["run"][
+                "contract"
+            ]["requirement_fingerprints"].get(req):
+                raise RunValidationError(
+                    "Revision preserves approved source semantics of verified consumers"
+                )
+    if canonical_sha256(_verified_policy_projection(current, verified)) != canonical_sha256(
+        _verified_policy_projection(revised, verified)
+    ):
+        raise RunValidationError(
+            "Revision preserves policies and field proofs of verified consumers"
+        )
+    new_ops = {item["object_key"]: item for item in revised["object_changes"]}
+
+    def owned_intent(value, specs, ops, key):
+        requirements = value["run"]["contract"]["requirement_fingerprints"]
+        return {
+            "native": specs.get(key),
+            "policies": _verified_policy_projection(value, {key}) if key in ops else None,
+            "requirements": {req: requirements.get(req) for req in ops[key]["requirement_ids"]}
+            if key in ops and _event_consumer(value, ops[key])
+            else {},
+        }
+
+    changed = sorted(
+        key
+        for key in old_specs.keys() | new_specs.keys()
+        if canonical_sha256(owned_intent(current, old_specs, old_ops, key))
+        != canonical_sha256(owned_intent(revised, new_specs, new_ops, key))
+    )
+    revised["object_changes"] = [
+        deepcopy(old_ops[item["object_key"]])
+        if item["object_key"] in old_ops
+        and old_specs[item["object_key"]] == new_specs[item["object_key"]]
+        else item
+        for item in revised["object_changes"]
+    ]
+    for field in ("container_baselines", "target_results", "final_inventories"):
+        revised[field] = deepcopy(current[field])
+    revised["run"]["targets"] = deepcopy(current["run"]["targets"])
+    revised["run"]["started_at"] = current["run"]["started_at"]
+    revised["run"]["revisions"] = deepcopy(current["run"]["revisions"]) + [
+        {
+            "at": now,
+            "note": note,
+            "previous_contract_fingerprint": current["run"]["contract"]["fingerprint"],
+            "contract_fingerprint": revised["run"]["contract"]["fingerprint"],
+            "changed_operation_keys": changed,
+        }
+    ]
+    revised["run"]["materialization"]["section_fingerprints"] = materialization_fingerprints(
+        revised
+    )
+    derive_live_status(revised)
+    return validate_document(revised)
 
 
 def load_document(path: Path) -> dict[str, Any]:
@@ -362,11 +564,13 @@ def build_target_baseline(
         "resources": normalized,
         "preexisting_workspace_changes": safe_changes,
         "capture_evidence": deepcopy(capture_evidence),
+        "supplemental_captures": [],
         "fingerprint": canonical_sha256(
             {
                 "resources": normalized,
                 "workspace_changes": safe_changes,
                 "capture_evidence": capture_evidence,
+                "supplemental_captures": [],
             }
         ),
     }
@@ -381,7 +585,7 @@ def record_target_baseline(
     preexisting_workspace_changes: list[dict[str, Any]],
     capture_evidence: dict[str, Any],
 ) -> dict[str, Any]:
-    """Record one baseline before the first write; repeated identical input is a no-op."""
+    """Capture the initial target baseline or append proof for newly required families."""
     value = deepcopy(validate_document(document))
     target = next(
         (item for item in value["run"]["targets"] if item["target_id"] == target_id),
@@ -393,36 +597,39 @@ def record_target_baseline(
         [item for item in value["object_changes"] if item["target_id"] == target_id],
         target["container_type"],
     )
-    if not required_families <= set(resources):
-        raise RunValidationError(
-            f"baseline misses planned resource families: {sorted(required_families - set(resources))}"
-        )
+    index = next(
+        index
+        for index, row in enumerate(value["container_baselines"])
+        if row["target_id"] == target_id
+    )
+    current = value["container_baselines"][index]
+    captured = set(current["resource_families"])
+    supplemental = bool(current.get("capture_evidence"))
+    if supplemental:
+        if set(resources) != required_families - captured:
+            raise RunConflictError(
+                "Supplemental capture proves exactly the newly required resource families"
+            )
+    else:
+        if not required_families <= set(resources):
+            raise RunValidationError(
+                f"baseline misses planned resource families: {sorted(required_families - set(resources))}"
+            )
+        if any(
+            item["target_id"] == target_id and (item["state"] != "planned" or item["journal"])
+            for item in value["object_changes"]
+        ):
+            raise RunConflictError(
+                "Initial target baseline precedes the first dispatched operation"
+            )
     if value["run"]["execution_mode"] == "refonte-durable":
         expected_families = (
             WEB_RESOURCE_FAMILIES if target["container_type"] == "web" else SERVER_RESOURCE_FAMILIES
         )
-        if set(resources) != expected_families:
+        if set(resources) | captured != expected_families:
             raise RunValidationError(
-                "refonte baseline must exhaust the complete target resource surface; "
-                f"missing={sorted(expected_families - set(resources))}, "
-                f"extra={sorted(set(resources) - expected_families)}"
+                "refonte baseline exhausts the complete target resource surface"
             )
-    started = [
-        item["operation_id"]
-        for item in value["object_changes"]
-        if item["target_id"] == target_id
-        and (
-            item["state"] in {"in_progress", "saved", "verified", "uncertain"}
-            or any(
-                entry["state"] in {"in_progress", "saved", "verified", "uncertain"}
-                for entry in item["journal"]
-            )
-        )
-    ]
-    if started:
-        raise RunConflictError(
-            "target baseline must be recorded before mutation: " + ", ".join(started)
-        )
     baseline = build_target_baseline(
         target,
         resources,
@@ -431,16 +638,23 @@ def record_target_baseline(
         capture_evidence=capture_evidence,
         operations=[item for item in value["object_changes"] if item["target_id"] == target_id],
     )
-    index = next(
-        index
-        for index, item in enumerate(value["container_baselines"])
-        if item["target_id"] == target_id
-    )
-    current = value["container_baselines"][index]
-    if current.get("complete") is True:
-        if current == baseline:
-            return value
-        raise RunConflictError(f"target {target_id!r} already has a different complete baseline")
+    if supplemental:
+        extension = {"captured_at": captured_at, "capture_evidence": deepcopy(capture_evidence)}
+        combined = deepcopy(current)
+        for field in ("resources", "family_counts", "resource_identities"):
+            combined[field].update(baseline[field])
+        combined["resource_families"] = sorted(combined["resources"])
+        combined["supplemental_captures"].append(extension)
+        combined["complete"] = True
+        combined["fingerprint"] = canonical_sha256(
+            {
+                "resources": combined["resources"],
+                "workspace_changes": combined["preexisting_workspace_changes"],
+                "capture_evidence": combined["capture_evidence"],
+                "supplemental_captures": combined["supplemental_captures"],
+            }
+        )
+        baseline = combined
     value["container_baselines"][index] = baseline
     value["run"]["updated_at"] = captured_at.strip()
     return validate_document(value)
@@ -485,14 +699,7 @@ def checkpoint_validated_operation(
             )
     if not transition_allowed(current, state):
         raise RunValidationError(f"operation transition {current!r} -> {state!r} is not allowed")
-    delta_actions = {
-        "update",
-        "replace",
-        "rename",
-        "pause",
-        "unpause",
-        "remove",
-    }
+    delta_actions = DELTA_ACTIONS
     if (
         current == "planned"
         and state in {"in_progress", "saved", "verified"}
@@ -704,6 +911,7 @@ def inspect_validated_document(value: dict[str, Any]) -> dict[str, Any]:
         "pass": value["run"]["status"] == "Configured",
         "valid": True,
         "schema_version": value["schema_version"],
+        "run_fingerprint": canonical_sha256(value),
         "mode": value["run"]["mode"],
         "status": value["run"]["status"],
         "ready_operations": sorted(ready),

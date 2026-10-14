@@ -394,7 +394,7 @@ def test_pipeline_event_rewrite_rejected_in_both_phases():
         for cell in trigger["intended"]["customEventFilter"][0]["parameter"]:
             if cell["key"] == "arg1":
                 cell["value"] = "purchase"
-        for topology in document["consent_topologies"]:
+        for topology in document["consent_policies"]:
             topology["event_coverage"] = ["purchase"]
     with pytest.raises(ValueError, match="transported_event"):
         validate_contract(contract)
@@ -489,10 +489,24 @@ def test_shared_consent_dependencies_serve_ready_event(blocked, tmp_path):
     contract = shared_events_contract()
     if blocked == 0:
         del contract["requirements"][0]["unresolved_fields"]
+        contract["implementation"]["field_bindings"] = [
+            item
+            for item in contract["implementation"]["field_bindings"]
+            if item["field_scope"] != "unresolved"
+        ]
     elif blocked == 2:
         contract["requirements"][1]["unresolved_fields"] = deepcopy(
             contract["requirements"][0]["unresolved_fields"]
         )
+        binding = deepcopy(
+            next(
+                item
+                for item in contract["implementation"]["field_bindings"]
+                if item["field_scope"] == "unresolved"
+            )
+        )
+        binding.update(requirement_id="SIGNUP", owner_object_key="web::tag::GA4 - Event - sign_up")
+        contract["implementation"]["field_bindings"].append(binding)
     target = contract["targets"][0]
     adapter = FakeGraphAdapter(target)
     capabilities = {
@@ -513,7 +527,7 @@ def test_shared_consent_dependencies_serve_ready_event(blocked, tmp_path):
     execute_ready_operations(path, registry)
     run = load_document(path)
     inspection = inspect_document(run)
-    assert len(adapter.mutations) == {0: 7, 1: 5, 2: 0}[blocked]
+    assert len(adapter.mutations) == {0: 8, 1: 6, 2: 0}[blocked]
     assert inspection["waiting_operations"] == {}
     if blocked:
         assert "GA4 - Event - generate_lead" not in adapter.mutations

@@ -45,6 +45,7 @@ def main():
             tagId: str | None = None,
             triggerId: str | None = None,
             variableId: str | None = None,
+            templateId: str | None = None,
             createOrUpdateConfig: dict | None = None,
             fingerprint: str | None = None,
         ) -> dict:
@@ -72,7 +73,14 @@ def main():
 
         app.add_tool(handler, name=name)
 
-    for tool in ("gtm_workspace", "gtm_container", "gtm_tag", "gtm_trigger", "gtm_variable"):
+    for tool in (
+        "gtm_workspace",
+        "gtm_container",
+        "gtm_tag",
+        "gtm_trigger",
+        "gtm_variable",
+        "gtm_template",
+    ):
         add(tool)
     app.run(transport="streamable-http" if args.transport == "http" else args.transport)
 

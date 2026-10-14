@@ -5,11 +5,12 @@ const assert = require('node:assert/strict');
 const root = process.env.RUNTIME_ROOT || path.resolve(__dirname, '../..');
 const pythonPath = process.env.TEST_PYTHON;
 const discoveryMode = process.env.RELAY_DISCOVERY === '1';
+const cancelMode = process.env.RELAY_CANCEL === '1';
 const shellPath = process.env.TEST_PWSH;
 assert(pythonPath && shellPath, 'Set TEST_PYTHON and TEST_PWSH to discovered runtimes');
 const quoted = fs.mkdtempSync(path.join(process.argv[2], "l’agent ‘test’ “double” "));
 const scriptPath = discoveryMode ? path.join(root, 'scripts/configure_gtm.py') : path.join(quoted, 'worker.py');
-if (!discoveryMode) fs.copyFileSync(path.join(__dirname, 'mcp_stdio_worker.py'), scriptPath);
+if (!discoveryMode) fs.copyFileSync(path.join(__dirname, cancelMode ? 'mcp_cancel_worker.py' : 'mcp_stdio_worker.py'), scriptPath);
 const runPath = path.join(quoted, 'run.json'), profilesPath = path.join(quoted, 'profiles.json');
 const discoveryPath = path.join(quoted, 'input.json'), discoveryOutputPath = path.join(quoted, 'inventory.json');
 let fixture;
@@ -42,9 +43,14 @@ const tools = {
     worker.on('close', code => {exited = true; exitCode = code;});
     return pull();
   },
-  write_stdin: async ({chars}) => {if (chars) worker.stdin.write(chars); return pull();},
+  write_stdin: async ({chars}) => {
+    assert((chars || '').length < 17000, 'Every host reply transfer must be bounded');
+    if (chars) worker.stdin.write(chars);
+    return pull();
+  },
   synthetic__gtm_tag: async args => {
     calls.push(args.action);
+    if (cancelMode) return new Promise(() => {});
     if (args.tagId === 'quota') { const error = new Error('private diagnostic'); error.status = 429; error.headers = {'Retry-After':'17'}; throw error; }
     if (args.tagId === 'sensitive') return {content:[{type:'text',text:JSON.stringify({access_token:'SYNTHETIC_ONLY'})}]};
     if (args.action === 'create') {
@@ -55,6 +61,10 @@ const tools = {
   },
   synthetic__gtm_workspace: async () => {throw new Error('Forbidden action was dispatched');},
   synthetic__gtm_variable: async () => {calls.push('failed');throw new Error('Synthetic tool failure');},
+  synthetic__gtm_template: async () => {
+    calls.push('template');
+    return {structuredContent:{templateId:'77',templateData:fs.readFileSync(path.join(root,'tests/fixtures/openai-web-template.tpl'),'utf8') + '\n' + 'Équipe 日本語\n'.repeat(100000)}};
+  },
 };
 const AsyncFunction = Object.getPrototypeOf(async function(){}).constructor;
 const source = fs.readFileSync(path.join(root,'scripts/mcp_relay.js'),'utf8');
@@ -71,12 +81,26 @@ if (discoveryMode) {
     };
   }
 }
-const fn = new AsyncFunction('pythonPath','scriptPath','runPath','profilesPath','tools','text','notify','yield_control','discoveryPath','discoveryOutputPath',source);
+const fn = new AsyncFunction('pythonPath','scriptPath','runPath','profilesPath','tools','text','notify','yield_control','discoveryPath','discoveryOutputPath','shellPath','runTimeoutSeconds',source);
 (async () => {
   try {
-    await fn(pythonPath,scriptPath,discoveryMode ? undefined : runPath,profilesPath,tools,v=>outputs.push(v),v=>outputs.push(v),async()=>{},discoveryMode ? discoveryPath : undefined,discoveryMode ? discoveryOutputPath : undefined);
+    try {
+      await fn(pythonPath,scriptPath,discoveryMode ? undefined : runPath,profilesPath,tools,v=>outputs.push(v),v=>outputs.push(v),async()=>{},discoveryMode ? discoveryPath : undefined,discoveryMode ? discoveryOutputPath : undefined,shellPath,cancelMode ? 3 : undefined);
+      assert(!cancelMode, 'Cancellation must surface its deadline');
+    } catch (error) {
+      if (!cancelMode) throw error;
+      assert.match(error.message, /deadline/);
+    }
     while (!exited) await delay();
     assert.equal(exitCode,0,pending);
+    if (cancelMode) {
+      assert.deepEqual(calls,['create']);
+      assert.deepEqual(JSON.parse(fs.readFileSync(runPath.replace(/\.json$/,'.execution.json'),'utf8')), {status:'Interrupted',writes_attempted:1});
+      const check = cp.spawnSync(pythonPath,['-X','utf8','-B','-c',"import sys; from pathlib import Path; from gtm_configure.runtime.adapter_protocol import run_file_lock; context=run_file_lock(Path(sys.argv[1])); context.__enter__(); context.__exit__(None,None,None)",runPath],{encoding:'utf8',env:{...process.env,PYTHONPATH:path.join(root,'scripts')}});
+      assert.equal(check.status,0,check.stderr);
+      console.log('PASS actual relay cancellation during write, confirmed worker exit and lock reacquisition');
+      return;
+    }
     if (discoveryMode) {
       assert.equal(outputs.at(-1).status,'Discovered');
       const inventory = JSON.parse(fs.readFileSync(discoveryOutputPath,'utf8'));
@@ -86,7 +110,7 @@ const fn = new AsyncFunction('pythonPath','scriptPath','runPath','profilesPath',
       return;
     }
     assert.equal(outputs.at(-1).status,'Synthetic relay done');
-    assert.equal(calls.length,5);
+    assert.equal(calls.length,6);
     assert.equal(commands.length,1, 'A persistent worker should be launched exactly once');
     assert(commands.every(command => !command.includes(nativeName) && !command.includes('SYNTHETIC_ONLY')));
     assert(!JSON.stringify(outputs).includes('SYNTHETIC_ONLY'));

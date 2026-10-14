@@ -12,7 +12,11 @@ Only when enhanced conversions are explicitly in scope, map approved `user_data`
 server Event Data. Record normalization/hash ownership and external Google Ads activation. Prefer
 the narrowest documented consumer and timing: an event override for conversion-page data, a
 User-Provided Data Event route for approved earlier-page capture, or tag-wide collection only when
-the current Google tag setup explicitly authorizes that wider lifecycle. Enumerate every effective consumer under the approved feature scope.
+the current Google tag setup explicitly authorizes that wider lifecycle. The
+[first-party scope invariant](../../data/identity.md#apply-the-pii-firewall) applies to every
+effective receiver, including an existing GA4 forwarder. Establish its separate authorized
+collection feature or exact documented native/property/exclusion disposition before selecting the
+route. The carrier name and an Ads receiver binding alone do not establish the GA4 outcome.
 
 For earlier-page capture, configure the native UPD variable on the actual capture-event sender
 when its value first becomes available. The documented event-level `user_data` override can carry

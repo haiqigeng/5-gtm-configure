@@ -38,7 +38,7 @@ Use current official entry points for the exact product. Examples include:
 Vendor-owned tag managers are separate administration systems. This route configures their browser
 destination through an established GTM implementation.
 
-## Useful supported routes to investigate
+## Product routes to investigate
 
 These discovery aids require current source and installed-version inspection:
 

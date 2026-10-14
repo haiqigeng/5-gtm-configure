@@ -39,9 +39,6 @@ def validate_transport_consent(topology: dict[str, Any], fail: Callable[[str], N
             or topology.get("transport_behavior") != "always-transported"
             or topology.get("server_enforcement", {}).get("mechanism") != "none"
             or topology.get("server_tag_keys")
-            or topology.get("transporter_tag_keys")
-            or topology.get("transporter_destination_vendor_block")
-            or topology.get("intentional_double_gate")
         ):
             fail(
                 "client-policy-ungated requires an ungated web destination, without server transport"
@@ -69,36 +66,38 @@ def validate_transport_consent(topology: dict[str, Any], fail: Callable[[str], N
         )
 
 
-def validate_consent_topologies(
+def consent_transporters(policy, tag_policies, mode, explicit_keys=frozenset()):
+    """Web policy selectors own membership; a server-bound route supplies transport."""
+    members = {
+        item["tag_object_key"]
+        for item in tag_policies
+        if item["consent_policy_id"] == policy["consent_policy_id"]
+    }
+    return members if mode == "pipeline" and policy["server_tag_keys"] else members & explicit_keys
+
+
+def validate_consent_policies(
     raw: Any,
     requirement_ids: set[str],
     objects: dict[str, dict[str, Any]],
     targets: dict[str, dict[str, Any]],
     mode: str,
+    tag_policies: list[dict[str, Any]],
 ) -> dict[str, dict[str, Any]]:
     records: dict[str, dict[str, Any]] = {}
     server_tag_bindings: dict[str, list[str]] = {}
-    for index, value in enumerate(array(raw, "$.consent_topologies")):
-        path = f"$.consent_topologies[{index}]"
+    for index, value in enumerate(array(raw, "$.consent_policies")):
+        path = f"$.consent_policies[{index}]"
         topology = object(value, path)
 
         validate_transport_consent(topology, fail)
-        topology_id = text(topology.get("consent_topology_id"), f"{path}.consent_topology_id")
+        topology_id = text(topology.get("consent_policy_id"), f"{path}.consent_policy_id")
         if topology_id in records:
             raise ContractValidationError(f"duplicate consent topology {topology_id!r}")
         records[topology_id] = topology
         text(topology.get("destination"), f"{path}.destination")
         if topology.get("consent_mode") not in CONSENT_MODES:
             raise ContractValidationError(f"{path}.consent_mode is unsupported")
-        links = set(
-            unique_texts(
-                topology.get("requirement_ids"),
-                f"{path}.requirement_ids",
-                allow_empty=False,
-            )
-        )
-        if not links <= requirement_ids:
-            raise ContractValidationError(f"{path}.requirement_ids contains unknown IDs")
         if topology.get("transport_behavior") not in TRANSPORT_BEHAVIORS:
             raise ContractValidationError(f"{path}.transport_behavior is unsupported")
         web = object(topology.get("web_enforcement"), f"{path}.web_enforcement")
@@ -123,19 +122,12 @@ def validate_consent_topologies(
         )
         if len(coverage) != len(set(coverage)):
             raise ContractValidationError(f"{path}.event_coverage contains duplicates")
-        if topology.get("intentional_double_gate") is True and not topology.get(
-            "double_gate_justification"
-        ):
-            raise ContractValidationError(f"{path}.double_gate_justification is required")
         server_tag_keys = unique_texts(topology.get("server_tag_keys"), f"{path}.server_tag_keys")
-        transporter_tag_keys = unique_texts(
-            topology.get("transporter_tag_keys"), f"{path}.transporter_tag_keys"
+        transporter_tag_keys = consent_transporters(topology, tag_policies, mode)
+        vendor_block = any(
+            objects.get(key, {}).get("intended", {}).get("blockingTriggerId", [])
+            for key in transporter_tag_keys
         )
-        vendor_block = topology.get("transporter_destination_vendor_block")
-        if not isinstance(vendor_block, bool):
-            raise ContractValidationError(
-                f"{path}.transporter_destination_vendor_block must be boolean"
-            )
         for key in server_tag_keys:
             item = objects.get(key)
             if item is None or not active_tag(item):
@@ -260,17 +252,16 @@ def validate_consent_topologies(
         if (
             topology.get("transport_behavior") == "blocked"
             and explicit_server_gate
-            and topology.get("intentional_double_gate") is not True
+            and not topology.get("double_gate_justification")
         ):
             raise ContractValidationError(
                 f"{path} duplicates a transport block with a server destination gate"
             )
-        if (
-            not (topology.get("transport_behavior") == "blocked" and explicit_server_gate)
-            and topology.get("intentional_double_gate") is True
-        ):
+        if not (
+            topology.get("transport_behavior") == "blocked" and explicit_server_gate
+        ) and topology.get("double_gate_justification"):
             raise ContractValidationError(
-                f"{path}.intentional_double_gate is true without two configurable gates"
+                f"{path}.double_gate_justification requires two configurable gates"
             )
     active_server_tags = {
         key

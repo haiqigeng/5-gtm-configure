@@ -171,8 +171,10 @@ class TestDurableEvidence(fixture_durable_evidence.CurrentRegressionHardeningTes
             }
         )
         action.pop("intended")
-        contract["execution_topologies"] = []
+        contract["tag_policies"] = []
         contract["page_view_decisions"] = []
+        contract["requirements"][0]["parameters"] = {}
+        contract["implementation"]["field_bindings"] = []
         fixture_durable_evidence.approve_mutations(contract)
         run = fixture_durable_evidence.materialize(contract)
         operation = run["object_changes"][0]

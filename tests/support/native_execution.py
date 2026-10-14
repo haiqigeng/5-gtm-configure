@@ -11,7 +11,8 @@ from fixtures.mcp_behavior_scenario import PROFILE, FakeGtm, bind, request
 from gtm_configure.adapters.mcp import McpTargetAdapter
 from gtm_configure.contract import ContractValidationError, validate_document
 from gtm_configure.core.privacy import contains_redacted, redact_for_persistence, sensitive_findings
-from gtm_configure.core.public_identifiers import canonical_template_source, public_identifier_paths
+from gtm_configure.core.public_identifiers import public_identifier_paths
+from gtm_configure.core.template_source import canonical_template_source
 from gtm_configure.intake.request import compile_request
 from gtm_configure.runtime.adapter_protocol import (
     AdapterExecutionError,
@@ -90,6 +91,25 @@ def meta_matching_contract(fields=("em", "ph")):
     routes = []
     original_route = deepcopy(contract["first_party_data_routes"][0])
     objects = contract["implementation"]["objects"]
+    template_key = "web-main::template::Synthetic matching template"
+    source = (ROOT / "tests/fixtures/synthetic-matching-template.tpl").read_text(encoding="utf-8")
+    objects.append(
+        {
+            "target_id": "web-main",
+            "resource_family": "template",
+            "name": "Synthetic matching template",
+            "object_key": template_key,
+            "object_id": "synthetic-template",
+            "action": "reuse",
+            "requirement_ids": [req["id"]],
+            "depends_on": [],
+            "justification": "Synthetic installed-source identity, not a Meta publisher/runtime claim",
+            "evidence": ["container-confirmed"],
+            "risk": "routine",
+            "intended": {"templateData": source},
+        }
+    )
+    tag["depends_on"].append(template_key)
     removed = {o["object_key"] for o in objects if o["intended"].get("type") == "awec"}
     objects[:] = [o for o in objects if o["object_key"] not in removed]
     tag["depends_on"] = [k for k in tag["depends_on"] if k not in removed]
@@ -135,7 +155,6 @@ def meta_matching_contract(fields=("em", "ph")):
             fields=[
                 {
                     "name": name,
-                    "source": source,
                     "normalization": ["native"],
                     "empty_behavior": "omit",
                 }
@@ -143,9 +162,6 @@ def meta_matching_contract(fields=("em", "ph")):
         )
         route["consumer_bindings"][0].update(
             product="meta",
-            implementation="installed-template",
-            tag_type="cvt_meta",
-            template_identity="cvt_meta",
             user_data_path=[
                 "parameter",
                 "advancedMatchingList",
@@ -164,8 +180,7 @@ def meta_matching_contract(fields=("em", "ph")):
     ]
     contract["implementation"]["field_bindings"] = bindings
     contract["first_party_data_routes"] = routes
-    contract["consent_topologies"][0]["destination"] = "Meta"
-    contract["execution_topologies"][0]["built_in_consent_checks"] = []
+    contract["consent_policies"][0]["destination"] = "Meta"
     return approve_mutations(contract)
 
 

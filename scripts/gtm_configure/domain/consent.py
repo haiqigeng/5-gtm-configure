@@ -4,13 +4,11 @@ from typing import Any, Callable
 
 from gtm_configure.core.public_identifiers import locate
 from gtm_configure.core.schemas import validate_definition
-from gtm_configure.domain.localization import (
-    local_array,
-)
 from gtm_configure.domain.native import (
     decode_parameter,
 )
 from gtm_configure.domain.web_model import BUILT_IN_TRIGGER_TYPES
+from gtm_configure.domain.web_native import tag_additional_consent_checks, tag_firing_option
 
 ALTERNATIVE_GATES = {"firing-trigger-condition", "additional-consent-checks"}
 
@@ -22,7 +20,9 @@ def validate_convention(execution, enforcement, operations, fail):
     evidence = enforcement.get("evidence")
     if not isinstance(evidence, str) or not evidence.strip():
         fail("Existing consent convention requires inspected container/default/lifecycle evidence")
-    if execution.get("blocking_trigger_keys") or execution.get("blocking_event_scope"):
+    owner = operations.get(execution["tag_object_key"], {})
+    native = owner.get("intended") or owner.get("pre_change") or {}
+    if native.get("blockingTriggerId") or execution.get("blocking_event_scope"):
         fail("Alternative consent convention cannot also declare vendor blocking triggers")
 
     def snapshot(key):
@@ -60,19 +60,19 @@ def validate_convention(execution, enforcement, operations, fail):
             )
         ):
             fail("Grant predicate must reject missing and denied consent")
-        if execution.get("additional_consent_checks"):
+        if tag_additional_consent_checks(native, "$.tag_policies[].bound_tag"):
             fail("Firing-trigger convention cannot also use Additional Consent Checks")
-        for trigger in execution["normal_triggers"]:
+        for trigger in execution["trigger_roles"]:
             configured = snapshot(trigger["trigger_object_key"])
             if condition not in configured.get("filter", []):
                 fail("Every firing trigger must contain the exact positive grant_condition")
     else:
         if (
             execution.get("lifecycle_role") != "event-driven"
-            or execution.get("firing_option") != "once-per-event"
+            or tag_firing_option(native, "$.tag_policies[].bound_tag") != "once-per-event"
         ):
             fail("Additional Consent Checks convention requires event-driven once-per-event tags")
-        checks = execution.get("additional_consent_checks", [])
+        checks = tag_additional_consent_checks(native, "$.tag_policies[].bound_tag")
         bindings = enforcement.get("default_bindings")
         if not checks or not isinstance(bindings, dict) or set(bindings) != set(checks):
             fail("Every Additional Consent Check requires an exact denied default binding")
@@ -137,55 +137,46 @@ def validate_topology_consent_binding(
     consent_by_id: dict[str, dict[str, Any]],
     path: str,
     fail: Callable[[str], None],
+    transporter_keys: set[str],
 ) -> None:
     tag_key = source.get("tag_object_key")
-    topology_ids = local_array(
-        source.get("consent_topology_ids"), f"{path}.consent_topology_ids", error_type=fail
-    )
-    if not topology_ids:
-        fail(f"{path}.consent_topology_ids must not be empty")
-    if len(set(topology_ids)) != len(topology_ids):
-        fail(f"{path}.consent_topology_ids contains duplicates")
-    linked_requirements = set(source.get("requirement_ids", []))
-    for topology_id in topology_ids:
-        topology = consent_by_id.get(topology_id)
-        if topology is None:
-            fail(f"{path} references unknown consent topology {topology_id!r}")
-            continue
-        if not linked_requirements <= set(topology.get("requirement_ids", [])):
-            fail(f"{path} consent topology {topology_id!r} does not cover its requirements")
-        if source.get("consent_mode") != topology.get("consent_mode"):
-            fail(f"{path}.consent_mode differs from consent topology {topology_id!r}")
-        mechanism = topology.get("web_enforcement", {}).get("mechanism")
-        is_transporter = tag_key in set(topology.get("transporter_tag_keys", []))
-        if source.get("consent_mode") == "strict-basic":
-            allowed = (
-                {"transport-trigger-only"}
-                if is_transporter and topology.get("transporter_destination_vendor_block") is False
-                else {
-                    "cmp-lifecycle-plus-vendor-block",
-                    "business-trigger-plus-vendor-block",
-                    *ALTERNATIVE_GATES,
-                }
-            )
-            if mechanism not in allowed:
-                fail(f"{path}.strict-basic consent mechanism differs from the tag's route role")
-            if mechanism in ALTERNATIVE_GATES and topology.get("unknown_state_behavior") != "deny":
-                fail("Alternative strict-basic conventions must fail closed on unknown consent")
-        native_google_carrier = (
-            is_transporter
-            and mechanism == "transport-trigger-only"
-            and topology.get("signal_authority") == "google-consent-mode"
-            and topology.get("server_enforcement", {}).get("mechanism")
-            in {"incoming-google-consent-native", "none"}
-        )
-        if (
-            source.get("consent_mode") == "advanced-native"
-            and not native_google_carrier
-            and mechanism
-            not in {
-                "google-consent-mode",
-                "product-native",
+    topology_id = source["consent_policy_id"]
+    topology = consent_by_id.get(topology_id)
+    if topology is None:
+        fail(f"{path} references unknown consent policy {topology_id!r}")
+        return
+    mode = topology["consent_mode"]
+    mechanism = topology.get("web_enforcement", {}).get("mechanism")
+    is_transporter = tag_key in transporter_keys
+    if mode == "strict-basic":
+        allowed = (
+            {"transport-trigger-only"}
+            if is_transporter
+            and topology["web_enforcement"]["mechanism"] == "transport-trigger-only"
+            else {
+                "cmp-lifecycle-plus-vendor-block",
+                "business-trigger-plus-vendor-block",
+                *ALTERNATIVE_GATES,
             }
-        ):
-            fail(f"{path}.advanced-native needs a documented native consent mechanism")
+        )
+        if mechanism not in allowed:
+            fail(f"{path}.strict-basic consent mechanism differs from the tag's route role")
+        if mechanism in ALTERNATIVE_GATES and topology.get("unknown_state_behavior") != "deny":
+            fail("Alternative strict-basic conventions must fail closed on unknown consent")
+    native_google_carrier = (
+        is_transporter
+        and mechanism == "transport-trigger-only"
+        and topology.get("signal_authority") == "google-consent-mode"
+        and topology.get("server_enforcement", {}).get("mechanism")
+        in {"incoming-google-consent-native", "none"}
+    )
+    if (
+        mode == "advanced-native"
+        and not native_google_carrier
+        and mechanism
+        not in {
+            "google-consent-mode",
+            "product-native",
+        }
+    ):
+        fail(f"{path}.advanced-native needs a documented native consent mechanism")

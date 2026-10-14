@@ -14,11 +14,11 @@ class TestInputAndExecution(fixture_input_and_execution.AuditRegressionsFixture)
         result = fixture_input_and_execution.compile_request(
             fixture_input_and_execution.compact(original)
         )
-        self.assertEqual(result["execution_topologies"], original["execution_topologies"])
-        self.assertEqual(result["consent_topologies"], original["consent_topologies"])
+        self.assertEqual(result["tag_policies"], original["tag_policies"])
+        self.assertEqual(result["consent_policies"], original["consent_policies"])
         self.assertEqual(len(result["implementation"]["objects"]), 3)
         broken = fixture_input_and_execution.compact(original)
-        broken.pop("consent_topologies")
+        broken.pop("consent_policies")
         with self.assertRaises(ValueError):
             fixture_input_and_execution.compile_request(broken)
 
@@ -36,7 +36,7 @@ class TestInputAndExecution(fixture_input_and_execution.AuditRegressionsFixture)
         self.assertEqual(len(result["implementation"]["objects"]), 3)
         self.assertNotIn("Unrelated trigger", fixture_input_and_execution.json.dumps(result))
 
-    def test_compiler_propagates_late_requirement_through_shared_dependency(self):
+    def test_compiler_preserves_authority_and_derives_shared_dependency_demand(self):
         def item(name, requirements, dependencies):
             return {
                 "name": name,
@@ -68,8 +68,12 @@ class TestInputAndExecution(fixture_input_and_execution.AuditRegressionsFixture)
         ):
             result = fixture_input_and_execution.compile_request(request)
         objects = {item["name"]: item for item in result["implementation"]["objects"]}
-        self.assertEqual(objects["shared"]["requirement_ids"], ["A", "B"])
-        self.assertEqual(objects["leaf"]["requirement_ids"], ["A", "B"])
+        self.assertEqual(objects["shared"]["requirement_ids"], [])
+        self.assertEqual(objects["leaf"]["requirement_ids"], [])
+        from gtm_configure.domain.graph import served_requirements
+
+        graph = {key: {**row, "dependencies": row["depends_on"]} for key, row in objects.items()}
+        self.assertEqual(served_requirements(graph)["leaf"], {"A", "B"})
 
 
 class TestNativeBoundaries(fixture_native_boundaries.NativeBoundaryTestsFixture):
@@ -126,14 +130,16 @@ class TestGoogleSettings(fixture_google_settings.GoogleTagInheritanceTestFixture
         )
         compact = {
             "requirements": contract["requirements"],
-            "execution_topologies": [],
+            "tag_policies": [],
             "field_bindings": [],
         }
         compact["requirements"][0]["parameters"]["lead_type"]["missing_behavior"] = (
             "omit when absent"
         )
         fixture_google_settings.derive_exact_declarations(compact, operations)
-        self.assertEqual(compact["field_bindings"][0]["native_binding"], mapping["native_binding"])
+        self.assertEqual(
+            compact["field_bindings"][0]["owner_object_key"], "web-main::variable::Shared"
+        )
         self.assertEqual(compact["field_bindings"][0]["gtm_resolution"], "{{DLV - lead_type}}")
 
 

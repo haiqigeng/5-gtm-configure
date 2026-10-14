@@ -39,8 +39,8 @@ events and state variables rather than copying example category values from anot
 
 Official entry points:
 
-- https://my.onetrust.com/articles/en_US/Knowledge/UUID-301b21c8-a73a-05e8-175a-36c9036728dc
-- https://my.onetrust.com/articles/en_US/Knowledge/UUID-d81787f6-685c-2262-36c3-5f1f3369e2a7
+- https://developer.onetrust.com/onetrust/docs/google-tag-manager
+- https://developer.onetrust.com/onetrust/docs/using-google-consent-mode
 
 Reconcile auto-blocking, site-deployed scripts, the CMP template, GTM additional-consent checks, and
 manual blocking around one default/update owner. Region/category mappings are approved CMP inputs.
@@ -105,10 +105,21 @@ every consumer.
 
 ## Secondary CMPs
 
-For Cookiebot, Commanders Act/TrustCommander, Usercentrics, or Quantcast, use the common state
+For Cookiebot, Commanders Act/TrustCommander, Usercentrics, or InMobi CMP, use the common state
 contract and reopen the selected CMP's current official GTM and consent documentation. Confirm its
 installed template, deployment owner, initialization and update lifecycle, exact grant state,
 Google consent mapping, and revocation behavior. Their own verified signals supply the common contract.
+
+Official entry points for the identified product:
+
+- [Cookiebot GTM deployment](https://support.cookiebot.com/hc/en-us/articles/360003793854-Google-Tag-Manager-deployment)
+- [Usercentrics consent-aware GTM tags](https://support.usercentrics.com/hc/en-us/articles/18375671341596-How-to-Configure-Google-Tag-Manager-Tags-to-be-Consent-Aware)
+- [Commanders Act consent state API](https://community.commandersact.com/consent-management/onsite-api/consent.get)
+- [InMobi CMP GTM implementation](https://support.inmobi.com/choice/other-resources/google-tag-manager-gtm-implementation)
+
+InMobi CMP is the current product name for former Quantcast Choice. Quantcast's measurement Live
+Tag is a separate destination. Exact deployed CMP/version evidence selects the current source and
+signal contract, including any documented replacement for an obsolete integration method.
 
 ## Other CMPs
 

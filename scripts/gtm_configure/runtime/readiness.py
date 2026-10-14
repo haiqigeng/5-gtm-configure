@@ -2,69 +2,36 @@
 
 from graphlib import TopologicalSorter
 
-from gtm_configure.domain.graph import active_tag
-from gtm_configure.domain.native import native_mapping_scope
+from gtm_configure.domain.graph import served_requirements
+from gtm_configure.domain.resources import required_baseline_families
 
 
-def _field_owners(operations, order):
-    """Native namespaces select owners; terminal tags consume unclassified fields."""
-    downstream_tags = {key: set() for key in operations}
-    downstream_requirements = {key: set() for key in operations}
-    owners, terminals, scoped = {}, {}, {}
-    for key in reversed(order):
-        operation = operations[key]
-        labels = {(operation["target_id"], req) for req in operation["requirement_ids"]}
-        scope = native_mapping_scope(operation.get("intended") or operation.get("pre_change") or {})
-        for req in operation["requirement_ids"]:
-            if active_tag(operation) and scope is not None:
-                scoped.setdefault((req, scope), set()).add(key)
-            if req not in downstream_requirements[key]:
-                terminals.setdefault(req, set()).add(key)
-            if active_tag(operation) and (operation["target_id"], req) not in downstream_tags[key]:
-                owners.setdefault(req, set()).add(key)
-        for dependency in operation["dependencies"]:
-            downstream_requirements[dependency].update(downstream_requirements[key])
-            downstream_requirements[dependency].update(operation["requirement_ids"])
-            downstream_tags[dependency].update(downstream_tags[key])
-            if active_tag(operation):
-                downstream_tags[dependency].update(labels)
-    return {req: owners.get(req, keys) for req, keys in terminals.items()}, scoped
-
-
-def _field_blockers(document, operations, order):
-    owners, scoped = _field_owners(operations, order)
+def _field_blockers(document, operations):
     by_key = {op["object_key"]: key for key, op in operations.items()}
     direct = {key: set() for key in operations}
     requirements = {}
 
-    def bind(requirement, reason, binding=None, scope=None):
+    def bind(requirement, owner_key, reason):
         requirements.setdefault(requirement, set()).add(reason)
-        owner = by_key.get((binding or {}).get("object_key"))
-        consumers = (
-            {owner}
-            if owner is not None and requirement in operations[owner]["requirement_ids"]
-            else scoped.get((requirement, scope), owners.get(requirement, set()))
-        )
-        for key in consumers:
-            direct[key].add(reason)
+        direct[by_key[owner_key]].add(reason)
 
     for row in document["payload_mappings"]:
         if row["status"] in {"pending", "blocked"}:
             bind(
                 row["requirement_id"],
+                row["owner_object_key"],
                 f"{row['requirement_id']}: field {row['field_scope']}::{row['destination_field']} is {row['status']}",
-                row.get("native_binding"),
-                row["field_scope"],
             )
     for pipeline in document["pipelines"]:
         for row in pipeline["field_flows"]:
             if row["status"] != "proved":
                 for req in row["requirement_ids"]:
                     bind(
-                        req, f"{req}: pipeline field {row['destination_field']} is {row['status']}"
+                        req,
+                        row["receiver_owner"],
+                        f"{req}: pipeline field {row['destination_field']} is {row['status']}",
                     )
-    for key, operation in operations.items():
-        served = set(operation["requirement_ids"])
+    for key, served in served_requirements(operations).items():
         if served and served <= requirements.keys():
             direct[key].update(reason for req in served for reason in requirements[req])
     return direct
@@ -73,7 +40,7 @@ def _field_blockers(document, operations, order):
 def operation_readiness(document):
     """Shared dependencies serve any ready requirement; blocked owners remain indivisible.
 
-    Requirement attribution includes dependency consumers and is not field ownership.
+    Field owners are explicit; dependency demand is derived independently of authorization.
     Blocker origins propagate forward through the graph; ordinary dependencies whose
     operations can still complete remain waiting until verified.
     """
@@ -83,11 +50,20 @@ def operation_readiness(document):
             {key: op["dependencies"] for key, op in operations.items()}
         ).static_order()
     )
-    fields = _field_blockers(document, operations, order)
+    fields = _field_blockers(document, operations)
     missing_baselines = {
         row["target_id"]
         for row in document["container_baselines"]
         if row.get("complete") is not True
+        or not required_baseline_families(
+            [item for item in operations.values() if item["target_id"] == row["target_id"]],
+            next(
+                target["container_type"]
+                for target in document["run"]["targets"]
+                if target["target_id"] == row["target_id"]
+            ),
+        )
+        <= set(row["resource_families"])
     }
     authentication_blocked = {
         op["target_id"]

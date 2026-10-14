@@ -10,6 +10,7 @@ from gtm_configure.core.model import (
     MUTATING_ACTIONS,
     RESOURCE_FAMILIES,
     SERVER_RESOURCE_FAMILIES,
+    TARGET_TYPES,
     WEB_RESOURCE_FAMILIES,
 )
 from gtm_configure.domain.native import (
@@ -129,7 +130,7 @@ def semantic_object_key(target_id: str, resource_family: str, name: str) -> str:
 def validate_target_family(container_type: str, resource_family: str) -> str:
     family = normalized_family(resource_family)
     allowed = WEB_RESOURCE_FAMILIES if container_type == "web" else SERVER_RESOURCE_FAMILIES
-    if container_type not in {"web", "server"}:
+    if container_type not in TARGET_TYPES:
         raise ResourceRegistryError(f"unsupported container_type {container_type!r}")
     if family not in allowed:
         raise ResourceRegistryError(

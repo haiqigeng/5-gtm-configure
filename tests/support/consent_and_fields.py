@@ -34,14 +34,11 @@ ROOT = Path(__file__).resolve().parents[2]
 def ungated_request():
     req = request()
     req["objects"][0]["intended"].pop("blockingTriggerId")
-    req["execution_topologies"][0].update(
-        consent_mode="client-policy-ungated",
-        blocking_trigger_keys=[],
+    req["tag_policies"][0].update(
         blocking_event_scope=None,
-        may_precede_cmp=False,
         pre_cmp_policy="not-applicable",
     )
-    req["consent_topologies"][0].update(
+    req["consent_policies"][0].update(
         consent_mode="client-policy-ungated",
         signal_authority="none",
         signal_source="Approved client collection policy",
@@ -62,11 +59,11 @@ def ungated_request():
 def firing_request():
     req = request()
     req["objects"][0]["intended"].pop("blockingTriggerId")
-    top = req["execution_topologies"][0]
-    top.update(blocking_trigger_keys=[], blocking_event_scope=None)
+    top = req["tag_policies"][0]
+    top.update(blocking_event_scope=None)
     grant = condition("{{CMP Analytics}}", "granted")
     req["reuse_candidates"][0]["intended"]["filter"] = [grant]
-    req["consent_topologies"][0]["web_enforcement"] = {
+    req["consent_policies"][0]["web_enforcement"] = {
         "mechanism": "firing-trigger-condition",
         "grant_condition": grant,
         "evidence": "Inspected normalized CMP signal: unknown and denied are not granted",
@@ -118,12 +115,28 @@ def additional_request():
             "evidence": ["approved-input", "container-confirmed", "official-current"],
         }
     )
-    req["execution_topologies"][0].update(
-        blocking_trigger_keys=[],
+    req["tag_policies"][0].update(
         blocking_event_scope=None,
-        additional_consent_checks=["analytics_storage"],
     )
-    req["consent_topologies"][0]["web_enforcement"] = {
+    template_key = "web-main::template::Inspected CMP defaults"
+    req["objects"][-1]["depends_on"] = [template_key]
+    req["reuse_candidates"].append(
+        {
+            "resource_family": "template",
+            "name": "Inspected CMP defaults",
+            "object_key": template_key,
+            "requirement_ids": ["REQ-CMP"],
+            "target_id": "web-main",
+            "action": "reuse",
+            "intended": {
+                "templateData": '___INFO___\n{"id":"cvt_42"}\n___TEMPLATE_PARAMETERS___\n[{"name":"analytics_storage","type":"TEXT"}]\n___SANDBOXED_JS_FOR_WEB_TEMPLATE___\nreturn data.analytics_storage;\n'
+            },
+            "justification": "Synthetic inspected CMP capability",
+            "evidence": ["container-confirmed"],
+            "risk": "routine",
+        }
+    )
+    req["consent_policies"][0]["web_enforcement"] = {
         "mechanism": "additional-consent-checks",
         "evidence": "Inspected native template default and update fields",
         "default_bindings": {

@@ -10,6 +10,7 @@ from pathlib import Path
 from gtm_configure.adapters.discovery import discover
 from gtm_configure.adapters.mcp import McpTargetAdapter
 from gtm_configure.adapters.transport import (
+    HostCancelledError,
     StdioTransport,
     completion,
     configure_terminal,
@@ -98,7 +99,7 @@ def main() -> int:
             if args.discover
             else execute(args.run, load_json(args.profiles), transport)
         )
-    except Exception as exc:
+    except (Exception, HostCancelledError) as exc:
         writes = transport.writes_attempted if transport else 0
         result = {
             "status": "Interrupted" if writes else "Blocked",

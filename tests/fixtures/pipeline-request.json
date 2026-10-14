@@ -228,15 +228,9 @@
       "receiving_target_id": "server-main",
       "request_class": "GA4 collect",
       "transport_owner": "web-main::tag::GA4 - Config",
-      "endpoint_reference": "https://metrics.example.test",
       "claiming_client": {
         "object_key": "server-main::client::GA4 Client",
         "claim_criteria": "Synthetic inspected default Google Analytics Client: claim supported GA4 collect requests at default paths with priority 0; retain native consent signals and event_name, no custom request activation."
-      },
-      "page_view_ownership": {
-        "owner": "web-main::tag::GA4 - Config",
-        "occurrence": "initial-page-load",
-        "send_page_view": true
       },
       "event_flows": [
         {
@@ -249,9 +243,6 @@
         }
       ],
       "field_flows": [],
-      "consent_topology_ids": [
-        "CONSENT-GA4"
-      ],
       "dedup_contract_ids": [],
       "operation_dependencies": [
         "server-main::client::GA4 Client",
@@ -261,13 +252,10 @@
       "cutover_operation_key": "web-main::tag::GA4 - Config"
     }
   ],
-  "consent_topologies": [
+  "consent_policies": [
     {
-      "consent_topology_id": "CONSENT-GA4",
+      "consent_policy_id": "CONSENT-GA4",
       "destination": "G-PIPE123456",
-      "requirement_ids": [
-        "GA4::page_view"
-      ],
       "consent_mode": "advanced-native",
       "transport_behavior": "always-transported",
       "web_enforcement": {
@@ -282,59 +270,28 @@
       "event_coverage": [
         "page_view"
       ],
-      "intentional_double_gate": false,
       "server_tag_keys": [
         "server-main::tag::GA4 - Server"
-      ],
-      "transporter_tag_keys": [
-        "web-main::tag::GA4 - Config"
-      ],
-      "transporter_destination_vendor_block": false
+      ]
     }
   ],
-  "execution_topologies": [
+  "tag_policies": [
     {
-      "consent_topology_ids": [
-        "CONSENT-GA4"
-      ],
       "tag_object_key": "web-main::tag::GA4 - Config",
-      "requirement_ids": [
-        "GA4::page_view"
-      ],
       "lifecycle_role": "baseline-page-load",
-      "normal_triggers": [
+      "trigger_roles": [
         {
           "trigger_object_key": "web-main::trigger::builtin::2147479553",
-          "role": "initialization-page-load",
-          "type": "page-view"
+          "role": "initialization-page-load"
         }
       ],
-      "consent_mode": "advanced-native",
-      "blocking_trigger_keys": [],
       "blocking_event_scope": null,
-      "built_in_consent_checks": [
-        "analytics_storage",
-        "ad_storage",
-        "ad_user_data",
-        "ad_personalization"
-      ],
-      "additional_consent_checks": [],
-      "firing_option": "once-per-event",
-      "may_precede_cmp": false,
       "pre_cmp_policy": "not-applicable",
-      "page_view_capable": true,
-      "page_view_destinations": [
-        "G-PIPE123456"
-      ],
-      "page_view_occurrences": [
-        "initial-page-load"
-      ],
-      "ecommerce_route": "not-applicable",
-      "manual_ecommerce_fields": [],
       "evidence": [
         "approved-input",
         "container-confirmed"
-      ]
+      ],
+      "consent_policy_id": "CONSENT-GA4"
     }
   ],
   "page_view_decisions": [
@@ -348,7 +305,6 @@
       "owner": "google-tag-automatic",
       "owner_object_key": "web-main::tag::GA4 - Config",
       "google_tag_object_key": "web-main::tag::GA4 - Config",
-      "send_page_view": true,
       "external_dependency_ids": [
         "EXT-CONSENT",
         "EXT-COLLECTION"

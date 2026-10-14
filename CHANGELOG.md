@@ -1,5 +1,46 @@
 # Changelog
 
+## 14.0.0
+
+### Why This Release Matters
+
+The real configuration run exposed duplicated authoring facts and recovery work that a clean file
+layout did not prevent. This release makes native configuration, policy choices, field ownership
+and execution evidence distinct, so the compiler and runtime coordinate the same graph.
+
+### What Changed
+
+- Contract 11.0 / run 9.0 replace duplicated execution and consent records with tag policies linked
+  to shared consent policies. Native settings and dependency demand are derived from their owners.
+- Explicit field ownership separates blocked consumers from shared prerequisites; operation
+  requirements retain their authorization meaning.
+- Current-run revision preserves verified intent, identities and receipts while revising unsent work.
+- Template consumer identity and integrity come from inspected source. Native comparison owns
+  evidence-backed serialization defaults; transport preserves the observed response.
+- The packaged relay supports bounded large replies, Unicode and cancellation with lock release.
+  Sanitized diagnostics preserve actionable causes and uncertain-write semantics.
+- Product guidance and tests distinguish browser Ads enhanced conversions, sanctioned GA4 user-data
+  transport, shared settings, consent roles and adapter-specific resource support.
+
+### What Users Should Do
+
+Replace the installed skill folder with this archive. Begin new work with current requests and
+contracts; retain prior run artifacts with their original release for historical validation.
+Read the applicable adapter guide for executable paths and supported resource families.
+
+### Validation
+
+The release audit records the full repository and extracted-package checks, host integration,
+independent adversarial probes, ownership map and same-workload performance comparison in
+`docs/release-14.0-validation.md`.
+
+### Known Limits
+
+Saved configuration and synthetic host tests establish readiness for a controlled field test.
+Website/server Preview, real consent transitions, vendor requests and receipt remain separate
+acceptance work. Product guidance is conditional on current official documentation and inspected
+native/template capability; a listed vendor is not universal runtime certification.
+
 ## 13.1.0
 
 Released 2026-10-14.

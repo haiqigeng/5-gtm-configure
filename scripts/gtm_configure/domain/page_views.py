@@ -96,16 +96,13 @@ def validate_page_view_decisions(
             raise RunValidationError(
                 f"{path}.external_dependency_ids contains a dependency outside the requirements"
             )
-        send_page_view = item.get("send_page_view")
-        if send_page_view is not None and not isinstance(send_page_view, bool):
-            raise RunValidationError(f"{path}.send_page_view must be boolean or null")
         if owner == "google-tag-automatic":
             if occurrence != "initial-page-load":
                 raise RunValidationError(
                     f"{path}.google-tag-automatic covers only the initial page load; "
                     "model history-based collection separately"
                 )
-            if not owner_key or owner_key != google_tag_key or send_page_view is not True:
+            if not owner_key or owner_key != google_tag_key:
                 raise RunValidationError(
                     f"{path}.google-tag-automatic requires the same owner and Google tag key "
                     "with send_page_view true"
@@ -114,12 +111,12 @@ def validate_page_view_decisions(
             if tag_type(owner_target, f"{path}.owner") not in GOOGLE_CONFIGURATION_TAG_TYPES:
                 raise RunValidationError(f"{path}.google-tag-automatic owner is not a Google tag")
             if not send_page_view_value(owner_target, f"{path}.owner", operations):
-                raise RunValidationError(f"{path}.send_page_view differs from the bound Google tag")
+                raise RunValidationError(f"{path}.automatic owner must emit native page_view")
             validate_google_destination(owner_target, destination, f"{path}.owner", operations)
             if not linked <= set(owner_operation["requirement_ids"]):
                 raise RunValidationError(f"{path}.owner does not cover its requirement_ids")
         elif owner == "dedicated-ga4-event":
-            if not owner_key or not google_tag_key or send_page_view is not False:
+            if not owner_key or not google_tag_key:
                 raise RunValidationError(
                     f"{path}.dedicated-ga4-event requires owner and Google tag keys with "
                     "send_page_view false"
@@ -151,7 +148,7 @@ def validate_page_view_decisions(
             if not linked <= set(google_operation["requirement_ids"]):
                 raise RunValidationError(f"{path}.Google tag does not cover its requirement_ids")
         elif owner == "internal-tag":
-            if not owner_key or google_tag_key is not None or send_page_view is not None:
+            if not owner_key or google_tag_key is not None:
                 raise RunValidationError(
                     f"{path}.internal-tag requires an owner, no Google tag, and null send_page_view"
                 )
@@ -159,7 +156,7 @@ def validate_page_view_decisions(
             if not linked <= set(owner_operation["requirement_ids"]):
                 raise RunValidationError(f"{path}.owner does not cover its requirement_ids")
         else:
-            if owner_key is not None or send_page_view is not None:
+            if owner_key is not None:
                 raise RunValidationError(
                     f"{path}.{owner} requires a null owner_object_key and send_page_view null"
                 )
@@ -210,67 +207,59 @@ def validate_page_view_emitters(*, local_operations, decisions, fail, validated_
             for item in local_operations.values()
             if item["object_key"] == topology["tag_object_key"]
         )
-        target = web_native.effective_target(operation, "$.execution_topologies[].bound_tag")
-        tag_type = web_native.tag_type(target, "$.execution_topologies[].bound_tag")
-        emits_page_view = False
-        if tag_type in web_model.GOOGLE_CONFIGURATION_TAG_TYPES:
-            emits_page_view = web_native.send_page_view_value(
-                target, "$.execution_topologies[].bound_tag", local_operations
-            )
-        elif tag_type in web_model.GA4_EVENT_TAG_TYPES:
-            _, event_name = web_native.configuration_value(target, {"event_name", "eventName"})
-            emits_page_view = event_name == "page_view"
-        elif topology["page_view_capable"]:
-            emits_page_view = True
+        target = web_native.effective_target(operation, "$.tag_policies[].bound_tag")
+        tag_type = web_native.tag_type(target, "$.tag_policies[].bound_tag")
+        destinations, occurrences = set(), []
         if tag_type in web_model.GOOGLE_CONFIGURATION_TAG_TYPES | web_model.GA4_EVENT_TAG_TYPES:
             try:
-                configured_destinations = web_native.configured_destinations(
-                    target,
-                    local_operations,
-                    "$.execution_topologies[].bound_tag",
+                configured = web_native.configured_destinations(
+                    target, local_operations, "$.tag_policies[].bound_tag"
                 )
             except validation.RunValidationError as exc:
                 fail(str(exc))
                 return
-            ga4_destinations = {
-                value for value in configured_destinations if value.startswith("G-")
-            }
+            ga4 = {value for value in configured if value.startswith("G-")}
             if tag_type in web_model.GOOGLE_CONFIGURATION_TAG_TYPES:
-                if not configured_destinations or (
-                    any(value.startswith("GT-") for value in configured_destinations)
-                    and not ga4_destinations
-                    and not any(
-                        value.startswith(("AW-", "DC-")) for value in configured_destinations
-                    )
+                if not configured or (
+                    any(value.startswith("GT-") for value in configured)
+                    and not ga4
+                    and not any(value.startswith(("AW-", "DC-")) for value in configured)
                 ):
                     fail(
                         "Google tag needs inspected destination identities before page-view ownership can be resolved"
                     )
-                emits_page_view = emits_page_view and bool(ga4_destinations)
-            elif emits_page_view and not ga4_destinations:
-                fail("GA4 page_view tag needs a resolved GA4 destination")
-            if emits_page_view:
-                if (
-                    not topology["page_view_capable"]
-                    or set(topology["page_view_destinations"]) != ga4_destinations
+                if web_native.send_page_view_value(
+                    target, "$.tag_policies[].bound_tag", local_operations
                 ):
-                    fail(
-                        "page-view declarations must cover every effective Google page-view destination"
-                    )
-                if tag_type in web_model.GOOGLE_CONFIGURATION_TAG_TYPES and topology[
-                    "page_view_occurrences"
-                ] != ["initial-page-load"]:
-                    fail(
-                        "Google tag automatic page-view declarations must include its initial-page-load occurrence only"
-                    )
-            elif topology["page_view_capable"]:
-                fail(
-                    "Google tag page-view declarations describe a tag that does not emit page_view"
-                )
-        if not emits_page_view:
+                    destinations, occurrences = ga4, ["initial-page-load"]
+                if topology.get("page_view_occurrences") or topology.get("custom_page_views"):
+                    fail("Google automatic page-view facts come from its native configuration")
+            else:
+                _, event_name = web_native.configuration_value(target, {"event_name", "eventName"})
+                if event_name == "page_view":
+                    if not ga4:
+                        fail("GA4 page_view tag needs a resolved GA4 destination")
+                    destinations, occurrences = ga4, topology.get("page_view_occurrences", [])
+                    if not occurrences:
+                        fail(
+                            "GA4 page_view with an ambiguous occurrence needs page_view_occurrences"
+                        )
+                elif topology.get("page_view_occurrences"):
+                    fail("Page-view occurrence policy requires a native page_view event")
+                if topology.get("custom_page_views"):
+                    fail("GA4 destinations come from native configuration")
+        else:
+            custom = topology.get("custom_page_views", {})
+            destinations, occurrences = (
+                set(custom.get("destinations", [])),
+                custom.get("occurrences", []),
+            )
+            if topology.get("page_view_occurrences"):
+                fail("Custom page-view policy owns its destinations and occurrences together")
+        if not destinations:
             continue
-        for destination in topology["page_view_destinations"]:
-            for trigger in topology["normal_triggers"]:
+        for destination in destinations:
+            for trigger in topology["trigger_roles"]:
                 trigger_emitters.setdefault(
                     (destination, trigger["trigger_object_key"]), set()
                 ).add(topology["tag_object_key"])
@@ -282,12 +271,12 @@ def validate_page_view_emitters(*, local_operations, decisions, fail, validated_
                     web_native.validate_google_destination(
                         target,
                         destination,
-                        "$.execution_topologies[].bound_tag",
+                        "$.tag_policies[].bound_tag",
                         local_operations,
                     )
             except validation.RunValidationError as exc:
                 fail(str(exc))
-            for occurrence in topology["page_view_occurrences"]:
+            for occurrence in occurrences:
                 if (
                     tag_type in web_model.GOOGLE_CONFIGURATION_TAG_TYPES
                     and occurrence != "initial-page-load"
@@ -295,7 +284,8 @@ def validate_page_view_emitters(*, local_operations, decisions, fail, validated_
                     continue
                 if (
                     occurrence == "virtual-navigation"
-                    and topology["firing_option"] == "once-per-page"
+                    and web_native.tag_firing_option(target, "$.tag_policies[].bound_tag")
+                    == "once-per-page"
                 ):
                     fail(
                         f"page-view emitter {topology['tag_object_key']!r} cannot use "
@@ -328,6 +318,8 @@ def validate_page_view_emitters(*, local_operations, decisions, fail, validated_
                 f"emitters={emitters}"
             )
 
+    return actual_emitters
+
 
 def validate_target_page_views(
     *,
@@ -356,40 +348,15 @@ def validate_target_page_views(
     except validation.RunValidationError as exc:
         fail(str(exc))
         return
-    decision_occurrences = {(item["destination"], item["occurrence"]) for item in decisions}
-    expected_occurrences = {
-        (destination, occurrence)
-        for topology in validated_topologies.values()
-        for destination in topology["page_view_destinations"]
-        for occurrence in topology["page_view_occurrences"]
-    }
-    if decision_occurrences != expected_occurrences:
-        fail(
-            f"web target {target_id!r} page-view decisions must exactly cover capable "
-            f"destination occurrences; missing={sorted(expected_occurrences - decision_occurrences)}, "
-            f"extra={sorted(decision_occurrences - expected_occurrences)}"
-        )
-    topology_by_key = {item["tag_object_key"]: item for item in validated_topologies.values()}
-    for decision in decisions:
-        owner_key = decision.get("owner_object_key")
-        if decision["owner"] not in {
-            "google-tag-automatic",
-            "dedicated-ga4-event",
-            "internal-tag",
-        }:
-            continue
-        owner_topology = topology_by_key.get(owner_key)
-        if owner_topology is None:
-            fail(f"page-view owner {owner_key!r} lacks an execution topology")
-            continue
-        if decision["destination"] not in owner_topology["page_view_destinations"]:
-            fail(f"page-view owner {owner_key!r} does not declare the destination")
-        if decision["occurrence"] not in owner_topology["page_view_occurrences"]:
-            fail(f"page-view owner {owner_key!r} does not declare the occurrence")
-
-    validate_page_view_emitters(
+    actual_emitters = validate_page_view_emitters(
         local_operations=local_operations,
         decisions=decisions,
         fail=fail,
         validated_topologies=validated_topologies,
     )
+    decision_occurrences = {(item["destination"], item["occurrence"]) for item in decisions}
+    missing = set(actual_emitters) - decision_occurrences
+    if missing:
+        fail(
+            f"web target {target_id!r} page-view decisions must cover native emitted occurrences; missing={sorted(missing)}"
+        )

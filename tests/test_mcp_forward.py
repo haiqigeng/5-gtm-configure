@@ -42,6 +42,25 @@ class McpForwardTests(unittest.TestCase):
             )
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
+    def test_actual_relay_cancel_releases_worker_lock(self):
+        if not (shutil.which("node") and shutil.which("pwsh")):
+            self.skipTest("Host relay requires Node and PowerShell 7")
+        with tempfile.TemporaryDirectory() as directory:
+            result = subprocess.run(
+                [shutil.which("node"), str(FIXTURES / "mcp_relay_scenario.cjs"), directory],
+                env={
+                    **os.environ,
+                    "TEST_PYTHON": sys.executable,
+                    "TEST_PWSH": shutil.which("pwsh"),
+                    "RELAY_CANCEL": "1",
+                },
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                timeout=20,
+            )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()

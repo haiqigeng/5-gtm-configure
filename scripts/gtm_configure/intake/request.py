@@ -22,9 +22,14 @@ from gtm_configure.core.public_identifiers import (
 from gtm_configure.core.schemas import field_collections
 from gtm_configure.domain.actions import build_mutation_approval
 from gtm_configure.domain.fields import field_mappings
-from gtm_configure.domain.native import direct_dlv_source, supports_native_mapping, variable_name
+from gtm_configure.domain.native import (
+    direct_dlv_source,
+    supports_native_mapping,
+    variable_name,
+)
 from gtm_configure.domain.resources import semantic_object_key
-from gtm_configure.domain.web_native import resolved_mapping_value
+from gtm_configure.domain.shared_settings import consolidate_event_settings
+from gtm_configure.domain.web_native import resolved_mapping_owner, resolved_mapping_value
 
 
 def derive_exact_declarations(contract: dict, objects: list[dict]) -> None:
@@ -45,7 +50,7 @@ def derive_exact_declarations(contract: dict, objects: list[dict]) -> None:
                     "supports": [requirement["id"]],
                 }
             )
-    for topology in contract["execution_topologies"]:
+    for topology in contract["tag_policies"]:
         owner = by_key.get(topology.get("tag_object_key"), {})
         linked = [requirements[key].get("source_event") for key in owner.get("requirement_ids", [])]
         if not linked or len(set(linked)) != 1 or not linked[0]:
@@ -74,13 +79,12 @@ def derive_exact_declarations(contract: dict, objects: list[dict]) -> None:
                 {
                     "trigger_object_key": key,
                     "role": "source-event",
-                    "type": "custom-event",
                 }
             )
         else:
             if derived:
-                topology.setdefault("normal_triggers", derived)
-                for row in topology["normal_triggers"]:
+                topology.setdefault("trigger_roles", derived)
+                for row in topology["trigger_roles"]:
                     match = next(
                         (
                             item
@@ -90,7 +94,7 @@ def derive_exact_declarations(contract: dict, objects: list[dict]) -> None:
                         None,
                     )
                     if match:
-                        for field in ("role", "type"):
+                        for field in ("role",):
                             row.setdefault(field, match[field])
     bindings = contract.setdefault("field_bindings", [])
     for requirement in requirements.values():
@@ -143,7 +147,12 @@ def derive_exact_declarations(contract: dict, objects: list[dict]) -> None:
                         continue
                 except ValueError:
                     continue
-                matches.append((owner, value))
+                try:
+                    storage = resolved_mapping_owner(owner, objects, mapping)
+                except (ValueError, KeyError, TypeError):
+                    continue
+                if not any(row[0]["object_key"] == storage["object_key"] for row in matches):
+                    matches.append((storage, value))
             if len(matches) != 1:
                 continue
             owner, value = matches[0]
@@ -155,10 +164,7 @@ def derive_exact_declarations(contract: dict, objects: list[dict]) -> None:
                 "template_field": mapping["destination_field"],
                 "missing_behavior": missing,
                 "status": "mapped",
-                "native_binding": {
-                    "object_key": owner["object_key"],
-                    "field": mapping["destination_field"],
-                },
+                "owner_object_key": owner["object_key"],
             }
             if existing is None:
                 bindings.append(derived)
@@ -192,9 +198,9 @@ def compile_request(request: dict[str, Any], *, inventory: dict | None = None) -
     )
     for field in (
         "pipelines",
-        "consent_topologies",
+        "consent_policies",
         "dedup_contracts",
-        "execution_topologies",
+        "tag_policies",
         "page_view_decisions",
         "first_party_data_routes",
         "inventory_dispositions",
@@ -245,40 +251,42 @@ def compile_request(request: dict[str, Any], *, inventory: dict | None = None) -
                 refs.add(key)
         return refs
 
-    index = 0
-    while index < len(objects):
-        item = objects[index]
-        dependencies = set(item["depends_on"]) | references(
-            item.get("intended", {}), item["target_id"]
-        )
-        dependencies.discard(item["object_key"])
-        for key in sorted(dependencies):
-            if key not in selected:
-                if key not in candidate_by_key:
-                    raise ValueError(f"Missing dependency: {key}")
-                candidate = deepcopy(candidate_by_key[key])
-                candidate["requirement_ids"] = list(item["requirement_ids"])
-                selected[key] = candidate
-                objects.append(candidate)
-        item["depends_on"] = sorted(dependencies)
-        if item["action"] in MUTATING_ACTIONS:
-            # The source locator records existing authorization; this is not approval discovery.
-            item["approval"] = build_mutation_approval(item, locators[item["requirement_ids"][0]])
-        index += 1
-    # Shared dependencies may be reached later through a longer path. Propagate
-    # requirement attribution over the complete closure until it stops changing.
-    changed = True
-    while changed:
-        changed = False
-        for item in objects:
-            for key in item["depends_on"]:
-                if key not in candidate_by_key:
-                    continue
-                dependency = selected[key]
-                merged = sorted(set(dependency["requirement_ids"]) | set(item["requirement_ids"]))
-                if merged != dependency["requirement_ids"]:
-                    dependency["requirement_ids"] = merged
-                    changed = True
+    def close_objects():
+        index = 0
+        while index < len(objects):
+            item = objects[index]
+            dependencies = set(item["depends_on"]) | references(
+                item.get("intended", {}), item["target_id"]
+            )
+            dependencies.discard(item["object_key"])
+            for key in sorted(dependencies):
+                if key not in selected:
+                    if key not in candidate_by_key:
+                        raise ValueError(f"Missing dependency: {key}")
+                    candidate = deepcopy(candidate_by_key[key])
+                    selected[key] = candidate
+                    objects.append(candidate)
+            item["depends_on"] = sorted(dependencies)
+            if item["action"] in MUTATING_ACTIONS:
+                # The source locator records existing authorization; this is not approval discovery.
+                item["approval"] = build_mutation_approval(
+                    item, locators[item["requirement_ids"][0]]
+                )
+            index += 1
+
+    close_objects()
+    consolidate_event_settings(contract, objects)
+    selected.update({item["object_key"]: item for item in objects})
+    all_objects.update(selected)
+    close_objects()
+    for binding in contract.get("field_bindings", []):
+        owner = selected.get(binding.get("owner_object_key"))
+        if owner is not None and binding["field_scope"] in {"configuration", "event-parameter"}:
+            try:
+                storage = resolved_mapping_owner(owner, objects, binding)
+                binding["owner_object_key"] = storage["object_key"]
+            except (ValueError, KeyError, TypeError):
+                pass
     derive_exact_declarations(contract, objects)
     contract["implementation"] = {
         "execution_mode": contract.pop("execution_mode", "isolated-durable"),

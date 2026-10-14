@@ -150,7 +150,7 @@ class PreparationTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 compile_request(req, inventory=inventory)
         req = self.compact_request()
-        req["consent_topologies"] = []
+        req["consent_policies"] = []
         with self.assertRaises(ValueError):
             compile_request(req, inventory=inventory)
 

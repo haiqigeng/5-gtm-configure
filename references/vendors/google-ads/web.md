@@ -79,16 +79,24 @@ Each override's `consumer_bindings` contains:
 - `activation_paths`: native boolean controls enabled for the selected route, or `[]` when none applies;
 - `field_review`: actual UI/export/schema locator reconciled with the current official procedure and event scope.
 
-Paths start with `parameter`, end with `value`, and identify native keys/indices. They bind inspected
-support, with the complete native fields, activation controls, UPD variable and references read back.
+The supported Ads conversion-event binding selects the `user_data` row in native
+`eventSettingsTable`: `["parameter", "eventSettingsTable", "list", <row>, "map", "parameterValue", "value"]`.
+The same row's `parameter` cell is exactly `user_data`. Read back that complete native table,
+any actual activation controls, the native UPD variable and its source references. Inspected
+source/UI capability and saved field retention establish configuration support together.
 An unsupported override remains blocked or uses another already-authorized supported route.
 Actual installed controls determine capability; unrelated Floodlight/SA360 UI changes have their own
 product scope. Earlier collection may use an Ads cookie alongside the independently required
 `ad_user_data` and `ad_storage` decisions.
 
-Synthetic/static checks establish saved configuration. Request contents, empty-data diagnostics and
+Offline checks exercise field-binding invariants; authentic saved readback establishes configuration.
+Request contents, empty-data diagnostics and
 match results belong to runtime/platform verification. Server transport and prior-page server
 capture use the distinct [identity routes](../../data/identity.md) and [server guide](server.md).
+
+The browser Google-tag collection route selects `user_data` under Event Parameters and has
+tag-wide consumer lifetime. The server Google-tag carrier's documented Configuration parameter
+has its own pipeline authority. The approved event/consumer scope selects the route before authoring.
 
 ## Coordinate consent and verify
 

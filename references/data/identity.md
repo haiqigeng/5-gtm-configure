@@ -25,9 +25,9 @@ product support, approved source contract and synthetic examples. The client own
 sensitive-category and legal decisions. Tag-wide scope enumerates all consumers, destinations and
 consent routes; event-scoped authority applies to its named event consumers.
 
-Bind each route to its exact mapped field and actual consumer objects. Record positive product
-identity, implementation kind, saved native tag type and, for a community template, installed
-identity and official/template evidence. Supported product surfaces establish native identity.
+Bind each route to its exact mapped field and actual consumer objects. Select its approved product
+and retain official/template evidence. Derive the native consumer type and installed identity from
+the inspected object and explicit template-source dependency; those native objects own the facts.
 
 Account-side activation has its own evidence and owner:
 
@@ -84,6 +84,18 @@ user-provided-data/matching feature for its approved consumer. Ordinary analytic
 properties, dimensions, metrics, User-ID, page context and ecommerce descriptive fields contain
 non-PII analytical values. Persistent artifacts follow
 [privacy enforcement](../core/execution.md#handle-secrets-without-false-equality).
+
+Approved data scope applies to every effective downstream consumer, independently of its wire
+carrier. Inspect each server tag's automatic Event Data handling as well as its explicit fields.
+For each consumer establish its separately approved matching feature or a documented exclusion
+through the exact native tag, product state, or scoped Transformation. For example, Google's
+[GA4 collection guidance](https://support.google.com/analytics/answer/14077171?hl=en-GB) states that
+an unchecked property user-provided-data checkbox prevents transmission to that Analytics property
+even if the Google tag still collects the data. An inspected applicable property state can establish
+that disposition; an additional Transformation is needed only when the selected route needs it.
+Record native/field-flow/Transformation proof and external property evidence with their existing
+owners. Declared bindings and saved configuration do not by themselves prove every implicit
+forwarding behavior; independent recette verifies the actual outgoing requests.
 
 Property-side data redaction and URL/query controls are additional external protections. When
 page/form/search sources could expose identifiers, record the source remediation and property

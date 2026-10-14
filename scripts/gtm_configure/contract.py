@@ -144,8 +144,6 @@ def _validate_objects(
             if not intended:
                 raise ContractValidationError(f"{path}.intended must not be empty")
         risk = item.get("risk", "routine")
-        if risk not in {"routine", "high-impact"}:
-            raise ContractValidationError(f"{path}.risk has unsupported value {risk!r}")
         expected_high = _object_is_high_impact(item)
         if expected_high and risk != "high-impact":
             raise ContractValidationError(f"{path}.risk must be 'high-impact'")
@@ -324,7 +322,7 @@ def validate_document(value: Any) -> dict[str, Any]:
     validate_web_domain(
         execution_mode=execution_mode,
         graph=graph,
-        execution_topologies=contract["execution_topologies"],
+        tag_policies=contract["tag_policies"],
         page_view_decisions=contract["page_view_decisions"],
         first_party_data_routes=contract["first_party_data_routes"],
         external_dependencies=contract["external_dependencies"],

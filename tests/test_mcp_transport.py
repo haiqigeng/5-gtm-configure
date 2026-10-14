@@ -159,7 +159,11 @@ class McpTransportTests(McpTransportTestsFixture):
                 .encode("utf-16-be")
                 .hex()
             )
-            stream = io.BytesIO((reply + "\n.\n").encode())
+            frames = [
+                f"MCP2 {identifier} {index + 1}/{(len(reply) + 4095) // 4096} {reply[start : start + 4096]} END"
+                for index, start in enumerate(range(0, len(reply), 4096))
+            ]
+            stream = io.BytesIO(("\n".join(frames) + "\n").encode())
             output = io.StringIO()
             with patch(
                 "gtm_configure.adapters.transport.uuid4", return_value=SimpleNamespace(hex="a" * 32)
@@ -179,12 +183,13 @@ class McpTransportTests(McpTransportTestsFixture):
     def test_stream_mismatched_write_reply_remains_ambiguous(self):
         reply = json.dumps({"id": "b" * 32, "result": {}}).encode("utf-16-be").hex()
         transport = StdioTransport(
-            input_stream=io.BytesIO((reply + "\n.\n").encode()), output_stream=io.StringIO()
+            input_stream=io.BytesIO((f"MCP2 {'b' * 32} 1/1 {reply} END\n").encode()),
+            output_stream=io.StringIO(),
         )
         with patch(
             "gtm_configure.adapters.transport.uuid4", return_value=SimpleNamespace(hex="a" * 32)
         ):
-            with self.assertRaisesRegex(AmbiguousWriteError, "identity mismatch"):
+            with self.assertRaisesRegex(AmbiguousWriteError, "chunk sequence"):
                 transport("synthetic__gtm_tag", {"action": "create"})
 
     def test_missing_profile_diagnostic_does_not_claim_a_write(self):

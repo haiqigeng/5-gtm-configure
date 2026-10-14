@@ -84,21 +84,16 @@ def local_topology(
     source: dict[str, Any], target_id: str, path: str, fail: Callable[[str], None]
 ) -> dict[str, Any]:
     record = deepcopy(source)
-    record.pop("consent_topology_ids", None)
     record["tag_object_key"] = local_key(
         source.get("tag_object_key"), target_id, f"{path}.tag_object_key", fail
     )
-    for index, trigger in enumerate(record.get("normal_triggers", [])):
+    for index, trigger in enumerate(record.get("trigger_roles", [])):
         trigger["trigger_object_key"] = local_trigger_reference(
             trigger.get("trigger_object_key"),
             target_id,
-            f"{path}.normal_triggers[{index}].trigger_object_key",
+            f"{path}.trigger_roles[{index}].trigger_object_key",
             fail,
         )
-    record["blocking_trigger_keys"] = [
-        local_trigger_reference(value, target_id, f"{path}.blocking_trigger_keys[]", fail)
-        for value in record.get("blocking_trigger_keys", [])
-    ]
     return record
 
 

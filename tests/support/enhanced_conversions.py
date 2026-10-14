@@ -7,7 +7,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def event_override_contract() -> dict:
-    """Inspected fields are a test premise; real runs must inspect their actual native surface."""
+    """Sanitized saved native shape; values are synthetic and runtime is unproved."""
     contract = valid_web_contract()
     contract["route"] = "media"
     contract["page_view_decisions"] = []
@@ -35,12 +35,13 @@ def event_override_contract() -> dict:
             "shape_compatibility": "compatible",
             "mapping_method": "native-template",
             "gtm_resolution": "{{UPD - Approved conversion}}",
-            "template_field": "userDataVariable",
+            "template_field": "eventSettingsTable.user_data",
             "missing_behavior": "Omit missing identifiers",
         }
     ]
     objects = contract["implementation"]["objects"]
     tag, trigger, block = objects
+    contract["implementation"]["field_bindings"][0]["owner_object_key"] = tag["object_key"]
     variable_key = "web-main::variable::UPD - Approved conversion"
     email_key = "web-main::variable::DLV - Approved email"
     tag["intended"] = {
@@ -49,11 +50,22 @@ def event_override_contract() -> dict:
             {"type": "template", "key": "conversionId", "value": "123456789"},
             {"type": "template", "key": "conversionLabel", "value": "synthetic-label"},
             {
-                "type": "template",
-                "key": "userDataVariable",
-                "value": "{{UPD - Approved conversion}}",
+                "type": "list",
+                "key": "eventSettingsTable",
+                "list": [
+                    {
+                        "type": "map",
+                        "map": [
+                            {"type": "template", "key": "parameter", "value": "user_data"},
+                            {
+                                "type": "template",
+                                "key": "parameterValue",
+                                "value": "{{UPD - Approved conversion}}",
+                            },
+                        ],
+                    }
+                ],
             },
-            {"type": "boolean", "key": "enableEnhancedConversions", "value": "true"},
         ],
         "firingTriggerId": [trigger["object_key"]],
         "blockingTriggerId": [block["object_key"]],
@@ -144,16 +156,13 @@ def event_override_contract() -> dict:
             }
         )
     block["depends_on"] = [objects[-1]["object_key"]]
-    topology = contract["execution_topologies"][0]
+    topology = contract["tag_policies"][0]
     topology.update(
         lifecycle_role="event-driven",
-        page_view_capable=False,
-        page_view_destinations=[],
         page_view_occurrences=[],
-        built_in_consent_checks=["ad_storage", "ad_user_data", "ad_personalization"],
     )
-    topology["normal_triggers"][0]["role"] = "source-event"
-    consent = contract["consent_topologies"][0]
+    topology["trigger_roles"][0]["role"] = "source-event"
+    consent = contract["consent_policies"][0]
     consent.update(
         destination="Google Ads",
         event_coverage=["purchase"],
@@ -178,13 +187,18 @@ def event_override_contract() -> dict:
                 {
                     "object_key": tag["object_key"],
                     "product": "google-ads",
-                    "implementation": "native",
-                    "tag_type": "awct",
-                    "template_identity": None,
                     "evidence": ["Synthetic native-surface premise; no live GTM claim"],
-                    "user_data_path": ["parameter", "userDataVariable", "value"],
-                    "activation_paths": [["parameter", "enableEnhancedConversions", "value"]],
-                    "field_review": "Synthetic native field review for event-level override and required control",
+                    "user_data_path": [
+                        "parameter",
+                        "eventSettingsTable",
+                        "list",
+                        0,
+                        "map",
+                        "parameterValue",
+                        "value",
+                    ],
+                    "activation_paths": [],
+                    "field_review": "Sanitized awct shape from read-only GTM tag 1828 on 2026-10-14; eventSettingsTable.user_data retained; runtime unproved",
                 }
             ],
             "source_priority": "data-layer",
@@ -193,7 +207,6 @@ def event_override_contract() -> dict:
             "fields": [
                 {
                     "name": "email",
-                    "source": "customer.email",
                     "normalization": ["native"],
                     "empty_behavior": "omit",
                 }

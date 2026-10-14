@@ -259,9 +259,8 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "consent_topology_id",
+        "consent_policy_id",
         "destination",
-        "requirement_ids",
         "consent_mode",
         "transport_behavior",
         "web_enforcement",
@@ -270,20 +269,14 @@
         "signal_source",
         "unknown_state_behavior",
         "event_coverage",
-        "intentional_double_gate",
-        "server_tag_keys",
-        "transporter_tag_keys",
-        "transporter_destination_vendor_block"
+        "server_tag_keys"
       ],
       "properties": {
-        "consent_topology_id": {
+        "consent_policy_id": {
           "$ref": "#/$defs/nonEmpty"
         },
         "destination": {
           "$ref": "#/$defs/nonEmpty"
-        },
-        "requirement_ids": {
-          "$ref": "#/$defs/uniqueStrings"
         },
         "consent_mode": {
           "$ref": "https://github.com/haiqigeng/5-gtm-configure/schemas/common.schema.json#/$defs/consentMode"
@@ -363,22 +356,18 @@
         "event_coverage": {
           "$ref": "#/$defs/uniqueStrings"
         },
-        "intentional_double_gate": {
-          "type": "boolean"
-        },
         "double_gate_justification": {
           "type": "string"
         },
         "server_tag_keys": {
           "$ref": "#/$defs/uniqueStrings"
-        },
-        "transporter_tag_keys": {
-          "$ref": "#/$defs/uniqueStrings"
-        },
-        "transporter_destination_vendor_block": {
-          "type": "boolean"
         }
-      }
+      },
+      "x-owner-paths": [
+        [
+          "server_tag_keys"
+        ]
+      ]
     },
     "consentMode": {
       "enum": [
@@ -397,12 +386,7 @@
       ],
       "properties": {
         "grade": {
-          "enum": [
-            "approved-input",
-            "official-current",
-            "container-confirmed",
-            "contract-sample"
-          ]
+          "$ref": "https://github.com/haiqigeng/5-gtm-configure/schemas/common.schema.json#/$defs/evidenceGrade"
         },
         "locator": {
           "$ref": "https://github.com/haiqigeng/5-gtm-configure/schemas/common.schema.json#/$defs/nonEmpty"
@@ -686,13 +670,12 @@
       ],
       "unevaluatedProperties": false
     },
-    "normalTrigger": {
+    "triggerRole": {
       "type": "object",
       "additionalProperties": false,
       "required": [
         "trigger_object_key",
-        "role",
-        "type"
+        "role"
       ],
       "properties": {
         "trigger_object_key": {
@@ -704,64 +687,24 @@
             "initialization-page-load",
             "source-event"
           ]
-        },
-        "type": {
-          "enum": [
-            "click-all-elements",
-            "click-just-links",
-            "consent-initialization",
-            "custom-event",
-            "dom-ready",
-            "element-visibility",
-            "form-submission",
-            "history-change",
-            "initialization",
-            "javascript-error",
-            "page-view",
-            "scroll-depth",
-            "timer",
-            "trigger-group",
-            "window-loaded",
-            "youtube-video"
-          ]
         }
       }
     },
-    "executionTopology": {
+    "tagPolicy": {
       "type": "object",
       "additionalProperties": false,
       "required": [
         "tag_object_key",
-        "requirement_ids",
-        "consent_topology_ids",
+        "consent_policy_id",
         "lifecycle_role",
-        "normal_triggers",
-        "consent_mode",
-        "blocking_trigger_keys",
+        "trigger_roles",
         "blocking_event_scope",
-        "built_in_consent_checks",
-        "additional_consent_checks",
-        "firing_option",
-        "may_precede_cmp",
         "pre_cmp_policy",
-        "page_view_capable",
-        "page_view_destinations",
-        "page_view_occurrences",
-        "ecommerce_route",
-        "manual_ecommerce_fields",
         "evidence"
       ],
       "properties": {
         "tag_object_key": {
           "$ref": "https://github.com/haiqigeng/5-gtm-configure/schemas/common.schema.json#/$defs/nonEmpty"
-        },
-        "requirement_ids": {
-          "$ref": "https://github.com/haiqigeng/5-gtm-configure/schemas/common.schema.json#/$defs/uniqueStrings",
-          "minItems": 1
-        },
-        "consent_topology_ids": {
-          "$ref": "https://github.com/haiqigeng/5-gtm-configure/schemas/common.schema.json#/$defs/uniqueStrings",
-          "minItems": 1
         },
         "lifecycle_role": {
           "enum": [
@@ -769,39 +712,17 @@
             "event-driven"
           ]
         },
-        "normal_triggers": {
+        "trigger_roles": {
           "type": "array",
           "items": {
-            "$ref": "https://github.com/haiqigeng/5-gtm-configure/schemas/common.schema.json#/$defs/normalTrigger"
+            "$ref": "https://github.com/haiqigeng/5-gtm-configure/schemas/common.schema.json#/$defs/triggerRole"
           }
-        },
-        "consent_mode": {
-          "$ref": "https://github.com/haiqigeng/5-gtm-configure/schemas/common.schema.json#/$defs/consentMode"
-        },
-        "blocking_trigger_keys": {
-          "$ref": "https://github.com/haiqigeng/5-gtm-configure/schemas/common.schema.json#/$defs/uniqueStrings"
         },
         "blocking_event_scope": {
           "type": [
             "string",
             "null"
           ]
-        },
-        "built_in_consent_checks": {
-          "$ref": "https://github.com/haiqigeng/5-gtm-configure/schemas/common.schema.json#/$defs/uniqueStrings"
-        },
-        "additional_consent_checks": {
-          "$ref": "https://github.com/haiqigeng/5-gtm-configure/schemas/common.schema.json#/$defs/uniqueStrings"
-        },
-        "firing_option": {
-          "enum": [
-            "once-per-event",
-            "once-per-page",
-            "unlimited"
-          ]
-        },
-        "may_precede_cmp": {
-          "type": "boolean"
         },
         "pre_cmp_policy": {
           "enum": [
@@ -813,37 +734,46 @@
             "source-after-readiness"
           ]
         },
-        "page_view_capable": {
-          "type": "boolean"
-        },
-        "page_view_destinations": {
-          "$ref": "https://github.com/haiqigeng/5-gtm-configure/schemas/common.schema.json#/$defs/uniqueStrings"
-        },
         "page_view_occurrences": {
           "type": "array",
           "items": {
-            "enum": [
-              "initial-page-load",
-              "virtual-navigation"
-            ]
+            "$ref": "https://github.com/haiqigeng/5-gtm-configure/schemas/common.schema.json#/$defs/pageViewOccurrence"
           }
-        },
-        "ecommerce_route": {
-          "enum": [
-            "manual",
-            "native-custom-object",
-            "native-data-layer",
-            "not-applicable"
-          ]
-        },
-        "manual_ecommerce_fields": {
-          "$ref": "https://github.com/haiqigeng/5-gtm-configure/schemas/common.schema.json#/$defs/uniqueStrings"
         },
         "evidence": {
           "$ref": "https://github.com/haiqigeng/5-gtm-configure/schemas/common.schema.json#/$defs/uniqueStrings",
           "minItems": 1
+        },
+        "consent_policy_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "custom_page_views": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "destinations",
+            "occurrences"
+          ],
+          "properties": {
+            "destinations": {
+              "$ref": "https://github.com/haiqigeng/5-gtm-configure/schemas/common.schema.json#/$defs/uniqueStrings",
+              "minItems": 1
+            },
+            "occurrences": {
+              "type": "array",
+              "items": {
+                "$ref": "https://github.com/haiqigeng/5-gtm-configure/schemas/common.schema.json#/$defs/pageViewOccurrence"
+              }
+            }
+          }
         }
-      }
+      },
+      "x-owner-paths": [
+        [
+          "tag_object_key"
+        ]
+      ]
     },
     "pageViewDecision": {
       "type": "object",
@@ -856,7 +786,6 @@
         "owner",
         "owner_object_key",
         "google_tag_object_key",
-        "send_page_view",
         "external_dependency_ids",
         "reason",
         "evidence"
@@ -869,10 +798,7 @@
           "$ref": "https://github.com/haiqigeng/5-gtm-configure/schemas/common.schema.json#/$defs/nonEmpty"
         },
         "occurrence": {
-          "enum": [
-            "initial-page-load",
-            "virtual-navigation"
-          ]
+          "$ref": "https://github.com/haiqigeng/5-gtm-configure/schemas/common.schema.json#/$defs/pageViewOccurrence"
         },
         "requirement_ids": {
           "$ref": "https://github.com/haiqigeng/5-gtm-configure/schemas/common.schema.json#/$defs/uniqueStrings",
@@ -899,12 +825,6 @@
             "null"
           ]
         },
-        "send_page_view": {
-          "type": [
-            "boolean",
-            "null"
-          ]
-        },
         "external_dependency_ids": {
           "$ref": "https://github.com/haiqigeng/5-gtm-configure/schemas/common.schema.json#/$defs/uniqueStrings"
         },
@@ -915,7 +835,15 @@
           "$ref": "https://github.com/haiqigeng/5-gtm-configure/schemas/common.schema.json#/$defs/uniqueStrings",
           "minItems": 1
         }
-      }
+      },
+      "x-owner-paths": [
+        [
+          "owner_object_key"
+        ],
+        [
+          "google_tag_object_key"
+        ]
+      ]
     },
     "firstPartyConsumer": {
       "type": "object",
@@ -923,9 +851,6 @@
       "required": [
         "object_key",
         "product",
-        "implementation",
-        "tag_type",
-        "template_identity",
         "evidence"
       ],
       "properties": {
@@ -934,21 +859,6 @@
         },
         "product": {
           "$ref": "https://github.com/haiqigeng/5-gtm-configure/schemas/common.schema.json#/$defs/nonEmpty"
-        },
-        "tag_type": {
-          "$ref": "https://github.com/haiqigeng/5-gtm-configure/schemas/common.schema.json#/$defs/nonEmpty"
-        },
-        "implementation": {
-          "enum": [
-            "installed-template",
-            "native"
-          ]
-        },
-        "template_identity": {
-          "type": [
-            "string",
-            "null"
-          ]
         },
         "evidence": {
           "$ref": "https://github.com/haiqigeng/5-gtm-configure/schemas/common.schema.json#/$defs/uniqueStrings",
@@ -1014,15 +924,11 @@
       "additionalProperties": false,
       "required": [
         "name",
-        "source",
         "normalization",
         "empty_behavior"
       ],
       "properties": {
         "name": {
-          "$ref": "https://github.com/haiqigeng/5-gtm-configure/schemas/common.schema.json#/$defs/nonEmpty"
-        },
-        "source": {
           "$ref": "https://github.com/haiqigeng/5-gtm-configure/schemas/common.schema.json#/$defs/nonEmpty"
         },
         "normalization": {
@@ -1190,6 +1096,14 @@
             ]
           }
         }
+      ],
+      "x-owner-paths": [
+        [
+          "consumer_object_keys"
+        ],
+        [
+          "server_consumer_object_keys"
+        ]
       ]
     },
     "inventoryDisposition": {
@@ -1198,16 +1112,9 @@
         "row_id",
         "source_order",
         "source_locator",
-        "before_object_key",
-        "before_tag_name",
         "disposition",
-        "after_tag_name",
-        "trigger_before",
-        "trigger_after",
-        "variable_changes",
-        "parameter_changes",
-        "consent_changes",
-        "rationale"
+        "rationale",
+        "target_id"
       ],
       "properties": {
         "row_id": {
@@ -1219,18 +1126,6 @@
         },
         "source_locator": {
           "$ref": "https://github.com/haiqigeng/5-gtm-configure/schemas/common.schema.json#/$defs/nonEmpty"
-        },
-        "before_object_key": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "before_tag_name": {
-          "type": [
-            "string",
-            "null"
-          ]
         },
         "disposition": {
           "enum": [
@@ -1244,47 +1139,21 @@
             "update"
           ]
         },
-        "after_tag_name": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "trigger_before": {
-          "$ref": "https://github.com/haiqigeng/5-gtm-configure/schemas/common.schema.json#/$defs/uniqueStrings"
-        },
-        "trigger_after": {
-          "$ref": "https://github.com/haiqigeng/5-gtm-configure/schemas/common.schema.json#/$defs/uniqueStrings"
-        },
-        "variable_changes": {
-          "$ref": "https://github.com/haiqigeng/5-gtm-configure/schemas/common.schema.json#/$defs/uniqueStrings"
-        },
-        "parameter_changes": {
-          "$ref": "https://github.com/haiqigeng/5-gtm-configure/schemas/common.schema.json#/$defs/uniqueStrings"
-        },
-        "consent_changes": {
-          "$ref": "https://github.com/haiqigeng/5-gtm-configure/schemas/common.schema.json#/$defs/uniqueStrings"
-        },
         "rationale": {
           "$ref": "https://github.com/haiqigeng/5-gtm-configure/schemas/common.schema.json#/$defs/nonEmpty"
-        }
-      }
-    },
-    "nativeBinding": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "object_key",
-        "field"
-      ],
-      "properties": {
-        "object_key": {
-          "$ref": "https://github.com/haiqigeng/5-gtm-configure/schemas/common.schema.json#/$defs/nonEmpty"
         },
-        "field": {
+        "target_id": {
           "$ref": "https://github.com/haiqigeng/5-gtm-configure/schemas/common.schema.json#/$defs/nonEmpty"
         }
-      }
+      },
+      "x-owner-paths": [
+        [
+          "operation_ids"
+        ],
+        [
+          "operation_keys"
+        ]
+      ]
     },
     "fieldBinding": {
       "type": "object",
@@ -1298,7 +1167,8 @@
         "gtm_resolution",
         "template_field",
         "missing_behavior",
-        "status"
+        "status",
+        "owner_object_key"
       ],
       "properties": {
         "requirement_id": {
@@ -1313,10 +1183,7 @@
         "shape_compatibility": {
           "anyOf": [
             {
-              "enum": [
-                "compatible",
-                "conversion-required"
-              ]
+              "$ref": "https://github.com/haiqigeng/5-gtm-configure/schemas/common.schema.json#/$defs/shapeCompatibility"
             },
             {
               "type": "null"
@@ -1326,15 +1193,7 @@
         "mapping_method": {
           "anyOf": [
             {
-              "enum": [
-                "constant",
-                "custom-javascript",
-                "direct-dlv",
-                "lookup-table",
-                "native-template",
-                "regex-table",
-                "settings-variable"
-              ]
+              "$ref": "https://github.com/haiqigeng/5-gtm-configure/schemas/common.schema.json#/$defs/mappingMethod"
             },
             {
               "type": "null"
@@ -1360,16 +1219,10 @@
           ]
         },
         "status": {
-          "enum": [
-            "blocked",
-            "external",
-            "intentionally-omitted",
-            "mapped",
-            "pending"
-          ]
+          "$ref": "https://github.com/haiqigeng/5-gtm-configure/schemas/common.schema.json#/$defs/mappingStatus"
         },
-        "native_binding": {
-          "$ref": "https://github.com/haiqigeng/5-gtm-configure/schemas/common.schema.json#/$defs/nativeBinding"
+        "owner_object_key": {
+          "$ref": "https://github.com/haiqigeng/5-gtm-configure/schemas/common.schema.json#/$defs/nonEmpty"
         }
       }
     },
@@ -1384,9 +1237,13 @@
         "gtm_resolution",
         "template_field",
         "status",
-        "provenance_locator"
+        "provenance_locator",
+        "source_fingerprint"
       ],
       "properties": {
+        "source_fingerprint": {
+          "$ref": "#/$defs/canonicalHash"
+        },
         "requirement_id": {
           "$ref": "https://github.com/haiqigeng/5-gtm-configure/schemas/common.schema.json#/$defs/nonEmpty"
         },
@@ -1399,10 +1256,7 @@
         "shape_compatibility": {
           "anyOf": [
             {
-              "enum": [
-                "compatible",
-                "conversion-required"
-              ]
+              "$ref": "https://github.com/haiqigeng/5-gtm-configure/schemas/common.schema.json#/$defs/shapeCompatibility"
             },
             {
               "type": "null"
@@ -1412,15 +1266,7 @@
         "mapping_method": {
           "anyOf": [
             {
-              "enum": [
-                "constant",
-                "custom-javascript",
-                "direct-dlv",
-                "lookup-table",
-                "native-template",
-                "regex-table",
-                "settings-variable"
-              ]
+              "$ref": "https://github.com/haiqigeng/5-gtm-configure/schemas/common.schema.json#/$defs/mappingMethod"
             },
             {
               "type": "null"
@@ -1446,13 +1292,7 @@
           ]
         },
         "status": {
-          "enum": [
-            "blocked",
-            "external",
-            "intentionally-omitted",
-            "mapped",
-            "pending"
-          ]
+          "$ref": "https://github.com/haiqigeng/5-gtm-configure/schemas/common.schema.json#/$defs/mappingStatus"
         },
         "source": {
           "type": [
@@ -1487,8 +1327,8 @@
             "null"
           ]
         },
-        "native_binding": {
-          "$ref": "https://github.com/haiqigeng/5-gtm-configure/schemas/common.schema.json#/$defs/nativeBinding"
+        "owner_object_key": {
+          "$ref": "https://github.com/haiqigeng/5-gtm-configure/schemas/common.schema.json#/$defs/nonEmpty"
         }
       },
       "dependentRequired": {
@@ -1555,7 +1395,12 @@
           "source_authority_locator",
           "source_shape"
         ]
-      }
+      },
+      "x-owner-paths": [
+        [
+          "owner_object_key"
+        ]
+      ]
     },
     "officialSource": {
       "type": "object",
@@ -1823,6 +1668,81 @@
           }
         }
       }
+    },
+    "runMode": {
+      "enum": [
+        "web",
+        "server",
+        "pipeline"
+      ]
+    },
+    "targetType": {
+      "enum": [
+        "web",
+        "server"
+      ]
+    },
+    "executionMode": {
+      "enum": [
+        "isolated-durable",
+        "refonte-durable"
+      ]
+    },
+    "action": {
+      "enum": [
+        "create",
+        "update",
+        "replace",
+        "rename",
+        "pause",
+        "unpause",
+        "reuse",
+        "untouched",
+        "remove"
+      ]
+    },
+    "resourceFamily": {
+      "$ref": "https://github.com/haiqigeng/5-gtm-configure/schemas/common.schema.json#/$defs/nonEmpty"
+    },
+    "evidenceGrade": {
+      "enum": [
+        "approved-input",
+        "official-current",
+        "container-confirmed",
+        "contract-sample"
+      ]
+    },
+    "mappingStatus": {
+      "enum": [
+        "blocked",
+        "external",
+        "intentionally-omitted",
+        "mapped",
+        "pending"
+      ]
+    },
+    "mappingMethod": {
+      "enum": [
+        "constant",
+        "custom-javascript",
+        "direct-dlv",
+        "lookup-table",
+        "native-template",
+        "regex-table",
+        "settings-variable"
+      ]
+    },
+    "shapeCompatibility": {
+      "enum": [
+        "compatible",
+        "conversion-required"
+      ]
+    },
+    "pageViewOccurrence": {
+      "enum": [
+        "initial-page-load",
+        "virtual-navigation"
+      ]
     }
   }
 }

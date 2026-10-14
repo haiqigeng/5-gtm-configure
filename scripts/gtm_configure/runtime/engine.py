@@ -15,7 +15,7 @@ from typing import Any, Protocol
 import gtm_configure.runtime.adapter_protocol as adapter_support
 import gtm_configure.runtime.state as run_state
 from gtm_configure.comparison.native import semantic_references
-from gtm_configure.core.model import IDENTITY_FIELDS
+from gtm_configure.core.model import DELTA_ACTIONS, IDENTITY_FIELDS
 from gtm_configure.core.privacy import (
     SecretProvider,
     SecretResolutionError,
@@ -256,6 +256,19 @@ def _target(document: dict[str, Any], target_id: str) -> dict[str, Any]:
     raise AdapterExecutionError(f"unknown target {target_id!r}")
 
 
+def _baseline_execution_history(document: dict, target_id: str) -> bool:
+    """Supplement receipts only after this lineage has crossed a proved runtime boundary."""
+    baseline = next(
+        item for item in document["container_baselines"] if item["target_id"] == target_id
+    )
+    return bool(baseline.get("capture_evidence")) and any(
+        entry.get("state") in {"in_progress", "saved", "verified", "uncertain"}
+        for operation in document["object_changes"]
+        if operation["target_id"] == target_id
+        for entry in operation.get("journal", [])
+    )
+
+
 def _capture_one_authenticated_baseline(
     document: dict[str, Any],
     target: dict[str, Any],
@@ -287,6 +300,12 @@ def _capture_one_authenticated_baseline(
         if document["run"]["execution_mode"] == "refonte-durable"
         else required_families
     )
+    previous = next(
+        item for item in document["container_baselines"] if item["target_id"] == target_id
+    )
+    supplemental = _baseline_execution_history(document, target_id)
+    if supplemental:
+        families = [family for family in families if family not in previous["resource_families"]]
     resources: dict[str, list[dict[str, Any]]] = {}
     resource_receipts: dict[str, dict[str, Any]] = {}
     for family in families:
@@ -309,7 +328,7 @@ def _capture_one_authenticated_baseline(
         "baseline_error", None
     )
     for index, baseline in enumerate(value["container_baselines"]):
-        if baseline["target_id"] == target_id:
+        if baseline["target_id"] == target_id and not supplemental:
             value["container_baselines"][index] = {
                 "target_id": target_id,
                 "captured_at": None,
@@ -320,6 +339,7 @@ def _capture_one_authenticated_baseline(
                 "resources": {},
                 "preexisting_workspace_changes": None,
                 "capture_evidence": None,
+                "supplemental_captures": [],
                 "fingerprint": None,
             }
             break
@@ -349,7 +369,20 @@ def _capture_authenticated_baselines(
         target_operations = [
             item for item in value["object_changes"] if item["target_id"] == target["target_id"]
         ]
-        if not target_operations or any(item["state"] != "planned" for item in target_operations):
+        if not target_operations:
+            continue
+        baseline = next(
+            item
+            for item in value["container_baselines"]
+            if item["target_id"] == target["target_id"]
+        )
+        required_families = required_baseline_families(target_operations, target["container_type"])
+        supplemental = _baseline_execution_history(value, target["target_id"])
+        if (
+            supplemental
+            and baseline["complete"]
+            and required_families <= set(baseline["resource_families"])
+        ):
             continue
         try:
             binding = registry.binding(target["target_id"])
@@ -368,17 +401,19 @@ def _capture_authenticated_baselines(
                 for item in value["container_baselines"]
                 if item["target_id"] == target["target_id"]
             )
-            baseline.update(
-                captured_at=None,
-                complete=False,
-                resource_families=[],
-                family_counts={},
-                resource_identities={},
-                resources={},
-                preexisting_workspace_changes=None,
-                capture_evidence=None,
-                fingerprint=None,
-            )
+            if not supplemental:
+                baseline.update(
+                    captured_at=None,
+                    complete=False,
+                    resource_families=[],
+                    family_counts={},
+                    resource_identities={},
+                    resources={},
+                    preexisting_workspace_changes=None,
+                    capture_evidence=None,
+                    supplemental_captures=[],
+                    fingerprint=None,
+                )
             result = next(
                 item for item in value["target_results"] if item["target_id"] == target["target_id"]
             )
@@ -1063,14 +1098,7 @@ def _prepare_write(document, operation, current, *, timestamp):
                 )
         return document, None
     kwargs: dict[str, Any] = {}
-    if operation["action"] in {
-        "update",
-        "replace",
-        "rename",
-        "pause",
-        "unpause",
-        "remove",
-    }:
+    if operation["action"] in DELTA_ACTIONS:
         pre_write_comparison, safe_current = build_pre_write_comparison(operation, current)
         if not pre_write_comparison["pass"]:
             document = run_state.checkpoint_validated_operation(

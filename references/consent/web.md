@@ -29,17 +29,19 @@ Structural complement checks prove only covered event constraints and supported 
 Actual CMP semantics, token boundaries, aliases and arbitrary regex require source evidence.
 
 Under this topology, Additional Consent Checks are unset and template-owned built-in checks remain
-recorded as native behavior. Approved advanced/native behavior retains its documented defaults,
+established by inspected product/template evidence. Approved advanced/native behavior retains its documented defaults,
 updates and limited denied-state execution. [Lifecycle](lifecycle.md) establishes initial/later
 opportunities separately from either eligibility mechanism.
 
 ## Contract representation
 
 Use `business-trigger-plus-vendor-block` for business-event opportunity plus denial block, or
-`cmp-lifecycle-plus-vendor-block` for CMP lifecycle opportunity plus denial block. Bind each execution
-topology's `consent_topology_ids` to its destination topology. Declared normal/blocking trigger keys,
-mechanism and deny predicate agree with the actual tag references. The
-[authoring model](../core/authoring.md) and shared schema own the remaining structure.
+`cmp-lifecycle-plus-vendor-block` for CMP lifecycle opportunity plus denial block. Each tag policy
+selects its single shared `consent_policy_id`; that policy owns mode, signal, unknown behavior and
+mechanism. Native tag references establish attached normal/blocking triggers and configurable checks.
+Web membership follows these selectors; server destination tags explicitly select their consent
+policy through `server_tag_keys`. Pipeline and external transport roles derive from their connected
+consumer relationships. The [authoring model](../core/authoring.md) and shared schema own structure.
 
 ## Existing consent conventions
 

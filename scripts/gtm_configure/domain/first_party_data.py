@@ -8,11 +8,12 @@ import gtm_configure.core.validation as validation
 import gtm_configure.domain.web_model as web_model
 import gtm_configure.domain.web_native as web_native
 from gtm_configure.core.public_identifiers import locate
+from gtm_configure.core.schemas import definition_validator
+from gtm_configure.core.template_source import inspect_template_identity
 from gtm_configure.core.validation import (
     RunValidationError,
     array,
     object,
-    optional_text,
     text,
     unique_texts,
 )
@@ -27,7 +28,6 @@ from gtm_configure.domain.native import (
 )
 from gtm_configure.domain.web_model import (
     CUSTOM_CODE_TAG_TYPES,
-    FIRST_PARTY_FEATURES,
     FIRST_PARTY_PRODUCTS,
     GA4_EVENT_TAG_TYPES,
     GOOGLE_ADS_CONVERSION_TAG_TYPES,
@@ -35,7 +35,6 @@ from gtm_configure.domain.web_model import (
     NON_EXECUTING_TAG_ACTIONS,
 )
 from gtm_configure.domain.web_native import (
-    configuration_value,
     effective_target,
     field_value,
     normalized_token,
@@ -147,16 +146,6 @@ def validate_first_party_feature_contract(
                 f"{path}.{feature} requires a Google tag or GA4 Event user_data sender"
             )
 
-    if feature.startswith("google-ads-") and feature not in {
-        "google-ads-enhanced-conversions",
-        "google-ads-tag-wide-user-data",
-        "google-ads-server-user-data-transport",
-        "google-ads-server-user-provided-data-event",
-    }:
-        if product_types & (GOOGLE_CONFIGURATION_TAG_TYPES | GA4_EVENT_TAG_TYPES):
-            raise RunValidationError(
-                f"{path}.{feature} must not bind a GA4 or generic Google configuration tag"
-            )
     externally_administered = {
         "ga4-user-provided-data",
         "google-ads-enhanced-conversions",
@@ -187,8 +176,25 @@ def first_party_binding_value(
         "user_data_path" in binding for binding in route.get("consumer_bindings", [])
     )
     if route.get("feature") != "google-ads-enhanced-conversions" and not native_matching:
-        if route.get("feature") == "ga4-user-provided-data":
-            return configuration_value(target, {route["destination_field"]})
+        if route.get("feature") in {
+            "ga4-user-provided-data",
+            "google-ads-tag-wide-user-data",
+            "google-ads-server-user-data-transport",
+            "google-ads-server-user-provided-data-event",
+        }:
+            # Current GA4 collection and Ads event transport both select a
+            # sanctioned user_data Event Parameter. Their independent feature
+            # authorization and account activation are verified by the route.
+            # The documented Google-tag server carrier uses Configuration.
+            namespace = (
+                "configuration"
+                if tag_type(target, path) == "googtag"
+                and route.get("feature") != "google-ads-tag-wide-user-data"
+                else "event-parameter"
+            )
+            fields = resolved_collection_fields(target, operations, path, namespace=namespace)
+            name = route["destination_field"]
+            return name in fields, fields.get(name)
         return field_value(
             resolved_fields(
                 target,
@@ -205,6 +211,30 @@ def first_party_binding_value(
         raise RunValidationError(f"{path} needs exactly one native field binding per consumer")
     binding = matches[0]
     text(binding.get("field_review"), f"{path}.consumer_binding.field_review")
+    if route.get("feature") == "google-ads-enhanced-conversions":
+        cell_path = binding.get("user_data_path")
+        if (
+            not isinstance(cell_path, list)
+            or len(cell_path) != 7
+            or cell_path[:3] != ["parameter", "eventSettingsTable", "list"]
+            or type(cell_path[3]) is not int
+            or cell_path[3] < 0
+            or cell_path[4:] != ["map", "parameterValue", "value"]
+        ):
+            raise RunValidationError(
+                f"{path} user_data_path must bind the native user_data event cell"
+            )
+        try:
+            field_name, _ = locate(target, cell_path[:4] + ["map", "parameter", "value"])
+        except (KeyError, TypeError, IndexError) as exc:
+            raise RunValidationError(
+                f"{path} native user_data event cell does not resolve uniquely"
+            ) from exc
+        if field_name != "user_data":
+            raise RunValidationError(f"{path} native event field must be user_data")
+        fields = resolved_collection_fields(target, operations, path, namespace="event-parameter")
+        if "user_data" not in fields:
+            raise RunValidationError(f"{path} requires the inspected native user_data event field")
     if native_matching:
         cell_path = binding.get("user_data_path")
         if (
@@ -273,6 +303,7 @@ def _validate_first_party_consumer_bindings(
     feature: str,
     consumers: set[str],
     consumer_targets: dict[str, dict[str, Any]],
+    operations: dict[str, dict[str, Any]],
 ) -> None:
     records: set[str] = set()
     for index, binding_raw in enumerate(array(raw, f"{path}.consumer_bindings")):
@@ -290,34 +321,42 @@ def _validate_first_party_consumer_bindings(
             raise RunValidationError(
                 f"{binding_path}.product must identify {expected_product!r} for {feature}"
             )
-        implementation = text(binding.get("implementation"), f"{binding_path}.implementation")
-        if implementation not in {"native", "installed-template"}:
-            raise RunValidationError(f"{binding_path}.implementation is unsupported")
-        if feature == "google-ads-enhanced-conversions" and implementation != "native":
-            raise RunValidationError(f"{binding_path}.event override requires a native Ads tag")
         actual_type = tag_type(consumer_targets[object_key], f"{binding_path}.consumer")
-        declared_type = normalized_token(text(binding.get("tag_type"), f"{binding_path}.tag_type"))
-        if declared_type != actual_type:
-            raise RunValidationError(
-                f"{binding_path}.tag_type differs from the bound saved tag type"
-            )
         if actual_type in CUSTOM_CODE_TAG_TYPES:
             raise RunValidationError(
                 f"{binding_path} cannot identify Custom HTML/Image as a product-native consumer"
             )
-        template_identity = optional_text(
-            binding.get("template_identity"), f"{binding_path}.template_identity"
-        )
-        if implementation == "native" and template_identity is not None:
-            raise RunValidationError(f"{binding_path}.native requires a null template_identity")
-        if implementation == "installed-template":
-            if template_identity is None:
-                raise RunValidationError(
-                    f"{binding_path}.installed-template requires template_identity"
+        if actual_type.startswith("cvt"):
+            by_key = {operation["object_key"]: operation for operation in operations.values()}
+            consumer = by_key[object_key]
+            dependencies = set(consumer.get("dependencies", consumer.get("depends_on", [])))
+            templates = [
+                operation
+                for operation in operations.values()
+                if operation["object_type"] == "template"
+                and operation["action"] not in NON_EXECUTING_TAG_ACTIONS
+                and (
+                    operation["object_key"] in dependencies
+                    or operation.get("operation_id") in dependencies
                 )
-            if normalized_token(template_identity) != actual_type:
+            ]
+            identities = []
+            for template in templates:
+                source = effective_target(template, f"{binding_path}.template").get("templateData")
+                try:
+                    if isinstance(source, str):
+                        identity = inspect_template_identity(source)
+                    elif isinstance(source, dict) and source.get("source_integrity"):
+                        identity = source["source_inspection"]["native_type"]
+                    else:
+                        raise ValueError("requires the inspected installed template source")
+                    identities.append(normalized_token(identity))
+                except (ValueError, KeyError, TypeError) as exc:
+                    raise RunValidationError(f"{binding_path}: {exc}") from exc
+            if identities.count(actual_type) != 1:
                 raise RunValidationError(
-                    f"{binding_path}.template_identity differs from the bound saved tag type"
+                    f"{binding_path} requires exactly one installed template source dependency "
+                    "matching the consumer native type"
                 )
         unique_texts(
             binding.get("evidence"),
@@ -350,13 +389,14 @@ def validate_first_party_data_routes(
     records: list[dict[str, Any]] = []
     for index, item_raw in enumerate(array(raw, "$.first_party_data_routes")):
         path = f"$.first_party_data_routes[{index}]"
+        error = next(definition_validator("firstPartyRoute").iter_errors(item_raw), None)
+        if error is not None:
+            raise RunValidationError(f"{path}: {error.message}")
         item = object(item_raw, path)
         requirement_id = text(item.get("requirement_id"), f"{path}.requirement_id")
         if requirement_id not in requirement_ids:
             raise RunValidationError(f"{path}.requirement_id is unknown")
         feature = text(item.get("feature"), f"{path}.feature")
-        if feature not in FIRST_PARTY_FEATURES:
-            raise RunValidationError(f"{path}.feature has unsupported value {feature!r}")
         destination_field = text(
             item.get("destination_field"),
             f"{path}.destination_field",
@@ -417,13 +457,8 @@ def validate_first_party_data_routes(
             if feature == "vendor-advanced-matching" and any(
                 "user_data_path" in binding for binding in item.get("consumer_bindings", [])
             ):
-                mapping = matching_fields[0]
                 if item.get("timing") != "same-event":
                     raise RunValidationError(f"{path} native matching requires same-event timing")
-                if item["fields"][0].get("source") != mapping.get("source"):
-                    raise RunValidationError(
-                        f"{path} matching source differs from the approved field"
-                    )
             consumer_targets[object_key] = target
         if "consumer_bindings" in item:
             _validate_first_party_consumer_bindings(
@@ -432,21 +467,10 @@ def validate_first_party_data_routes(
                 feature=feature,
                 consumers=consumers,
                 consumer_targets=consumer_targets,
+                operations=operations,
             )
-        source_priority = text(item.get("source_priority"), f"{path}.source_priority")
-        if source_priority not in {
-            "data-layer",
-            "controlled-javascript",
-            "dom",
-            "automatic",
-        }:
-            raise RunValidationError(f"{path}.source_priority is unsupported")
         timing = text(item.get("timing"), f"{path}.timing")
-        if timing not in {"tag-wide", "same-event", "prior-page"}:
-            raise RunValidationError(f"{path}.timing is unsupported")
         hashing_owner = text(item.get("hashing_owner"), f"{path}.hashing_owner")
-        if hashing_owner not in {"not-applicable", "native-raw", "prehashed-sha256"}:
-            raise RunValidationError(f"{path}.hashing_owner is unsupported")
         fields = array(item.get("fields"), f"{path}.fields")
         if not fields:
             raise RunValidationError(f"{path}.fields must not be empty")
@@ -458,14 +482,9 @@ def validate_first_party_data_routes(
             if name in field_names:
                 raise RunValidationError(f"{path}.fields contains duplicate field {name!r}")
             field_names.add(name)
-            text(field.get("source"), f"{field_path}.source")
             unique_texts(field.get("normalization"), f"{field_path}.normalization")
             if field.get("empty_behavior") != "omit":
                 raise RunValidationError(f"{field_path}.empty_behavior must be 'omit'")
-        if feature == "ga4-user-id" and fields[0]["source"] != matching_fields[0]["source"]:
-            raise RunValidationError(
-                f"{path}.identity source differs from its approved configuration mapping"
-            )
         consent_types = set(unique_texts(item.get("consent_types"), f"{path}.consent_types"))
         dependency_ids = set(
             unique_texts(
@@ -690,7 +709,7 @@ def validate_target_routes(
             operations_by_key = {item["object_key"]: item for item in local_operations.values()}
             for consumer_key in route["consumer_object_keys"]:
                 topology = validated_topologies.get(consumer_key, {})
-                triggers = topology.get("normal_triggers", [])
+                triggers = topology.get("trigger_roles", [])
                 if (
                     not source_event
                     or not triggers
@@ -711,8 +730,12 @@ def validate_target_routes(
                         "use the documented event-scoped sender when data becomes available later"
                     )
         if route["feature"] not in {
+            "ga4-user-provided-data",
             "google-ads-user-provided-data-event",
             "google-ads-enhanced-conversions",
+            "google-ads-tag-wide-user-data",
+            "google-ads-server-user-data-transport",
+            "google-ads-server-user-provided-data-event",
         }:
             continue
         if route["feature"] == "google-ads-user-provided-data-event":
@@ -722,10 +745,12 @@ def validate_target_routes(
                     f"first-party route {route['requirement_id']!r} must bind the "
                     "gtm.formSubmit source event for prior-page browser capture"
                 )
+            trigger_types = web_native.resolved_trigger_types(local_operations, {})
             for consumer_key in route["consumer_object_keys"]:
                 topology = validated_topologies.get(consumer_key)
                 if topology is None or {
-                    trigger["type"] for trigger in topology["normal_triggers"]
+                    trigger_types.get(trigger["trigger_object_key"])
+                    for trigger in topology["trigger_roles"]
                 } != {"form-submission"}:
                     fail(
                         f"first-party route {route['requirement_id']!r} must bind the "

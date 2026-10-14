@@ -8,6 +8,8 @@ Native GTM bodies and authority records retain their original representation.
 from dataclasses import dataclass, field
 from typing import Any
 
+from gtm_configure.domain.graph import served_requirements
+
 
 @dataclass
 class ConfigurationGraph:
@@ -18,17 +20,20 @@ class ConfigurationGraph:
     pipelines: list[dict[str, Any]]
     inventory_dispositions: list[dict[str, Any]]
     payload_mappings: list[dict[str, Any]]
-    consent_topologies: list[dict[str, Any]]
+    consent_policies: list[dict[str, Any]]
     dedup_contracts: list[dict[str, Any]]
     external_dependencies: list[dict[str, Any]]
-    execution_topologies: list[dict[str, Any]]
+    tag_policies: list[dict[str, Any]]
     container_baselines: list[dict[str, Any]]
+    phase: str = "contract"
     by_id: dict[str, dict[str, Any]] = field(init=False)
     by_key: dict[str, dict[str, Any]] = field(init=False)
+    serves: dict[str, set[str]] = field(init=False)
 
     def __post_init__(self):
         self.by_id = {item["operation_id"]: item for item in self.operations}
         self.by_key = {item["object_key"]: item for item in self.operations}
+        self.serves = served_requirements(self.by_id)
 
     @classmethod
     def from_contract(cls, contract, payload_mappings):
@@ -66,10 +71,10 @@ class ConfigurationGraph:
             pipelines,
             inventory,
             payload_mappings,
-            contract["consent_topologies"],
+            contract["consent_policies"],
             contract["dedup_contracts"],
             contract["external_dependencies"],
-            contract["execution_topologies"],
+            contract["tag_policies"],
             [],
         )
 
@@ -83,9 +88,10 @@ class ConfigurationGraph:
             document["pipelines"],
             document["inventory_dispositions"],
             document["payload_mappings"],
-            document["consent_topologies"],
+            document["consent_policies"],
             document["dedup_contracts"],
             document["external_dependencies"],
-            document["execution_topologies"],
+            document["tag_policies"],
             document["container_baselines"],
+            phase="run",
         )

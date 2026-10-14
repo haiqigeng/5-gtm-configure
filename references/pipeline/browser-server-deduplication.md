@@ -76,7 +76,7 @@ The inspected generator contract establishes per-occurrence stability across all
 Use `source_type: "generated-event-id"` with `strategy: "dual-shared-id"`. Its `generation` record
 applies even when the generator variable already exists; `template-native` is not a way to bypass
 these generation checks. The record
-contains `template_object_key`, the exact inspected native `template_type`, `review_locator`, and
+contains `template_object_key`, `review_locator`, and
 `consumer_bindings`. Each binding names `object_key` and a `field_path` array inside its native
 `intended` body. String path components select named GTM Parameter rows; integers select list
 positions. Example: `["parameter", "eventId", "value"]`. Inspect that this is the actual vendor ID
@@ -87,7 +87,8 @@ with the saved native type, and evidence that repeated reads on one event are st
 events receive distinct IDs. Include the installed template as a `reuse`/`untouched` operation with
 its authoritative `object_id` and full inspected `templateData`; the generator variable depends on
 it. If installation is needed, complete the separately authorized template import and readback
-first, then use its observed native type in the configuration contract. Its saved authoritative ID supplies the native type binding. Follow [template governance](../templates.md).
+first, then use its observed native type in the variable's native configuration. The installed
+source's `INFO.id` supplies that native type binding. Follow [template governance](../templates.md).
 
 Bind every browser and transporter consumer's actual native ID field to that one variable. This generated-ID route covers the same direct source-event triggers in one web container, once
 per event. Sequencing, replay, cross-event/container and purchase routes require a supplied stable

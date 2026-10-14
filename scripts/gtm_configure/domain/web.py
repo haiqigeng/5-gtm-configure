@@ -21,13 +21,16 @@ from gtm_configure.domain.localization import (
     localize_operations,
     web_sections_by_target,
 )
+from gtm_configure.domain.pipeline_declarations import consent_transporters
+from gtm_configure.domain.template_bindings import validate_template_bindings
+from gtm_configure.domain.web_native import configured_transport_endpoint
 
 
 def validate_web_domain(
     *,
     execution_mode: str,
     graph: ConfigurationGraph,
-    execution_topologies: list[dict[str, Any]],
+    tag_policies: list[dict[str, Any]],
     page_view_decisions: list[dict[str, Any]],
     first_party_data_routes: list[dict[str, Any]],
     external_dependencies: list[Any],
@@ -41,7 +44,7 @@ def validate_web_domain(
         graph.operations,
         graph.target_types,
     )
-    payload_mappings, consent_topologies = graph.payload_mappings, graph.consent_topologies
+    payload_mappings, consent_policies = graph.payload_mappings, graph.consent_policies
     pipelines, inventory_dispositions = graph.pipelines, graph.inventory_dispositions
     if execution_mode not in EXECUTION_MODES:
         fail(f"execution_mode has unsupported value {execution_mode!r}")
@@ -57,6 +60,7 @@ def validate_web_domain(
         for item in requirements
         if isinstance(item, dict) and isinstance(item.get("id"), str)
     }
+    validate_template_bindings(operations, fail, persisted=graph.phase == "run")
     first_party_data.validate_server_identity_consumers(
         fail=fail,
         first_party_data_routes=first_party_data_routes,
@@ -73,31 +77,51 @@ def validate_web_domain(
     dependencies = external_dependency_index(external_dependencies, set(requirement_ids), fail)
     consent_by_id: dict[str, dict[str, Any]] = {}
     transporter_keys: set[str] = set()
-    for index, topology in enumerate(consent_topologies):
+    explicit_transporters = {
+        key for item in graph.dedup_contracts for key in item.get("transporter_consumer_keys", [])
+    }
+    for operation in operations:
+        native = operation.get("intended") or operation.get("pre_change") or {}
+        if operation["resource_family"] == "tag" and native.get("type") in {
+            "googtag",
+            "gaawc",
+            "gaawe",
+        }:
+            try:
+                if configured_transport_endpoint(operation, graph.by_key, "$.native_transport"):
+                    explicit_transporters.add(operation["object_key"])
+            except ValueError:
+                pass
+    explicit_transporters.update(
+        key
+        for route in first_party_data_routes
+        if route["feature"]
+        in {"google-ads-server-user-data-transport", "google-ads-server-user-provided-data-event"}
+        for key in route["consumer_object_keys"]
+    )
+    for index, topology in enumerate(consent_policies):
         if not isinstance(topology, dict):
-            fail(f"$.consent_topologies[{index}] must be an object")
+            fail(f"$.consent_policies[{index}] must be an object")
             continue
-        topology_id = topology.get("consent_topology_id")
+        topology_id = topology.get("consent_policy_id")
         if isinstance(topology_id, str):
             consent_by_id[topology_id] = topology
-        if topology.get("transporter_destination_vendor_block") is False:
+        if topology.get("web_enforcement", {}).get("mechanism") == "transport-trigger-only":
             transporter_keys.update(
-                value
-                for value in topology.get("transporter_tag_keys", [])
-                if isinstance(value, str)
+                consent_transporters(topology, tag_policies, graph.mode, explicit_transporters)
             )
 
     web_target_ids = {
         target_id for target_id, container_type in target_types.items() if container_type == "web"
     }
-    for index, topology in enumerate(execution_topologies):
+    for index, topology in enumerate(tag_policies):
         if not isinstance(topology, dict):
-            fail(f"$.execution_topologies[{index}] must be an object")
+            fail(f"$.tag_policies[{index}] must be an object")
             continue
         key = topology.get("tag_object_key")
         target_id = key.split("::", 1)[0] if isinstance(key, str) else None
         if target_id not in web_target_ids:
-            fail(f"$.execution_topologies[{index}] must reference a web target tag")
+            fail(f"$.tag_policies[{index}] must reference a web target tag")
     for index, decision in enumerate(page_view_decisions):
         if not isinstance(decision, dict) or decision.get("target_id") not in web_target_ids:
             fail(f"$.page_view_decisions[{index}].target_id must reference a web target")
@@ -113,9 +137,7 @@ def validate_web_domain(
             continue
         if any(value not in valid_inventory_links for value in links):
             fail(f"$.inventory_dispositions[{index}] references an unknown object action")
-    topologies_by_target = web_sections_by_target(
-        execution_topologies, "tag_object_key", web_target_ids
-    )
+    topologies_by_target = web_sections_by_target(tag_policies, "tag_object_key", web_target_ids)
     first_party_data.validate_transport_routes(
         dependencies=dependencies,
         fail=fail,
@@ -199,7 +221,7 @@ def validate_web_domain(
 
     if not web_target_ids and any(
         (
-            execution_topologies,
+            tag_policies,
             page_view_decisions,
             first_party_data_routes,
             inventory_dispositions,

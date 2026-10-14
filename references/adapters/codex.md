@@ -9,14 +9,16 @@ and validate the complete target profiles before execution. Node is required for
 tests, not for running the relay in Codex. Claude Code and Gemini CLI use [the SDK runner](mcp-sdk.md);
 a connected MCP alone does not establish an executable path for other hosts.
 
-Load `scripts/mcp_relay.js` into one `functions.exec` call with absolute `pythonPath`, `scriptPath`
+Load `scripts/mcp_relay.js` into one `functions.exec` call with absolute `shellPath` (the discovered
+PowerShell 7 executable), `pythonPath`, `scriptPath`
 (pointing to `scripts/configure_gtm.py`), `runPath` and `profilesPath` bindings. It starts one worker,
 services ordered requests through its stdin/stdout session, and returns sanitized completion
 metadata. One relay owns one run and starts its worker directly, using in-memory request/reply exchange. The relay uses PowerShell only to launch fixed local executable paths, encoded
 as data; MCP responses never enter a shell command. Stop on unsupported required capabilities.
 
 Requests use acknowledged 4096-character hex chunks so large objects do not rely on one tool-output
-budget. Replies use a non-echoing stream; raw data stays in memory until complete relevant baseline
+budget. Replies transfer four identified 4096-character chunks per bounded host write and wait for
+the worker's acknowledgement. The worker uses a non-echoing stream; raw data stays in memory until complete relevant baseline
 and readback graphs are classified and redacted. The bound is 64 MiB of hex per request/reply
 (16 Mi UTF-16 code units), with a default 180-second call timeout and 1800-second run deadline.
 For a measured large-object requirement, set positive `callTimeoutSeconds` and `runTimeoutSeconds`
@@ -31,6 +33,12 @@ run and read back. Within the run, an operation uses the existing `failed` or `u
 Credential-bearing mutations remain unavailable through this relay: bind a separately verified
 secure provider in an adapter that can handle the real destination/host requirements. See
 [secret handling](../core/execution.md#credential-findings-and-transport-limits).
+Unstructured connector errors retain their sanitized cause while their write outcome remains
+uncertain. Structured endpoint rejections establish non-application independently of that cause.
+The relay owns its deadline and STOP handshake: cancellation reaches the worker's outer lifecycle
+boundary and waits for session exit before reporting shutdown, allowing its run lock to release.
+An unconfirmed exit remains a setup/recovery diagnostic.
+
 Diagnostics use the same sanitized evidence boundary. Host MCP and
 session-tool transcripts can retain the original replies or recoverable encoded bytes. Hex is
 transport encoding, not encryption, and this skill cannot change host logging or retention.

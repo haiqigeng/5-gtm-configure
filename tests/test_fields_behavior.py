@@ -24,7 +24,7 @@ class TestFieldBinding(fixture_field_binding.NativeMappingTestFixture):
                     ):
                         objects[0]["intended"]["parameter"][-1]["list"][0]["map"][0]["value"] = name
                         if change_binding:
-                            bindings[0]["native_binding"]["field"] = name
+                            bindings[0]["destination_field"] = name
                     with self.assertRaises(ValueError):
                         fixture_field_binding.compile_request(value)
                     with self.assertRaises(ValueError):
@@ -49,8 +49,6 @@ class TestFieldBinding(fixture_field_binding.NativeMappingTestFixture):
                         binding = value["field_bindings"][0]
                         binding["field_scope"] = scope
                         binding["template_field"] = "agent-inspected native route"
-                        if not binding_present:
-                            binding.pop("native_binding")
                         if not event_row_present:
                             value["objects"][0]["intended"]["parameter"].pop()
                         run = fixture_field_binding.create_from_contract(
@@ -75,7 +73,7 @@ class TestFieldBinding(fixture_field_binding.NativeMappingTestFixture):
                 value = fixture_field_binding.lead_request()
                 binding = value["field_bindings"][0]
                 if mutation == "binding":
-                    binding.pop("native_binding")
+                    binding.pop("owner_object_key")
                 elif mutation == "field":
                     value["objects"][0]["intended"]["parameter"].pop()
                 elif mutation == "variable":
@@ -85,9 +83,9 @@ class TestFieldBinding(fixture_field_binding.NativeMappingTestFixture):
                         "wrong.source"
                     )
                 elif mutation == "owner":
-                    binding["native_binding"]["object_key"] = "web-main::variable::DLV - lead_type"
+                    binding["owner_object_key"] = "web-main::variable::DLV - lead_type"
                 else:
-                    binding["native_binding"]["field"] = "notes"
+                    value["objects"][0]["intended"]["parameter"].pop()
                     value["objects"][0]["intended"]["notes"] = binding["gtm_resolution"]
                 with self.assertRaises(ValueError):
                     fixture_field_binding.compile_request(value)
@@ -141,16 +139,14 @@ class TestTransportAndState(fixture_transport_and_state.UtilityEvolutionTestFixt
 
 
 @pytest.mark.parametrize("status", ["pending", "blocked"])
-@pytest.mark.parametrize(
-    "invalid", ["unknown", "requirement", "namespace", "field", "paused", "variable"]
-)
+@pytest.mark.parametrize("invalid", ["unknown", "requirement", "namespace", "paused", "variable"])
 def test_unresolved_bindings_validate_owner_before_mapping_proof(status, invalid):
     mapping = {
         "requirement_id": "A",
         "field_scope": "configuration",
         "destination_field": "custom_config",
         "status": status,
-        "native_binding": {"object_key": "GOOGLE", "field": "custom_config"},
+        "owner_object_key": "GOOGLE",
     }
     owner = {
         "object_key": "GOOGLE",
@@ -165,16 +161,14 @@ def test_unresolved_bindings_validate_owner_before_mapping_proof(status, invalid
 
     validate_native_mappings([mapping], [owner], fail)
     if invalid == "unknown":
-        mapping["native_binding"]["object_key"] = "MISSING"
+        mapping["owner_object_key"] = "MISSING"
     elif invalid == "requirement":
         owner["requirement_ids"] = ["B"]
     elif invalid == "namespace":
         owner["intended"]["type"] = "gaawe"
-    elif invalid == "field":
-        mapping["native_binding"]["field"] = "different"
     elif invalid == "paused":
         owner["intended"]["paused"] = True
     else:
         owner["resource_family"] = "variable"
-    with pytest.raises(ValueError, match="native mapping"):
+    with pytest.raises(ValueError, match="field owner|native mapping"):
         validate_native_mappings([mapping], [owner], fail)

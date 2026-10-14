@@ -46,7 +46,10 @@ retain their documented classification.
 
 ## Prove exact conformance
 
-Compare approved versus intended semantics once at intake: included IDs, event names, timing,
+Freeze the approved projection from the original source and explicit amendments before authoring
+the implementation. Retain the original artifact hash and sheet/cell/row locators with that projection;
+recovery consumes the same immutable UTF-8 evidence. Compare approved versus intended semantics:
+included IDs, event names, timing,
 repeatability, filters, exact field sets/namespaces and source paths/literals. Use importer output
 `approved-semantics.json` directly when available. GTM infrastructure stays outside that semantic
 projection. A difference requires correction, blocking classification or an explicit amendment.
@@ -70,6 +73,9 @@ sets. Requirement/scope-list order is non-semantic; nested arrays remain ordered
 python "<skill-dir>/scripts/configure_gtm.py" conformance --approved approved.json --candidate intended.json
 ~~~
 
-Exit `0`: exact conformance; `1`: deterministic difference; `2`: invalid input/invocation. Preserve
-the result with implementation evidence. Saved-state proof uses native comparison and convergence,
+Exit `0`: semantic projection equality; `1`: deterministic difference; `2`: invalid input/invocation.
+The comparator establishes equality of its inputs. Source fidelity comes from the independently
+frozen source projection and amendments; a projection generated from the candidate does not establish
+that independence. Preserve the result with implementation evidence and bind behavior checks to the
+exact final candidate hash. Saved-state proof uses native comparison and convergence,
 completing the chain above through the same approved requirements.

@@ -184,14 +184,12 @@ class MachineryAdoption(unittest.TestCase):
             for key, value in req["field_bindings"][0].items()
             if key in {"requirement_id", "field_scope", "destination_field", "missing_behavior"}
         }
-        req["execution_topologies"][0].pop("normal_triggers")
+        req["tag_policies"][0].pop("trigger_roles")
         contract = compile_request(req)
         self.assertEqual(
             contract["implementation"]["field_bindings"][0]["mapping_method"], "direct-dlv"
         )
-        self.assertEqual(
-            contract["execution_topologies"][0]["normal_triggers"][0]["role"], "source-event"
-        )
+        self.assertEqual(contract["tag_policies"][0]["trigger_roles"][0]["role"], "source-event")
         req["reuse_candidates"][0]["intended"]["filter"] = [
             {
                 "type": "equals",
@@ -207,7 +205,7 @@ class MachineryAdoption(unittest.TestCase):
     def test_transformed_or_non_v2_dlv_is_not_derived(self):
         for mutation in ("format", "v1"):
             req = lead_request()
-            req["field_bindings"][0].pop("native_binding")
+            req["field_bindings"][0].pop("owner_object_key")
             variable = req["reuse_candidates"][-1]["intended"]
             if mutation == "format":
                 variable["formatValue"] = {"caseConversionType": "UPPERCASE"}

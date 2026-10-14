@@ -400,14 +400,10 @@
       "decision": "OFFLINE fixture: native GA4 eventSettingsTable, approved string field, CMP denial gate and exact success event. No actual source review claimed."
     }
   ],
-  "consent_topologies": [
+  "consent_policies": [
     {
-      "consent_topology_id": "GA4-CONSENT",
+      "consent_policy_id": "GA4-CONSENT",
       "destination": "G-SYNTHETIC1",
-      "requirement_ids": [
-        "LEAD",
-        "SIGNUP"
-      ],
       "consent_mode": "strict-basic",
       "transport_behavior": "blocked",
       "web_enforcement": {
@@ -423,78 +419,45 @@
         "generate_lead",
         "sign_up"
       ],
-      "intentional_double_gate": false,
-      "server_tag_keys": [],
-      "transporter_tag_keys": [],
-      "transporter_destination_vendor_block": false
+      "server_tag_keys": []
     }
   ],
-  "execution_topologies": [
+  "tag_policies": [
     {
       "tag_object_key": "web::tag::GA4 - Event - generate_lead",
-      "requirement_ids": [
-        "LEAD"
-      ],
       "lifecycle_role": "event-driven",
-      "consent_mode": "strict-basic",
-      "blocking_trigger_keys": [
-        "web::trigger::Block - CMP - GA4 denied"
-      ],
       "blocking_event_scope": "regex:.*",
-      "built_in_consent_checks": [
-        "analytics_storage",
-        "ad_storage",
-        "ad_user_data",
-        "ad_personalization"
-      ],
-      "additional_consent_checks": [],
-      "firing_option": "once-per-event",
-      "may_precede_cmp": true,
       "pre_cmp_policy": "drop-unconsented-occurrence",
-      "page_view_capable": false,
-      "page_view_destinations": [],
       "page_view_occurrences": [],
-      "ecommerce_route": "not-applicable",
-      "manual_ecommerce_fields": [],
       "evidence": [
         "SYNTHETIC approved policy and native container inspection"
       ],
-      "consent_topology_ids": [
-        "GA4-CONSENT"
-      ]
+      "consent_policy_id": "GA4-CONSENT"
     },
     {
       "tag_object_key": "web::tag::GA4 - Event - sign_up",
-      "requirement_ids": [
-        "SIGNUP"
-      ],
       "lifecycle_role": "event-driven",
-      "consent_mode": "strict-basic",
-      "blocking_trigger_keys": [
-        "web::trigger::Block - CMP - GA4 denied"
-      ],
       "blocking_event_scope": "regex:.*",
-      "built_in_consent_checks": [
-        "analytics_storage",
-        "ad_storage",
-        "ad_user_data",
-        "ad_personalization"
-      ],
-      "additional_consent_checks": [],
-      "firing_option": "once-per-event",
-      "may_precede_cmp": true,
       "pre_cmp_policy": "drop-unconsented-occurrence",
-      "page_view_capable": false,
-      "page_view_destinations": [],
       "page_view_occurrences": [],
-      "ecommerce_route": "not-applicable",
-      "manual_ecommerce_fields": [],
       "evidence": [
         "SYNTHETIC approved policy and native container inspection"
       ],
-      "consent_topology_ids": [
-        "GA4-CONSENT"
-      ]
+      "consent_policy_id": "GA4-CONSENT"
+    }
+  ],
+  "field_bindings": [
+    {
+      "requirement_id": "LEAD",
+      "field_scope": "unresolved",
+      "destination_field": "pending",
+      "owner_object_key": "web::tag::GA4 - Event - generate_lead",
+      "shape_compatibility": null,
+      "mapping_method": null,
+      "gtm_resolution": null,
+      "template_field": null,
+      "missing_behavior": "Resolve approved destination before this consumer executes",
+      "status": "blocked"
     }
   ]
 }

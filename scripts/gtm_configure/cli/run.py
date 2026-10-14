@@ -30,6 +30,7 @@ from gtm_configure.runtime.state import (
     inspect_document,
     load_document,
     reopen_failed_operation,
+    revise_from_contract,
 )
 
 
@@ -48,7 +49,12 @@ def main() -> int:
     init_parser.add_argument("--source-locator", required=True)
     init_parser.add_argument("--timestamp")
     init_parser.add_argument("--output", type=Path, required=True)
-    init_parser.add_argument("--replace-planned", action="store_true")
+    revise_parser = subparsers.add_parser("revise")
+    revise_parser.add_argument("--run", type=Path, required=True)
+    revise_parser.add_argument("--contract", type=Path, required=True)
+    revise_parser.add_argument("--expected-fingerprint", required=True)
+    revise_parser.add_argument("--note", required=True)
+    revise_parser.add_argument("--timestamp")
     inspect_parser = subparsers.add_parser("inspect")
     inspect_parser.add_argument("--run", type=Path, required=True)
     checkpoint_parser = subparsers.add_parser("checkpoint")
@@ -88,17 +94,29 @@ def main() -> int:
                 timestamp=args.timestamp,
             )
             with run_file_lock(args.output):
-                if args.output.exists() and not args.replace_planned:
-                    raise RunValidationError("output already exists; select a new path")
-                if args.output.exists() and args.replace_planned:
-                    existing = load_document(args.output)
-                    if any(
-                        item["state"] != "planned" or item["journal"]
-                        for item in existing["object_changes"]
-                    ):
-                        raise RunValidationError("--replace-planned refuses saved run history")
+                if args.output.exists():
+                    raise RunValidationError(
+                        "output already exists; use the current run revision transition"
+                    )
                 atomic_write(args.output, document)
             _emit_json({"pass": True, "output": str(args.output.resolve())})
+        elif args.command == "revise":
+            with run_file_lock(args.run):
+                document = revise_from_contract(
+                    load_document(args.run),
+                    load_json(args.contract),
+                    expected_fingerprint=args.expected_fingerprint,
+                    note=args.note,
+                    timestamp=args.timestamp,
+                )
+                atomic_write(args.run, document)
+            _emit_json(
+                {
+                    "pass": True,
+                    "run": str(args.run.resolve()),
+                    "revision": len(document["run"]["revisions"]),
+                }
+            )
         elif args.command == "inspect":
             _emit_json(inspect_document(load_document(args.run)))
         elif args.command == "checkpoint":

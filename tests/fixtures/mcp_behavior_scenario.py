@@ -1,6 +1,5 @@
 # ruff: noqa: E402
 import copy
-import json
 import sys
 import traceback
 from pathlib import Path
@@ -55,26 +54,20 @@ def request():
         if "supports" in e:
             e["supports"] = ["REQ-LEAD"]
     c["page_view_decisions"] = []
-    top = c["execution_topologies"][0]
+    top = c["tag_policies"][0]
     top.update(
         tag_object_key=key("tag", "GA4 - generate_lead"),
-        requirement_ids=["REQ-LEAD"],
         lifecycle_role="event-driven",
-        normal_triggers=[
+        trigger_roles=[
             {
                 "trigger_object_key": key("trigger", "CE - lead_success"),
                 "role": "source-event",
-                "type": "custom-event",
             }
         ],
-        blocking_trigger_keys=[key("trigger", "CMP - Analytics denied")],
-        page_view_capable=False,
-        page_view_destinations=[],
         page_view_occurrences=[],
     )
-    consent = c["consent_topologies"][0]
+    consent = c["consent_policies"][0]
     consent.update(
-        requirement_ids=["REQ-LEAD"],
         event_coverage=["lead_success"],
         web_enforcement={"mechanism": "business-trigger-plus-vendor-block"},
     )
@@ -231,7 +224,7 @@ PROFILE = {
             "list_path": [f],
             "object_path": [],
         }
-        for f in ("tag", "trigger", "variable")
+        for f in ("tag", "trigger", "variable", "template")
     },
 }
 
@@ -253,15 +246,15 @@ def init(c, name):
 
 
 def snapshot(backend, name):
-    (OUT / (name + "-saved.json")).write_text(json.dumps(backend.data, indent=2))
+    atomic_write(OUT / (name + "-saved.json"), backend.data)
 
 
 def run():
     req = request()
-    (OUT / "request.json").write_text(json.dumps(req, indent=2))
+    atomic_write(OUT / "request.json", req)
     c = compile_request(req)
     assert len(c["implementation"]["objects"]) == 4, "Only reachable dependencies should compile"
-    (OUT / "compiled-contract.json").write_text(json.dumps(c, indent=2))
+    atomic_write(OUT / "compiled-contract.json", c)
     backend = FakeGtm(req)
     unrelated = clone(backend.data["tag"]["999"])
     reg, ad = bind(c, backend)
@@ -301,8 +294,9 @@ def run():
         print("DEFECT packaged MCP update:", failed["journal"][-1])
         from gtm_configure.runtime.verification import build_pre_write_comparison
 
-        (OUT / "update-false-drift-comparison.json").write_text(
-            json.dumps(build_pre_write_comparison(failed, ad2.read(failed))[0], indent=2)
+        atomic_write(
+            OUT / "update-false-drift-comparison.json",
+            build_pre_write_comparison(failed, ad2.read(failed))[0],
         )
         raise AssertionError("Packaged MCP update must succeed without adapter workarounds")
     verify_idempotent_rerun(p2, reg2)

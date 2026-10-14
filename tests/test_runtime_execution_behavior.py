@@ -149,10 +149,10 @@ class TestAdapters(fixture_adapters.CurrentAdapterRuntimeTestFixture):
             if item["object_key"] == block_key
         )
         contract["implementation"]["objects"].append(block_trigger)
-        direct_topology = fixture_adapters.deepcopy(web_only["consent_topologies"][0])
-        direct_topology["consent_topology_id"] = "CONSENT-DIAGNOSTICS"
+        direct_topology = fixture_adapters.deepcopy(web_only["consent_policies"][0])
+        direct_topology["consent_policy_id"] = "CONSENT-DIAGNOSTICS"
         direct_topology["destination"] = "Diagnostics"
-        contract["consent_topologies"].append(direct_topology)
+        contract["consent_policies"].append(direct_topology)
         client = contract["implementation"]["objects"][1]
         client.update(
             {
@@ -189,32 +189,20 @@ class TestAdapters(fixture_adapters.CurrentAdapterRuntimeTestFixture):
                 },
             }
         )
-        contract["execution_topologies"].append(
+        contract["tag_policies"].append(
             {
                 "tag_object_key": "web-main::tag::Independent - Diagnostics",
-                "requirement_ids": ["REQ-PAGE"],
                 "lifecycle_role": "event-driven",
-                "normal_triggers": [
+                "trigger_roles": [
                     {
                         "trigger_object_key": "web-main::trigger::CMP - Analytics granted",
                         "role": "source-event",
-                        "type": "custom-event",
                     }
                 ],
-                "consent_mode": "strict-basic",
-                "consent_topology_ids": ["CONSENT-DIAGNOSTICS"],
-                "blocking_trigger_keys": [block_key],
+                "consent_policy_id": "CONSENT-DIAGNOSTICS",
                 "blocking_event_scope": ".*",
-                "built_in_consent_checks": ["analytics_storage"],
-                "additional_consent_checks": [],
-                "firing_option": "once-per-event",
-                "may_precede_cmp": False,
                 "pre_cmp_policy": "not-applicable",
-                "page_view_capable": False,
-                "page_view_destinations": [],
                 "page_view_occurrences": [],
-                "ecommerce_route": "not-applicable",
-                "manual_ecommerce_fields": [],
                 "evidence": ["official-current", "container-confirmed"],
             }
         )
@@ -242,7 +230,6 @@ class TestAdapters(fixture_adapters.CurrentAdapterRuntimeTestFixture):
         contract = fixture_adapters.valid_pipeline_contract()
         meta_key = "server-main::tag::Meta - PageView"
         server_trigger_key = "server-main::trigger::Event Data - page_view"
-        web_transport_key = "web-main::tag::Google tag - Web transport"
         contract["implementation"]["objects"].append(
             {
                 "target_id": "server-main",
@@ -266,11 +253,10 @@ class TestAdapters(fixture_adapters.CurrentAdapterRuntimeTestFixture):
                 },
             }
         )
-        contract["consent_topologies"].append(
+        contract["consent_policies"].append(
             {
-                "consent_topology_id": "CONSENT-META",
+                "consent_policy_id": "CONSENT-META",
                 "destination": "Meta",
-                "requirement_ids": ["REQ-PAGE"],
                 "consent_mode": "product-specific",
                 "transport_behavior": "always-transported",
                 "web_enforcement": {"mechanism": "transport-trigger-only"},
@@ -282,13 +268,10 @@ class TestAdapters(fixture_adapters.CurrentAdapterRuntimeTestFixture):
                 "signal_source": "Installed Meta server template consent input",
                 "unknown_state_behavior": "explicit-policy",
                 "event_coverage": ["page_view"],
-                "intentional_double_gate": False,
                 "server_tag_keys": [meta_key],
-                "transporter_tag_keys": [web_transport_key],
-                "transporter_destination_vendor_block": False,
             }
         )
-        contract["pipelines"][0]["consent_topology_ids"].append("CONSENT-META")
+
         contract["pipelines"][0]["event_flows"][0]["server_consumer_keys"].append(meta_key)
         contract["pipelines"][0]["operation_dependencies"].append(meta_key)
         next(
@@ -866,9 +849,10 @@ class TestDurableEvidence(fixture_durable_evidence.CurrentRegressionHardeningTes
                 "resources": baseline["resources"],
                 "workspace_changes": baseline["preexisting_workspace_changes"],
                 "capture_evidence": baseline["capture_evidence"],
+                "supplemental_captures": baseline["supplemental_captures"],
             }
         )
-        self.assertEqual(fixture_durable_evidence.validate_run(run)["schema_version"], "8.0")
+        self.assertEqual(fixture_durable_evidence.validate_run(run)["schema_version"], "9.0")
 
     def test_action_semantics_fail_closed_for_every_high_risk_shape(self) -> None:
         cases = []
@@ -884,7 +868,7 @@ class TestDurableEvidence(fixture_durable_evidence.CurrentRegressionHardeningTes
             }
         )
         action.pop("intended")
-        remove["execution_topologies"] = []
+        remove["tag_policies"] = []
         remove["page_view_decisions"] = []
         action.pop("approval")
         cases.append((remove, "approval"))

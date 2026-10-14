@@ -69,9 +69,9 @@ def shared_contract(*, authorized):
     if not authorized:
         tag.update(name="Unapproved Google tag", object_key="web-main::tag::Unapproved Google tag")
         objects.append(tag)
-        topology = deepcopy(contract["execution_topologies"][0])
+        topology = deepcopy(contract["tag_policies"][0])
         topology["tag_object_key"] = tag["object_key"]
-        contract["execution_topologies"].append(topology)
+        contract["tag_policies"].append(topology)
     tag["intended"]["type"] = "googtag"
     tag["intended"]["parameter"] = [
         {"type": "template", "key": "tagId", "value": "AW-123456789"},
@@ -82,7 +82,6 @@ def shared_contract(*, authorized):
         route = contract["first_party_data_routes"][0]
         route.update(feature="google-ads-tag-wide-user-data", timing="tag-wide")
         binding = route["consumer_bindings"][0]
-        binding["tag_type"] = "googtag"
         for field in ("user_data_path", "activation_paths", "field_review"):
             binding.pop(field)
     return approve_mutations(contract)
@@ -262,7 +261,7 @@ class NativeScopeExecutionTests(unittest.TestCase):
         for item in objects:
             if item["resource_family"] != "tag":
                 item["requirement_ids"].append("REQ-SECOND")
-        for item in contract["external_dependencies"] + contract["consent_topologies"]:
+        for item in contract["external_dependencies"]:
             item["requirement_ids"].append("REQ-SECOND")
         variable = deepcopy(objects[3])
         variable.update(
@@ -277,14 +276,18 @@ class NativeScopeExecutionTests(unittest.TestCase):
             object_key="web-main::tag::Second conversion",
             requirement_ids=["REQ-SECOND"],
         )
-        tag["intended"]["parameter"][2]["value"] = "{{Second UPD}}"
+        tag["intended"]["parameter"][2]["list"][0]["map"][1]["value"] = "{{Second UPD}}"
         tag["depends_on"].append(variable["object_key"])
         objects.append(tag)
-        topology = deepcopy(contract["execution_topologies"][0])
-        topology.update(tag_object_key=tag["object_key"], requirement_ids=["REQ-SECOND"])
-        contract["execution_topologies"].append(topology)
+        topology = deepcopy(contract["tag_policies"][0])
+        topology.update(tag_object_key=tag["object_key"])
+        contract["tag_policies"].append(topology)
         mapping = deepcopy(contract["implementation"]["field_bindings"][0])
-        mapping.update(requirement_id="REQ-SECOND", gtm_resolution="{{Second UPD}}")
+        mapping.update(
+            requirement_id="REQ-SECOND",
+            gtm_resolution="{{Second UPD}}",
+            owner_object_key=tag["object_key"],
+        )
         contract["implementation"]["field_bindings"].append(mapping)
         route = deepcopy(contract["first_party_data_routes"][0])
         route.update(requirement_id="REQ-SECOND", consumer_object_keys=[tag["object_key"]])
@@ -312,17 +315,9 @@ class NativeScopeExecutionTests(unittest.TestCase):
         sender = next(
             item for item in contract["implementation"]["objects"] if item["object_key"] == key
         )
-        value = sender["intended"].pop("user_data")
-        sender["intended"].setdefault("parameter", []).append(
-            table("eventSettingsTable", value=value)
+        self.assertEqual(
+            local_fields(sender["intended"])["userdata"], "{{UPD - Approved purchase}}"
         )
-        for key, native_key in (
-            ("measurement_id", "measurementIdOverride"),
-            ("event_name", "eventName"),
-        ):
-            sender["intended"]["parameter"].append(
-                {"type": "template", "key": native_key, "value": sender["intended"].pop(key)}
-            )
         result, _ = self.execute(approve_mutations(contract))
         self.assertEqual(result["run"]["status"], "Configured")
 

@@ -92,7 +92,7 @@ def test_requirement_unknown_keys_rejected(field):
     "definition",
     [
         "collectionField",
-        "executionTopology",
+        "tagPolicy",
         "pageViewDecision",
         "firstPartyRoute",
         "firstPartyConsumer",
@@ -110,12 +110,10 @@ def test_shared_records_reject_unknown_keys(definition):
 
 def test_product_specific_consent_reaches_run_validation():
     contract = valid_web_contract()
-    contract["consent_topologies"][0]["consent_mode"] = "product-specific"
-    contract["execution_topologies"][0]["consent_mode"] = "product-specific"
-    topology = contract["execution_topologies"][0]
-    topology["blocking_trigger_keys"] = []
+    contract["consent_policies"][0]["consent_mode"] = "product-specific"
+    topology = contract["tag_policies"][0]
     topology["blocking_event_scope"] = None
-    contract["consent_topologies"][0]["web_enforcement"] = {"mechanism": "product-native"}
+    contract["consent_policies"][0]["web_enforcement"] = {"mechanism": "product-native"}
     for operation in contract["implementation"]["objects"]:
         if operation["object_key"] == topology["tag_object_key"]:
             operation["intended"]["blockingTriggerId"] = []

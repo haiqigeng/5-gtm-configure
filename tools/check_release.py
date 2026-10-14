@@ -104,16 +104,38 @@ def check_versions_and_schemas():
         v.check_schema(v.schema)
         if v.schema["properties"]["schema_version"]["const"] != version:
             errors.append(f"wrong {kind} schema version")
+        errors.extend(
+            schema_version_claim_errors(v.schema.get("title", ""), versions, f"{kind} schema title")
+        )
+    for path in [ROOT / "SKILL.md", *sorted((ROOT / "references").rglob("*.md"))]:
+        errors.extend(
+            schema_version_claim_errors(
+                path.read_text(encoding="utf-8"), versions, str(path.relative_to(ROOT))
+            )
+        )
     for path in (ROOT / "scripts").rglob("*.py"):
         tree = ast.parse(path.read_text(encoding="utf-8"))
         for node in ast.walk(tree):
             if isinstance(node, (ast.Module, ast.FunctionDef, ast.ClassDef)):
-                for kind, version in re.findall(
-                    r"(?:configuration-)?(contract|run)@(\d+\.\d+)", ast.get_docstring(node) or ""
-                ):
-                    if versions[kind] != version:
-                        errors.append(f"{path.relative_to(ROOT)}: stale {kind}@{version} docstring")
+                errors.extend(
+                    schema_version_claim_errors(
+                        ast.get_docstring(node) or "",
+                        versions,
+                        f"{path.relative_to(ROOT)} docstring",
+                    )
+                )
     return errors
+
+
+def schema_version_claim_errors(source, versions, locator):
+    """Current executable/instruction claims refer to their schema owner's version."""
+    return [
+        f"{locator}: stale {kind}@{version}; current schema is {versions[kind]}"
+        for kind, version in re.findall(
+            r"(?:configuration-)?(contract|run)@(\d+(?:\.\d+)+)", source
+        )
+        if versions[kind] != version
+    ]
 
 
 def check_runtime_package():

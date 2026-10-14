@@ -224,7 +224,7 @@ class ReleaseFieldGatesTest(ReleaseFieldGatesTestFixture):
         )
         tag["evidence"].append("container-confirmed")
         tag["intended"]["paused"] = False
-        contract["execution_topologies"] = []
+        contract["tag_policies"] = []
         contract["page_view_decisions"] = []
         approve_mutations(contract)
         with self.assertRaisesRegex(ContractValidationError, "intended.paused must be true"):
@@ -467,7 +467,7 @@ class ReleaseFieldGatesTest(ReleaseFieldGatesTestFixture):
     def test_pipeline_endpoint_and_consent_carrier_are_bound_to_transport_owner(self) -> None:
         contract = valid_pipeline_contract()
         contract["pipelines"][0]["endpoint_reference"] = "https://wrong.example.test"
-        with self.assertRaisesRegex(ContractValidationError, "differs from its transport owner"):
+        with self.assertRaisesRegex(ContractValidationError, "endpoint_reference.*unexpected"):
             validate_document(contract)
 
     def test_pipeline_requires_transport_owner_cutover_and_receiver_dependencies(self) -> None:
@@ -487,16 +487,14 @@ class ReleaseFieldGatesTest(ReleaseFieldGatesTestFixture):
             "blockingTriggerId": [],
         }
         contract["implementation"]["objects"].append(wrong)
-        topology = deepcopy(contract["execution_topologies"][0])
+        topology = deepcopy(contract["tag_policies"][0])
         topology.update(
             tag_object_key=wrong_key,
             lifecycle_role="event-driven",
-            page_view_capable=False,
-            page_view_destinations=[],
             page_view_occurrences=[],
         )
-        contract["execution_topologies"].append(topology)
-        contract["consent_topologies"][0]["transporter_tag_keys"] = [wrong_key]
+        contract["tag_policies"].append(topology)
+
         approve_mutations(contract)
         with self.assertRaisesRegex(
             ContractValidationError, "does not inherit the proved endpoint"
@@ -611,18 +609,11 @@ class ReleaseFieldGatesTest(ReleaseFieldGatesTestFixture):
         )
         contract["inventory_dispositions"] = [
             {
+                "target_id": "web-main",
                 "row_id": "INV-ADDED-GOOGLE-TAG",
                 "source_order": 0,
                 "source_locator": "approved empty-container inventory",
-                "before_object_key": None,
-                "before_tag_name": None,
                 "disposition": "added",
-                "after_tag_name": tag["name"],
-                "trigger_before": [],
-                "trigger_after": ["CMP - Analytics granted"],
-                "variable_changes": [],
-                "parameter_changes": [],
-                "consent_changes": ["strict-basic vendor blocking"],
                 "rationale": "The approved empty baseline requires the new Google tag.",
                 "operation_keys": [tag["object_key"]],
             }

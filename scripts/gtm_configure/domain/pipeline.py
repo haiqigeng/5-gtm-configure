@@ -17,18 +17,14 @@ from gtm_configure.domain.deduplication import (
 from gtm_configure.domain.events import approved_event_name
 from gtm_configure.domain.graph import active_tag, reference_name
 from gtm_configure.domain.pipeline_declarations import (
-    validate_consent_topologies,
+    consent_transporters,
+    validate_consent_policies,
     validate_dedup_contracts,
     validate_field_flow,
 )
-from gtm_configure.domain.web_model import GOOGLE_CONFIGURATION_TAG_TYPES
 from gtm_configure.domain.web_native import (
     configured_destinations,
     configured_transport_endpoint,
-    normalize_transport_endpoint,
-    resolve_constant_reference,
-    send_page_view_value,
-    tag_type,
 )
 
 
@@ -62,8 +58,8 @@ def validate_pipeline(
     objects = graph.by_key
     targets = {key: {"container_type": value} for key, value in target_types.items()}
     try:
-        consent_by_id = validate_consent_topologies(
-            graph.consent_topologies, requirement_ids, objects, targets, mode
+        consent_by_id = validate_consent_policies(
+            graph.consent_policies, requirement_ids, objects, targets, mode, graph.tag_policies
         )
         dedup_by_id = validate_dedup_contracts(graph.dedup_contracts, requirement_ids)
     except ValueError as exc:
@@ -133,6 +129,7 @@ def validate_pipeline(
         topology_ids, pipeline_consumer_ids = _validate_pipeline_consent(
             by_object_key=by_object_key,
             by_operation=by_operation,
+            tag_policies=graph.tag_policies,
             consent_by_id=consent_by_id,
             event_flows=event_flows,
             fail=fail,
@@ -198,7 +195,7 @@ def validate_pipeline(
     validate_generated_event_ids(
         graph.dedup_contracts,
         list(by_object_key.values()),
-        graph.execution_topologies,
+        graph.tag_policies,
         target_types,
         fail,
         graph.container_baselines,
@@ -232,74 +229,20 @@ def _validate_transport_owner(*, by_object_key, fail, path, pipeline, senders):
         or transport_operation.get("target_id") not in senders
     ):
         fail(f"{path}.transport_owner must reference a sender web tag")
-    endpoint_reference = pipeline.get("endpoint_reference")
-    if not isinstance(endpoint_reference, str) or not endpoint_reference.strip():
-        fail(f"{path}.endpoint_reference must be a non-empty string")
-        resolved_endpoint = None
-    else:
-        try:
-            resolved_endpoint = normalize_transport_endpoint(
-                resolve_constant_reference(
-                    endpoint_reference, by_object_key, f"{path}.endpoint_reference"
-                ),
-                f"{path}.endpoint_reference",
-            )
-        except ValueError as exc:
-            fail(str(exc))
-            resolved_endpoint = None
-    if transport_operation is not None:
-        try:
-            owner_endpoint = configured_transport_endpoint(
-                transport_operation, by_object_key, f"{path}.transport_owner"
-            )
-            owner_destinations = configured_destinations(
-                transport_operation.get("intended", {}),
-                by_object_key,
-                f"{path}.transport_owner",
-            )
-        except ValueError as exc:
-            fail(str(exc))
-            owner_endpoint = None
-            owner_destinations = set()
-        if owner_endpoint != resolved_endpoint:
-            fail(f"{path}.endpoint_reference differs from its transport owner")
-    else:
-        owner_destinations = set()
-    page_view = pipeline.get("page_view_ownership")
-    if not isinstance(page_view, dict) or not page_view.get("owner"):
-        fail(f"{path}.page_view_ownership must name the owner")
-    else:
-        if page_view.get("occurrence") != "initial-page-load":
-            fail(f"{path}.page_view_ownership.occurrence must be 'initial-page-load'")
-        owner_operation = by_object_key.get(page_view["owner"])
-        if (
-            owner_operation is None
-            or owner_operation.get("resource_family") != "tag"
-            or owner_operation.get("target_id") not in senders
-        ):
-            fail(f"{path}.page_view_ownership.owner must reference a sender web tag")
-        else:
-            intended = owner_operation.get("intended")
-            if not isinstance(intended, dict):
-                fail(f"{path}.page_view_ownership owner lacks intended state")
-            else:
-                owner_type = tag_type(intended, path)
-                if owner_type in GOOGLE_CONFIGURATION_TAG_TYPES:
-                    if page_view.get("send_page_view") not in {True, False}:
-                        fail(
-                            f"{path}.page_view_ownership.send_page_view must be boolean "
-                            "for a Google tag"
-                        )
-                    elif (
-                        send_page_view_value(intended, path, by_object_key)
-                        != page_view["send_page_view"]
-                    ):
-                        fail(f"{path}.page_view_ownership differs from its bound Google tag")
-                elif page_view.get("send_page_view") is not None:
-                    fail(
-                        f"{path}.page_view_ownership.send_page_view must be null for a "
-                        "non-Google sender"
-                    )
+    if transport_operation is None:
+        return transport_owner, None, None, set()
+    try:
+        resolved_endpoint = configured_transport_endpoint(
+            transport_operation, by_object_key, f"{path}.transport_owner"
+        )
+        if not resolved_endpoint:
+            fail(f"{path}.transport_owner requires a resolved native transport endpoint")
+        owner_destinations = configured_destinations(
+            transport_operation.get("intended", {}), by_object_key, f"{path}.transport_owner"
+        )
+    except ValueError as exc:
+        fail(str(exc))
+        resolved_endpoint, owner_destinations = None, set()
     return transport_owner, transport_operation, resolved_endpoint, owner_destinations
 
 
@@ -426,6 +369,7 @@ def _validate_pipeline_consent(
     by_object_key,
     by_operation,
     consent_by_id,
+    tag_policies,
     event_flows,
     fail,
     field_flows,
@@ -436,10 +380,6 @@ def _validate_pipeline_consent(
     senders,
     transport_owner,
 ):
-    topology_ids = pipeline.get("consent_topology_ids")
-    if not isinstance(topology_ids, list) or not topology_ids:
-        fail(f"{path}.consent_topology_ids must be a non-empty array")
-        topology_ids = []
     pipeline_consumer_ids = {
         consumer_id
         for flow in event_flows
@@ -450,13 +390,20 @@ def _validate_pipeline_consent(
         for operation_id in pipeline_consumer_ids
         if operation_id in by_operation
     }
+    topology_ids = [
+        key
+        for key, policy in consent_by_id.items()
+        if pipeline_consumer_keys & set(policy["server_tag_keys"])
+    ]
     topology_consumer_keys: set[str] = set()
     for topology_id in topology_ids:
         topology = consent_by_id.get(topology_id)
         if topology is None:
             fail(f"{path} references unknown consent topology {topology_id!r}")
             continue
-        transporter_keys = set(topology.get("transporter_tag_keys", []))
+        transporter_keys = consent_transporters(topology, tag_policies, "pipeline") | {
+            transport_owner
+        }
         if not transporter_keys:
             fail(f"{path} consent topology {topology_id!r} does not bind its transporter")
         if any(
@@ -490,7 +437,7 @@ def _validate_pipeline_consent(
                     f"{path} consent topology {topology_id!r} transporter {key!r} "
                     "does not inherit the proved endpoint"
                 )
-        server_keys = set(topology.get("server_tag_keys", []))
+        server_keys = set(topology["server_tag_keys"]) & pipeline_consumer_keys
         topology_consumer_keys.update(server_keys)
         if not server_keys <= pipeline_consumer_keys:
             fail(f"{path} consent topology {topology_id!r} binds a tag outside its flows")
@@ -517,8 +464,6 @@ def _validate_pipeline_consent(
             for flow in topology_flows
             if flow.get("transported_event")
         }
-        if not topology_requirements <= set(topology.get("requirement_ids", [])):
-            fail(f"{path} consent topology {topology_id!r} misses destination requirements")
         missing = sorted(topology_events - set(topology.get("event_coverage", [])))
         if missing:
             fail(

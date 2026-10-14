@@ -18,6 +18,20 @@ def blocked_contract():
         "destination_pending": deepcopy(requirement["configuration_fields"]["user_id"])
     }
     requirement["unresolved_fields"]["destination_pending"]["destination"] = "other"
+    contract["implementation"]["field_bindings"].append(
+        {
+            "requirement_id": requirement["id"],
+            "field_scope": "unresolved",
+            "destination_field": "destination_pending",
+            "owner_object_key": contract["implementation"]["objects"][0]["object_key"],
+            "shape_compatibility": None,
+            "mapping_method": None,
+            "gtm_resolution": None,
+            "template_field": None,
+            "missing_behavior": "Resolve approved destination",
+            "status": "blocked",
+        }
+    )
     return contract
 
 
@@ -116,13 +130,15 @@ def shared_google_graph(*, owner=None, state="planned"):
         "destination_field": "pending",
         "status": "blocked",
     }
-    if owner:
-        mapping["native_binding"] = {"object_key": owner, "field": "pending"}
+    mapping["owner_object_key"] = owner or "A"
     return {
         "object_changes": operations,
         "payload_mappings": [mapping],
         "pipelines": [],
-        "container_baselines": [{"target_id": "web", "complete": True}],
+        "run": {"targets": [{"target_id": "web", "container_type": "web"}]},
+        "container_baselines": [
+            {"target_id": "web", "complete": True, "resource_families": ["tag", "variable"]}
+        ],
     }
 
 
@@ -159,7 +175,12 @@ def test_pipeline_field_blockers_follow_requirement_consumers():
     graph["pipelines"] = [
         {
             "field_flows": [
-                {"requirement_ids": ["A"], "destination_field": "lead_type", "status": "blocked"}
+                {
+                    "requirement_ids": ["A"],
+                    "destination_field": "lead_type",
+                    "status": "blocked",
+                    "receiver_owner": "A",
+                }
             ]
         }
     ]
@@ -169,17 +190,19 @@ def test_pipeline_field_blockers_follow_requirement_consumers():
 
 
 @pytest.mark.parametrize("tag_type", ["googtag", "gaawc"])
-def test_native_configuration_namespace_owns_unbound_fields(tag_type):
+def test_explicit_owner_controls_configuration_and_event_namespace(tag_type):
     graph = shared_google_graph()
     graph["object_changes"][1]["intended"]["type"] = tag_type
     for operation in graph["object_changes"][2:]:
         operation["intended"]["type"] = "gaawe"
     graph["payload_mappings"][0]["field_scope"] = "configuration"
+    graph["payload_mappings"][0]["owner_object_key"] = "GOOGLE"
     result = operation_readiness(graph)
     assert result["GOOGLE"]["blocked"]
     assert any("GOOGLE:" in reason for reason in result["B"]["blocked"])
     assert not result["B"]["waiting"]
     graph["payload_mappings"][0]["field_scope"] = "event-parameter"
+    graph["payload_mappings"][0]["owner_object_key"] = "A"
     result = operation_readiness(graph)
     assert not result["GOOGLE"]["blocked"]
     assert not result["B"]["blocked"]

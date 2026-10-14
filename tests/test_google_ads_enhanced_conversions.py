@@ -41,18 +41,20 @@ class EnhancedConversionsTests(EnhancedConversionsTestsFixture):
         contract["implementation"]["objects"].append(removed)
         validate_document(approve_mutations(contract))
 
-    def test_saved_disabled_control_cannot_report_configured(self):
-        class DisabledControlAdapter(FakeAdapter):
+    def test_saved_user_data_drift_cannot_report_configured(self):
+        class UserDataDriftAdapter(FakeAdapter):
             def mutate(self, operation):
                 result = super().mutate(operation)
                 if operation["resource_family"] == "tag":
-                    self.saved[operation["name"]]["parameter"][-1]["value"] = "false"
+                    self.saved[operation["name"]]["parameter"][2]["list"][0]["map"][1]["value"] = (
+                        "{{Wrong source}}"
+                    )
                 return result
 
         run = create_from_contract(
             event_override_contract(), run_id="ads-drift", source_locator="synthetic"
         )
-        adapter = DisabledControlAdapter()
+        adapter = UserDataDriftAdapter()
         adapter.bind_target(run["run"]["targets"][0])
         registry = TargetAdapterRegistry()
         registry.register(
@@ -102,8 +104,8 @@ class EnhancedConversionsTests(EnhancedConversionsTestsFixture):
         for field, value, message in [
             ("field_review", "", "field_review"),
             ("user_data_path", ["notes"], "user_data_path"),
-            ("user_data_path", ["parameter", "absent", "value"], "resolve uniquely"),
-            ("user_data_path", ["parameter", "conversionLabel", "value"], "binding differs"),
+            ("user_data_path", ["parameter", "absent", "value"], "user_data_path"),
+            ("user_data_path", ["parameter", "conversionLabel", "value"], "user_data_path"),
             ("activation_paths", [["parameter", "missingFlag", "value"]], "resolve uniquely"),
         ]:
             with self.subTest(field=field, value=value):
@@ -112,7 +114,7 @@ class EnhancedConversionsTests(EnhancedConversionsTestsFixture):
                 with self.assertRaisesRegex(ContractValidationError, message):
                     validate_document(contract)
 
-    def test_disabled_required_control_and_duplicate_parameter_rejected(self):
+    def test_wrong_event_field_and_duplicate_parameter_rejected(self):
         for duplicate in (False, True):
             contract = event_override_contract()
             parameters = contract["implementation"]["objects"][0]["intended"]["parameter"]
@@ -120,20 +122,16 @@ class EnhancedConversionsTests(EnhancedConversionsTestsFixture):
                 parameters.append(deepcopy(parameters[2]))
                 message = "resolve uniquely"
             else:
-                parameters[-1]["value"] = "false"
-                message = "control is not enabled"
+                parameters[2]["list"][0]["map"][0]["value"] = "unrelated_field"
+                message = "native event field must be user_data"
             approve_mutations(contract)
             with self.assertRaisesRegex(ContractValidationError, message):
                 validate_document(contract)
 
     def test_inspected_surface_without_boolean_control_does_not_invent_one(self):
         contract = event_override_contract()
-        contract["implementation"]["objects"][0]["intended"]["parameter"].pop()
         binding = contract["first_party_data_routes"][0]["consumer_bindings"][0]
-        binding.update(
-            activation_paths=[],
-            field_review="Synthetic inspected native event field without a separate boolean control",
-        )
+        self.assertEqual(binding["activation_paths"], [])
         validate_document(approve_mutations(contract))
 
     def test_wrong_product_scope_source_or_consent_rejected(self):
@@ -155,7 +153,6 @@ class EnhancedConversionsTests(EnhancedConversionsTestsFixture):
                         contract["implementation"]["objects"][0]["intended"].update(
                             event_name="purchase", measurement_id="G-TEST123"
                         )
-                    route["consumer_bindings"][0]["tag_type"] = tag_type
                 elif alteration == "custom-source":
                     contract["implementation"]["objects"][3]["intended"]["type"] = "jsm"
                 elif alteration == "consent":
@@ -174,9 +171,9 @@ class EnhancedConversionsTests(EnhancedConversionsTestsFixture):
         extra.update(name="Unrelated conversion", object_key="web-main::tag::Unrelated conversion")
         extra["intended"]["parameter"][2]["key"] = "anotherNativeField"
         contract["implementation"]["objects"].append(extra)
-        topology = deepcopy(contract["execution_topologies"][0])
+        topology = deepcopy(contract["tag_policies"][0])
         topology["tag_object_key"] = extra["object_key"]
-        contract["execution_topologies"].append(topology)
+        contract["tag_policies"].append(topology)
         approve_mutations(contract)
         with self.assertRaisesRegex(ContractValidationError, "without an authorized first-party"):
             validate_document(contract)

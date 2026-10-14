@@ -7,9 +7,9 @@ Before mutation, represent the approved change as one requirement-to-object cont
 [evidence policy](evidence.md) for current technical support. This file owns declaration meaning
 and preparation; schemas own structural keys and types.
 
-## Use configuration-contract 10.0
+## Use configuration-contract 11.0
 
-Use `"schema_version": "10.0"` and
+Use `"schema_version": "11.0"` and
 [the contract schema](../../schemas/configuration-contract.schema.json). Preparation and execution
 consume this current model through the same domain validators.
 
@@ -23,10 +23,10 @@ consume this current model through the same domain validators.
 | `implementation.execution_mode` | `isolated-durable`, or `refonte-durable` |
 | `implementation.objects` | Exact target-scoped GTM actions, intended state, and dependencies |
 | `implementation.field_bindings` | Resolution for every outgoing field in its approved namespace; readiness blocks dependent operations while fields are pending or blocked |
-| `pipelines` | Sender/receiver graph, request/Client, page-view, event/field flow, and cutover |
-| `consent_topologies` | Per-destination web, transport, server mechanism, signal, and event coverage |
-| `execution_topologies` | One bound firing/blocking/consent/lifecycle decision per executing web tag |
-| `page_view_decisions` | One effective owner per web destination and occurrence role, with an applicable `send_page_view` decision |
+| `pipelines` | Sender/receiver graph, request/Client, event/field flow, and cutover |
+| `consent_policies` | Per-destination web, transport, server mechanism, signal, and event coverage |
+| `tag_policies` | One lifecycle, trigger-role, shared-consent selector and pre-CMP policy per executing web tag |
+| `page_view_decisions` | One effective owner per web destination and occurrence role; native Google settings determine automatic emission |
 | `first_party_data_routes` | Approved user-data/User-ID feature, source, timing, hashing, consent, and consumers; native Ads event overrides also bind inspected parameter/control paths as described in the [Ads procedure](../vendors/google-ads/web.md#configure-enhanced-conversions-only-explicitly) |
 | `inventory_dispositions` | Ordered one-row-per-tag refonte disposition linked to exact object actions |
 | `dedup_contracts` | Only overlapping delivery, with one occurrence identity and exact product fields |
@@ -72,7 +72,7 @@ Collection changes use their corresponding route and technical evidence.
 ## Map target-scoped object actions
 
 Represent each semantic object once as `<target-id>::<resource-family>::<semantic-name>`. Record its
-action, existing stable ID where applicable, full intended state, dependencies, requirements,
+action, existing stable ID where applicable, full intended state, dependencies, authorizing requirements,
 justification, evidence and risk. Resource subtypes remain in the native fields.
 
 | Action information | Declaration |
@@ -83,6 +83,10 @@ justification, evidence and risk. Resource subtypes remain in the native fields.
 | Replace | Same-identity governed replacement plus reason and authority. |
 | Template mutation | Reviewed permission delta. |
 | Any mutation | Approval record bound to source locator, action, object key, requirements and exact mutation payload hash. |
+
+`requirement_ids` is the operation's explicit authorization scope. The compiler preserves it on
+selected objects and reuse candidates. The graph derives the requirements served through dependency
+closure separately for readiness and handoff; that derived demand supplies no mutation authority.
 
 Use the schema's action/resource vocabulary. A complete snapshot supports comparison even when the
 adapter accepts patches. Google settings-variable changes include consumers of both old and new
@@ -96,12 +100,12 @@ convergence proves completed intentions need no further mutations.
 
 ## Map pipeline flow
 
-Declare sender target(s), receiving target, request class, transport owner, endpoint and intended
-claiming Client with criteria. Bind initial-page-load transport and effective `send_page_view`;
-`page_view_decisions` distinguishes occurrence roles.
-
-Every emitting tag either owns the saved endpoint directly or inherits it through the same bound
-destination identity. Link actual emitters in the consent topology. Event flows bind approved
+Declare sender target(s), receiving target, request class, transport owner and intended claiming
+Client with criteria. The native transport owner and its effective shared settings provide the
+endpoint. `page_view_decisions` owns the destination/occurrence choice, while the effective native
+`send_page_view` value establishes automatic emission. Each additional emitter owns that endpoint
+or inherits it through the same bound destination identity. Server consent bindings and web tag
+policy selectors determine consent membership across the connected graph. Event flows bind approved
 requirement/source events to transported events and receiver tags. Field-flow identities are
 `(requirement_id, field_scope, destination_field)` and cover each mapped field exactly once:
 
@@ -114,12 +118,12 @@ and cutover dependencies. The contract records the mechanism; feature guides own
 
 ## Map consent and deduplication
 
-Populate consent/execution topology fields from the selected [web consent](../consent/web.md),
+Populate shared consent policies and tag policy choices from the selected [web consent](../consent/web.md),
 [server consent](../consent/server.md) and applicable lifecycle/product guides. Record the exact
 mechanism, signal authority, unknown/denied behavior, transport behavior, event coverage and native
 owner bindings. Built-in template behavior remains distinct from custom enforcement.
 
-An approved ungated web policy is represented by `client-policy-ungated` in consent and execution,
+An approved ungated web policy is represented by `client-policy-ungated` in the shared consent policy,
 `signal_authority: none`, `unknown_state_behavior: explicit-policy`, `transport_behavior:
 always-transported`, server mechanism `none`, and empty server/transporter bindings. Its declaration is:
 
@@ -141,7 +145,7 @@ Run `scripts/configure_gtm.py validate-contract` before mutation. For analytics,
 `scripts/configure_gtm.py conformance` to check requirement IDs, events, timing/filters, outgoing
 fields and approved source/literal equality. Review current source evidence as well as validator output.
 
-The contract materializes its active sections into run 8.0. Resolve implementation decisions in the
+The contract materializes its active sections into run 9.0. Resolve implementation decisions in the
 contract; [execution](execution.md#materialize-deterministically) owns durable state and fingerprints.
 Each `implementation.field_bindings` row records identity, status, shape compatibility, method,
 GTM resolution, template field and missing behavior. The approved requirement supplies source,
@@ -149,16 +153,14 @@ provenance and shapes; the binding records implementation of those facts.
 
 ### Native mapping proof
 
-Deterministic proof covers explicit scalar GA4 Event (`gaawe`) event parameters and Google tag
-(`googtag`, `gaawc`) configuration settings, excluding `native-template` mappings. Supply:
+Every mapped, pending or blocked outgoing field has one `owner_object_key` in its field binding.
+This semantic owner is explicit even when its destination surface is unresolved. It identifies an
+active native consumer or shared Google settings variable authorized for the requirement. The
+approved `destination_field` remains the exact native field identity, including case and punctuation.
 
-```json
-{"object_key":"target::tag::name","field":"lead_type"}
-```
-
-as `native_binding`. The owner is an active tag for the requirement and supported namespace; `field`
-matches the approved destination exactly, including case and punctuation. Provided bindings undergo
-ownership validation at every status before mapped-value proof.
+Deterministic scalar proof covers supported GA4 Event event fields, Google configuration fields and
+shared Event/Configuration Settings variables, excluding `native-template` mapping methods.
+Ownership is validated at every status; native value/source proof applies to supported mapped fields.
 
 Configuration bindings resolve local/shared configuration tables. Event bindings resolve native
 `eventSettingsTable` LIST rows with `parameter`/`parameterValue` MAP cells, including shared
@@ -171,8 +173,8 @@ Use an actual scalar/reference as `gtm_resolution`.
 
 User/item scopes, other templates, automatic `native-template` fields and whole ecommerce payloads
 use **agent-reviewed mapping declarations**. Inspect exact destination namespace, source routing
-and native product/template structure and record the rationale. A supplied binding establishes its
-owner/name, while field-equality/source proof remains limited to the supported native scope above.
+and native product/template structure and record the rationale. The field binding establishes its
+owner, while field-equality/source proof remains limited to the supported native scope above.
 The rendered handoff preserves that distinction.
 
 Automatic values and ecommerce passthrough use their inspected native mechanism. For example,
@@ -184,14 +186,17 @@ statuses with evidence. Pending/blocked fields hold their owners through
 ## Compact input
 
 Use `scripts/configure_gtm.py prepare` before `run init`. Supply `mode`, `route`, targets, approved
-requirements, evidence and objects, plus the applicable pipeline, consent/execution, page-view,
+requirements, evidence and objects, plus the applicable pipeline, shared consent/tag policy, page-view,
 first-party-data, inventory, deduplication and field-binding declarations.
 
 Supply each object's scope justification. The compiler derives object keys, binds approval hashes to existing
 requirement authority and fills target/requirement IDs only when unambiguous. It resolves native
 references into dependency keys and materializes explicit `reuse_candidates`. With `--inventory`,
 `reuse_keys` select exact inspected inventory definitions. Supplied intentions and semantic decisions
-remain explicit; redacted values carry presence evidence rather than credentials.
+remain explicit; redacted values carry presence evidence rather than credentials. Repeated compatible
+GA4 event fields use one native Event Settings variable, qualified by approved field sources/shapes,
+lifecycle, destination and consent policy. Different local values remain event overrides. Preparation
+resolves the actual native storage owner of inherited fields and recomputes approvals for the result.
 
 ```powershell
 python "<skill-dir>/scripts/configure_gtm.py" prepare request.json -o contract.json
@@ -203,5 +208,5 @@ against the approved scope and execute through the same runtime.
 
 Mechanical inference covers a sole native `{{_event}} equals X` matching the approved source event,
 and direct scalar bindings through one explicit untransformed V2 DLV with compatible shapes and
-explicit missing behavior. Ambiguous source, consent, lifecycle, destination and cross-target
+explicit missing behavior. Ambiguous source, consent, lifecycle, page-view occurrence and cross-target
 choices require declarations. A new settings variable is assessed by its action and consumer impact.

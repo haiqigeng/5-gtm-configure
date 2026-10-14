@@ -1,0 +1,16 @@
+{
+  "purpose": "Saved native field shape used by the sanitized enhanced-conversions fixture",
+  "observed_at": "2026-10-14T15:51:19Z",
+  "product": "Google Ads Conversion Tracking",
+  "native_type": "awct",
+  "source_kind": "read-only authenticated GTM saved tag",
+  "source_locator": "outputs/configure-gtm-field-readiness-2026-10-14/ads-readback-1551Z.json",
+  "saved_fingerprint": "1791992851246",
+  "field": "parameter.eventSettingsTable.list[0].map.parameterValue.value",
+  "semantic_name_cell": "parameter.eventSettingsTable.list[0].map.parameter.value=user_data",
+  "required_boolean_controls_observed": [],
+  "official_source": "https://support.google.com/google-ads/answer/13262500?hl=en",
+  "official_directive": "Event-specific user_data within GTM event tags overrides tag-wide user-provided data",
+  "fixture_values": "Synthetic IDs, names and sources; authentic retained table structure",
+  "proof_boundary": "Saved configuration only; execution, hashing, consent requests, acceptance and matching were not tested"
+}

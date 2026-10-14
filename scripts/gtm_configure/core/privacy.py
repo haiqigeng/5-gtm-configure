@@ -14,6 +14,15 @@ from threading import Lock
 from typing import Any, Protocol
 from urllib.parse import parse_qsl, urlsplit
 
+from gtm_configure.core.json_io import loads_strict
+from gtm_configure.core.template_source import (
+    inspect_template_source,
+    template_sections,
+    template_source_integrity,
+    valid_source_inspection,
+    valid_source_integrity,
+)
+
 REDACTED_STATE = "present-not-compared"
 _SECRET_KEY = re.compile(
     r"(?:^|_)(?:token|tokens|api_?key|api_?secret|authorization|auth_?header|"
@@ -200,7 +209,8 @@ def redacted_marker(
 def is_redacted(value: Any) -> bool:
     return (
         isinstance(value, dict)
-        and set(value) <= {"secret_state", "reference", "redaction"}
+        and set(value)
+        <= {"secret_state", "reference", "redaction", "source_integrity", "source_inspection"}
         and value.get("secret_state") == REDACTED_STATE
         and (
             "reference" not in value
@@ -208,6 +218,12 @@ def is_redacted(value: Any) -> bool:
             and bool(_SECRET_REFERENCE.fullmatch(value["reference"].strip()))
         )
         and ("redaction" not in value or _valid_evidence(value["redaction"]))
+        and ("source_integrity" not in value or valid_source_integrity(value["source_integrity"]))
+        and (
+            "source_inspection" not in value
+            or "source_integrity" in value
+            and valid_source_inspection(value["source_inspection"])
+        )
     )
 
 
@@ -225,7 +241,7 @@ def _literal_finding(value: str, *, declared_public: bool = False) -> tuple[str,
     for match in assignments:
         if any(url.start() <= match.start() < url.end() for url in urls):
             continue
-        if _key_category(match["label"]) == "credential":
+        if _key_category(match["label"]) == "credential" and match["value"] != "[REDACTED]":
             return "credential", "credential-assignment"
     ambiguous_query = False
     for match in urls:
@@ -277,7 +293,7 @@ def _literal_finding(value: str, *, declared_public: bool = False) -> tuple[str,
 
 
 def _inspected_template_scan_source(value: str) -> str:
-    """Classify only reviewed test emails and a static injectScript cache-key name.
+    """Classify inspected fixture inputs using their declared parameter purpose.
 
     Caller binds exact full source bytes to inspected provenance. Values stay intact
     for credential-format/Authorization/private-key detection; persisted code is untouched.
@@ -288,6 +304,33 @@ def _inspected_template_scan_source(value: str) -> str:
         return value
     if "___TESTS___" in headers:
         index = sections.index("___TESTS___") + 1
+        try:
+            parameters = loads_strict(
+                template_sections(value).get("___TEMPLATE_PARAMETERS___", "[]")
+            )
+        except ValueError:
+            return value
+        public_parameters = set()
+
+        def inspect_parameters(items: Any) -> None:
+            if isinstance(items, list):
+                for item in items:
+                    inspect_parameters(item)
+            elif isinstance(items, dict):
+                name = items.get("name")
+                label = items.get("displayName", "")
+                if (
+                    isinstance(name, str)
+                    and isinstance(label, str)
+                    and re.search(r"\bpublic\b", label, re.I)
+                    and not _private_hint(name)
+                ):
+                    public_parameters.add(name)
+                for child in items.values():
+                    if isinstance(child, (dict, list)):
+                        inspect_parameters(child)
+
+        inspect_parameters(parameters)
         sections[index] = _EMAIL_VALUE.sub("fixture-email", sections[index])
         # A test mock copying a symbol is not a literal credential. Quoted values,
         # Authorization strings and actual credential formats still run through detection.
@@ -295,6 +338,7 @@ def _inspected_template_scan_source(value: str) -> str:
             lambda match: (
                 match[0].replace(match["label"], "fixtureReference", 1)
                 if re.fullmatch(r"[A-Za-z_$][A-Za-z0-9_$]*", match["value"])
+                or match["label"].strip() in public_parameters
                 else match[0]
             ),
             sections[index],
@@ -755,7 +799,19 @@ def redact_for_persistence(
                     if isinstance(reference, str) and _SECRET_REFERENCE.fullmatch(reference.strip())
                     else None
                 )
-            return redacted_marker(category=finding["category"], detector=finding["detector"])
+            marker = redacted_marker(category=finding["category"], detector=finding["detector"])
+            if here.endswith(".templateData") and isinstance(item, str):
+                marker["source_integrity"] = template_source_integrity(item)
+                try:
+                    inspection = inspect_template_source(item)
+                except ValueError:
+                    pass
+                else:
+                    marker["source_inspection"] = {
+                        "native_type": inspection["native_type"],
+                        "parameter_types": inspection["parameter_types"],
+                    }
+            return marker
         if isinstance(item, dict):
             return {key: visit(child, f"{here}.{key}") for key, child in item.items()}
         if isinstance(item, list):
@@ -812,5 +868,23 @@ def scrub_sensitive_text(value: str, sensitive_values: set[str]) -> str:
     output = value
     for secret in sorted(sensitive_values, key=len, reverse=True):
         output = output.replace(secret, "[REDACTED]")
-    # Exception strings have no reliable field structure; suppress affected text.
+    for pattern in (_CREDENTIAL_FORMAT, _AUTHORIZATION_VALUE, _EMAIL_VALUE):
+        output = pattern.sub("[REDACTED]", output)
+
+    # Keep the operational cause while removing recognizable values. Typed field
+    # labels are retained so diagnostics remain useful without credential custody.
+    def scrub_assignment(match: re.Match) -> str:
+        raw = match["value"]
+        if _key_category(match["label"]):
+            safe = "[REDACTED]"
+        elif raw[0] in {'"', "'"} and raw[-1] == raw[0]:
+            safe = raw[0] + scrub_sensitive_text(raw[1:-1], set()) + raw[-1]
+        else:
+            return match[0]
+        return match[0].replace(raw, safe)
+
+    output = _ASSIGNMENT.sub(scrub_assignment, output)
+    output = _URL_VALUE.sub(
+        lambda match: "[REDACTED URL]" if _literal_finding(match[0]) else match[0], output
+    )
     return "[REDACTED]" if _literal_finding(output) else output

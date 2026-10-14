@@ -44,7 +44,7 @@ def sender_generated_contract():
     objects[:] = [o for o in objects if o["target_id"] == "web-main"]
     for obj in objects:
         obj["depends_on"] = [k for k in obj["depends_on"] if k.startswith("web-main::")]
-    for topology in contract["consent_topologies"]:
+    for topology in contract["consent_policies"]:
         topology["server_tag_keys"] = []
         topology["server_enforcement"] = {"mechanism": "none"}
     contract["external_dependencies"].append(
@@ -92,7 +92,7 @@ def sender_user_data_contract():
         external_receiver_dependency_id="EXT-ADS",
     )
     binding = route["consumer_bindings"][0]
-    binding.update(product="google-ads-transport", tag_type="gaawe")
+    binding.update(product="google-ads-transport")
     for key in ("user_data_path", "activation_paths", "field_review"):
         binding.pop(key)
     contract["implementation"]["field_bindings"][0]["template_field"] = "user_data"

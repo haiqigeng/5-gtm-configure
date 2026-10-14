@@ -16,6 +16,7 @@ from gtm_configure.core.validation import (
 )
 from gtm_configure.domain.native import (
     FieldResolutionError,
+    collection_field_owner,
     effective_collection_fields,
     effective_fields,
     field_key,
@@ -425,3 +426,26 @@ def resolved_mapping_value(owner, operations, variables, mapping):
             raise FieldResolutionError(f"configuration field {field!r} is absent")
         return fields[field]
     return resolved_event_parameter(owner, operations, variables, field)
+
+
+def resolved_mapping_owner(consumer, operations, mapping):
+    """Resolve the storing native object using the same collection inheritance as values."""
+    try:
+        return collection_field_owner(
+            consumer,
+            operations,
+            namespace=mapping["field_scope"],
+            field=mapping["destination_field"],
+        )
+    except KeyError:
+        if mapping["field_scope"] != "event-parameter":
+            raise
+        base = associated_google_tag(consumer, operations)
+        if base is None:
+            raise
+        owner = next(
+            item for item in operations if (item.get("intended") or item.get("pre_change")) is base
+        )
+        return collection_field_owner(
+            owner, operations, namespace=mapping["field_scope"], field=mapping["destination_field"]
+        )

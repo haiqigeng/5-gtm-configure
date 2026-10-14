@@ -24,16 +24,17 @@ Inspect every consumer before editing a shared setting.
 | Repeated GA4 event parameter  |  Event Settings variable only after all consumers and lifecycle match |
 | GA4 user property  |  GA4 Event tag user-properties area, or a narrowly shared Event Settings user-properties area |
 | GA4 `user_id`  |  Google tag configuration, with the documented login/logout lifecycle |
-| GA4 user-provided data (`user_data`)  |  Native User-Provided Data variable selected on only the authorized GA4 Event tag(s) |
+| GA4 user-provided data collection (`user_data`)  |  Native User-Provided Data variable selected in the Event Parameters `user_data` field of only the authorized GA4 Event tag(s), under the separately approved GA4 collection feature and activation |
 | Google Ads enhanced-conversion user data  |  Authorized tag-wide Google tag collection, a documented event override bound to inspected native Ads conversion-tag fields, or a User-Provided Data Event tag for earlier-page capture. Reuse sufficient existing collection; follow the [Ads procedure](../vendors/google-ads/web.md#configure-enhanced-conversions-only-explicitly). |
-| Google Ads server enhanced-conversion transport  |  `google-ads-server-user-data-transport`: documented event-scoped `user_data` on the GA4 sender with native UPD; web-only scope records the external receiver dependency. Pipeline scope binds the receiving server Ads Conversion Tracking tag; separately authorized tag-wide scope remains a pipeline route. |
+| Google Ads server enhanced-conversion transport  |  `google-ads-server-user-data-transport`: native Event Parameters `user_data` on the GA4 sender with native UPD; web-only scope records the external receiver dependency. Pipeline scope binds the receiving server Ads Conversion Tracking tag. A separately authorized tag-wide Google-tag carrier uses its documented Configuration parameter. |
 | Google Ads server prior-page user-data event  |  `google-ads-server-user-provided-data-event`: Google tag or documented GA4 Event override resolves `user_data` on the approved capture event; the server User-provided Data Event tag consumes it |
 | GA4 ecommerce object  |  One GA4 Event tag ecommerce route: native Data Layer or compatible Custom Object |
 | Google Ads conversion value, currency, transaction ID, and vendor fields  |  Exact installed Google Ads template fields on the conversion tag, or a narrowly shared supported setting |
 
 The site's dataLayer is a shared source contract. Map its actual keys to the selected product fields
-and inspect browser defaults before overriding them. User-ID, user properties, matching data and
-ordinary event parameters retain these separate native namespaces.
+and inspect browser defaults before overriding them. Bind each field to its approved feature and
+scope. GA4 user-data collection and Ads user-data transport can use the same Event Parameters
+`user_data` slot; their product activation, consumer authority and purposes remain distinct.
 
 ## Verify inherited fields
 

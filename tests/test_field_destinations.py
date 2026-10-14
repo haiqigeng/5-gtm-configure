@@ -38,7 +38,7 @@ def test_configuration_identity_reaches_saved_native_verification():
     mapping = next(m for m in run["payload_mappings"] if m["destination_field"] == "user_id")
     assert mapping["field_scope"] == "configuration"
     assert mapping["source"] == "account.opaque_id"
-    assert mapping["native_binding"]["field"] == "user_id"
+    assert mapping["owner_object_key"] == contract["implementation"]["objects"][0]["object_key"]
 
 
 @pytest.mark.parametrize(

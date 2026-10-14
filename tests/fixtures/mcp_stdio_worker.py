@@ -15,6 +15,9 @@ name = "Événement d'O’Brien ‘quoted’ “double” — 日本語"
 large = "É日本語" * int(os.environ.get("RELAY_LARGE_REPEATS", "30000"))
 result = transport("synthetic__gtm_tag", {"action": "get", "tagId": "1"})
 assert unwrap(result)["name"] == name
+result = unwrap(transport("synthetic__gtm_template", {"action": "get", "templateId": "77"}))
+assert result["templateId"] == "77"
+assert result["templateData"].endswith("Équipe 日本語\n" * 100000)
 result = transport(
     "synthetic__gtm_tag",
     {"action": "create", "createOrUpdateConfig": {"name": name, "notes": large}},

@@ -40,11 +40,11 @@ of every referencing tag, trigger, table and transformation because resolution/p
 
 ## Inspect advanced tag execution settings
 
-Every active in-scope created/updated/unpaused/reused/untouched tag declares its lifecycle role,
-normal-trigger semantic keys and actual native types/roles, block keys, consent topology,
-Additional/built-in checks, firing option and pre-CMP policy. Declared sets equal native
-`firingTriggerId`/`blockingTriggerId`. A fully authored paused creation still declares its intended
-topology. Pause/remove actions instead preserve exact pre-change trigger/consent state and disposition.
+Every active in-scope created/updated/unpaused/reused/untouched web tag has one `tag_policies` record
+holding its lifecycle role, semantic trigger roles, shared `consent_policy_id`, pre-CMP choice and
+any ambiguous page-view occurrence. Native snapshots own firing/blocking references, trigger types,
+Additional Consent Checks, firing option and automatic page-view settings. Product/template evidence
+owns built-in capability. Pause/remove actions preserve the exact pre-change state and disposition.
 
 Page View, DOM Ready, Window Loaded, Initialization and Consent Initialization are page-load
 lifecycle types. Later virtual-page Custom Event/History Change represents event-driven navigation.

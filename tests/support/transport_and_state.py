@@ -76,6 +76,7 @@ def ads_transport_contract() -> dict:
             "requirement_id": "REQ-ADS",
             "field_scope": "event-parameter",
             "destination_field": "user_data",
+            "owner_object_key": "web-main::tag::Ads identity sender",
             "status": "mapped",
             "shape_compatibility": "compatible",
             "mapping_method": "native-template",
@@ -90,6 +91,8 @@ def ads_transport_contract() -> dict:
     web_trigger_key = "web-main::trigger::Purchase"
     receiver_key = "server-main::tag::Ads conversion"
     server_trigger_key = "server-main::trigger::Purchase"
+    upd_key = "web-main::variable::UPD - Approved purchase"
+    email_key = "web-main::variable::DLV - Approved purchase email"
     client_key = contract["pipelines"][0]["claiming_client"]["object_key"]
     for target_id, family, name, key, intended, dependencies in [
         (
@@ -137,14 +140,64 @@ def ads_transport_contract() -> dict:
             sender_key,
             {
                 "type": "gaawe",
-                "measurement_id": "G-TEST123",
-                "event_name": "purchase",
-                "user_data": "{{UPD - Approved purchase}}",
+                "parameter": [
+                    {"key": "measurementIdOverride", "type": "template", "value": "G-TEST123"},
+                    {"key": "eventName", "type": "template", "value": "purchase"},
+                    {
+                        "key": "eventSettingsTable",
+                        "type": "list",
+                        "list": [
+                            {
+                                "type": "map",
+                                "map": [
+                                    {"key": "parameter", "type": "template", "value": "user_data"},
+                                    {
+                                        "key": "parameterValue",
+                                        "type": "template",
+                                        "value": "{{UPD - Approved purchase}}",
+                                    },
+                                ],
+                            },
+                        ],
+                    },
+                ],
                 "firingTriggerId": [web_trigger_key],
                 "blockingTriggerId": [],
                 "tagFiringOption": "oncePerEvent",
             },
-            [web_trigger_key],
+            [web_trigger_key, upd_key],
+        ),
+        (
+            "web-main",
+            "variable",
+            "UPD - Approved purchase",
+            upd_key,
+            {
+                "type": "awec",
+                "parameter": [
+                    {"key": "mode", "type": "template", "value": "MANUAL"},
+                    {
+                        "key": "email",
+                        "type": "template",
+                        "value": "{{DLV - Approved purchase email}}",
+                    },
+                ],
+            },
+            [email_key],
+        ),
+        (
+            "web-main",
+            "variable",
+            "DLV - Approved purchase email",
+            email_key,
+            {
+                "type": "v",
+                "parameter": [
+                    {"key": "name", "type": "template", "value": "customer.email"},
+                    {"key": "dataLayerVersion", "type": "integer", "value": "2"},
+                ],
+            },
+            [],
         ),
         (
             "server-main",
@@ -207,31 +260,23 @@ def ads_transport_contract() -> dict:
         item for item in objects if item["object_key"] == pipeline["cutover_operation_key"]
     )
     transport_owner["depends_on"].extend([server_trigger_key, receiver_key])
-    consent = deepcopy(contract["consent_topologies"][0])
+    consent = deepcopy(contract["consent_policies"][0])
     consent.update(
-        consent_topology_id="CONSENT-ADS",
+        consent_policy_id="CONSENT-ADS",
         destination="Google Ads",
-        requirement_ids=["REQ-ADS"],
         event_coverage=["purchase"],
         server_tag_keys=[receiver_key],
-        transporter_tag_keys=[sender_key],
     )
-    contract["consent_topologies"].append(consent)
-    pipeline["consent_topology_ids"].append("CONSENT-ADS")
-    topology = deepcopy(contract["execution_topologies"][0])
+    contract["consent_policies"].append(consent)
+    topology = deepcopy(contract["tag_policies"][0])
     topology.update(
         tag_object_key=sender_key,
-        requirement_ids=["REQ-ADS"],
         lifecycle_role="event-driven",
-        normal_triggers=[
-            {"trigger_object_key": web_trigger_key, "role": "source-event", "type": "custom-event"}
-        ],
-        consent_topology_ids=["CONSENT-ADS"],
-        page_view_capable=False,
-        page_view_destinations=[],
+        trigger_roles=[{"trigger_object_key": web_trigger_key, "role": "source-event"}],
+        consent_policy_id="CONSENT-ADS",
         page_view_occurrences=[],
     )
-    contract["execution_topologies"].append(topology)
+    contract["tag_policies"].append(topology)
     contract["external_dependencies"] = [
         {
             "id": "EXT-ADS",
@@ -252,9 +297,6 @@ def ads_transport_contract() -> dict:
                 {
                     "object_key": sender_key,
                     "product": "google-ads-transport",
-                    "implementation": "native",
-                    "tag_type": "gaawe",
-                    "template_identity": None,
                     "evidence": ["Synthetic template premise"],
                 }
             ],
@@ -264,7 +306,6 @@ def ads_transport_contract() -> dict:
             "fields": [
                 {
                     "name": "email",
-                    "source": "customer.email",
                     "normalization": ["native normalization"],
                     "empty_behavior": "omit",
                 }

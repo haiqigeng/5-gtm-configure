@@ -9,6 +9,7 @@ from gtm_configure.domain.native import (
     local_fields,
     variable_name,
 )
+from gtm_configure.domain.web_native import tag_firing_option
 
 
 def _identity_binding(target, path, expected_field, variables=None):
@@ -216,20 +217,19 @@ def validate_generated_event_ids(
         if not isinstance(generation, dict):
             fail(f"{label} requires the inspected template and consumer field bindings")
             continue
-        for field in ("template_object_key", "template_type", "review_locator"):
+        for field in ("template_object_key", "review_locator"):
             if not isinstance(generation.get(field), str) or not generation[field].strip():
                 fail(f"{label}.{field} must identify inspected evidence")
         variable = by_key.get(contract.get("source_variable_key"), {})
         target_id = variable.get("target_id")
         template = by_key.get(generation.get("template_object_key"), {})
-        template_type = generation.get("template_type", "")
+        template_type = variable.get("intended", {}).get("type", "")
         if (
             target_types.get(target_id) != "web"
             or variable.get("resource_family") != "variable"
             or variable.get("action") in {"remove", "pause"}
             or not isinstance(template_type, str)
             or not template_type.startswith("cvt_")
-            or variable.get("intended", {}).get("type") != template_type
         ):
             fail(f"{label} requires the exact reviewed web variable template type")
         if (
@@ -325,10 +325,10 @@ def validate_generated_event_ids(
                 consumer.get("target_id") != target_id
                 or consumer.get("resource_family") != "tag"
                 or topology.get("lifecycle_role") != "event-driven"
-                or topology.get("firing_option") != "once-per-event"
+                or tag_firing_option(intended, "$.dedup_contracts[].consumer") != "once-per-event"
             ):
                 fail(f"{label} consumers must fire once on the same web-container event")
-            triggers = topology.get("normal_triggers", [])
+            triggers = topology.get("trigger_roles", [])
             if not triggers or any(item.get("role") != "source-event" for item in triggers):
                 fail(f"{label} requires direct source-event triggers without consent replay")
             trigger_sets.append({item.get("trigger_object_key") for item in triggers})

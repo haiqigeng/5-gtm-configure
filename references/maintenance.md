@@ -38,6 +38,6 @@ The gate detects literal copies of complete closed schema key sets in local or m
 Tests are grouped by behavior owner; reusable native graphs and
 adapters live in `tests/support`. Repository-only checks and fixtures stay outside the installed skill.
 
-Current release is 13.1.0, contract 10.0, run 8.0. No old entry points, schema migrations or
+Current release is 14.0.0, contract 11.0, run 9.0. No old entry points, schema migrations or
 compatibility fallbacks are shipped. Re-author a pending change with the current model; retain
 historical executed artifacts as evidence and resolve uncertain writes before starting another run.

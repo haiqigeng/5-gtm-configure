@@ -47,9 +47,7 @@ class TestDurableEvidence(fixture_durable_evidence.CurrentRegressionHardeningTes
         for mutation in (
             lambda run: run["run"]["targets"][0].__setitem__("container_id", "GTM-TAMPER"),
             lambda run: run["official_sources"][0].__setitem__("url", "https://example.test"),
-            lambda run: run["execution_topologies"][0].__setitem__(
-                "blocking_event_scope", "purchase"
-            ),
+            lambda run: run["tag_policies"][0].__setitem__("blocking_event_scope", "purchase"),
         ):
             run = fixture_durable_evidence.materialize(
                 fixture_durable_evidence.valid_pipeline_contract()
@@ -219,7 +217,7 @@ class TestPhaseContracts(fixture_phase_contracts.CurrentContractAndRunTestFixtur
                     source_locator="approved input",
                     timestamp="2026-08-18T00:00:00Z",
                 )
-                self.assertEqual(run["schema_version"], "8.0")
+                self.assertEqual(run["schema_version"], "9.0")
                 self.assertEqual(run["run"]["mode"], contract["mode"])
                 self.assertEqual(len(run["object_changes"]), expected_operations)
                 self.assertEqual(

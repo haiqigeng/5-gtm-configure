@@ -41,7 +41,6 @@ from gtm_configure.domain.pipeline import (
 from gtm_configure.domain.resources import (
     ResourceRegistryError,
     native_inventory_identity,
-    required_baseline_families,
     semantic_object_key,
     validate_target_family,
 )
@@ -116,6 +115,14 @@ def _validate_header(document: dict[str, Any]) -> tuple[dict[str, str], set[str]
         _fail("server mode requires only server targets")
     if run["mode"] == "pipeline" and target_values != TARGET_TYPES:
         _fail("pipeline mode requires web and server targets")
+    if set(contract["requirement_fingerprints"]) != requirement_ids:
+        _fail("requirement fingerprints cover the complete approved source scope")
+    revisions = document["run"]["revisions"]
+    for previous, following in zip(revisions, revisions[1:]):
+        if previous["contract_fingerprint"] != following["previous_contract_fingerprint"]:
+            _fail("run revision contract fingerprints form a continuous lineage")
+    if revisions and revisions[-1]["contract_fingerprint"] != contract["fingerprint"]:
+        _fail("current contract fingerprint must close the run revision lineage")
     return target_types, requirement_ids
 
 
@@ -183,9 +190,6 @@ def _validate_operations(
             if "approved-input" not in evidence:
                 _fail(f"{path}.evidence needs 'approved-input' mutation authority")
         _array(operation.get("journal"), f"{path}.journal")
-        risk = operation.get("risk")
-        if risk not in {"routine", "high-impact"}:
-            _fail(f"{path}.risk is unsupported")
         validate_action_contract(
             operation,
             path=path,
@@ -310,6 +314,7 @@ def _validate_target_records(document: dict[str, Any], target_types: dict[str, s
                     "resources": resources,
                     "workspace_changes": baseline["preexisting_workspace_changes"],
                     "capture_evidence": capture,
+                    "supplemental_captures": baseline["supplemental_captures"],
                 }
             )
             if baseline["fingerprint"] != expected_fingerprint:
@@ -318,18 +323,17 @@ def _validate_target_records(document: dict[str, Any], target_types: dict[str, s
                 capture.get("resource_pagination"),
                 f"{path}.capture_evidence.resource_pagination",
             )
-            if set(pagination) != set(families):
-                _fail(f"{path}.capture_evidence must cover exactly the captured families")
-            required_families = required_baseline_families(
-                [
-                    item
-                    for item in document["object_changes"]
-                    if item["target_id"] == baseline["target_id"]
-                ],
-                target["container_type"],
-            )
-            if not required_families <= set(families):
-                _fail(f"{path} misses planned resource families")
+            covered = set(pagination)
+            for receipt in baseline["supplemental_captures"]:
+                extra = receipt["capture_evidence"]
+                if extra["source_identity"] != expected_identity:
+                    _fail(f"{path}.supplemental capture source differs from the authorized target")
+                added = set(extra["resource_pagination"])
+                if covered & added:
+                    _fail(f"{path}.captured resource families each retain one original receipt")
+                covered.update(added)
+            if covered != set(families):
+                _fail(f"{path}.capture receipts must cover exactly the retained families")
             if document["run"]["execution_mode"] == "refonte-durable":
                 expected_families = (
                     WEB_RESOURCE_FAMILIES
@@ -392,8 +396,8 @@ def validate_document(value: Any) -> dict[str, Any]:
     for field in (
         "pipelines",
         "payload_mappings",
-        "consent_topologies",
-        "execution_topologies",
+        "consent_policies",
+        "tag_policies",
         "page_view_decisions",
         "first_party_data_routes",
         "inventory_dispositions",
@@ -461,8 +465,6 @@ def validate_document(value: Any) -> dict[str, Any]:
                 _fail(f"{path}.observed_at must be newer than operation verification")
         except (ValueError, TypeError):
             _fail(f"{path}.observed_at cannot be validated against verification")
-        if observation.get("decision") not in {"no-op", "mutation-required"}:
-            _fail(f"{path}.decision is unsupported")
         try:
             validate_verification_comparison(
                 operation, observation.get("comparison"), observation.get("saved")
@@ -516,7 +518,7 @@ def validate_document(value: Any) -> dict[str, Any]:
     validate_web_domain(
         execution_mode=document["run"]["execution_mode"],
         graph=graph,
-        execution_topologies=document["execution_topologies"],
+        tag_policies=document["tag_policies"],
         page_view_decisions=document["page_view_decisions"],
         first_party_data_routes=document["first_party_data_routes"],
         external_dependencies=document["external_dependencies"],

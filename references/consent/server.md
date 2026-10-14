@@ -19,7 +19,7 @@ behavior and event coverage. Each active server destination binds one effective 
 | Hybrid | Independent declared authority per destination and its required transported signal. |
 
 Carrier policy is resolved independently of downstream eligibility. Where the approved design also
-uses a destination-vendor block on the transporter, record `transporter_destination_vendor_block: true`,
+uses a destination-vendor block on the transporter, bind that native block and its covered event scope,
 distinct roles and intentional double-gate justification. Unresolved carrier policy holds the affected
 architecture. Required native state handling can coexist with a separate basic eligibility role.
 

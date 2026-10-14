@@ -57,10 +57,13 @@ instructions guide the agent to the appropriate owner without losing required sa
 | Closed record structure | `schemas/common.schema.json` | contract/run schemas, `core/schemas.py` | schema consistency, run schema, ownership invariant tests |
 | Phase-specific record structure | contract/run schemas | cached core schema loader | schema and packaged release tests |
 | Destination namespaces | `schemas/common.schema.json` field registry | importer, requirement validation, compiler, mappings and pipeline declarations | destination and schema parity tests |
-| Enums, versions and state transitions | `core/model.py` | domain, state, verification; schema enum representations | schema consistency and release version checks |
+| Versions, semantic subsets and state transitions | `core/model.py` | domain, state, verification; structural vocabularies read from schema through `core/schemas.py` | schema consistency and release version checks |
 | JSON values, typed access and canonical hash | `core/validation.py` | contract validation bindings, state, verification, comparison | ownership invariants and durable evidence tests |
 | Secrets and public identifiers | `core/privacy.py`, `core/public_identifiers.py` | persistence, adapters, renderer | privacy and redaction shape tests |
 | Approved GA4 delivery conversion | `intake/ga4.py` | analytics intake reference, producer delivery fixtures | GA4 intake and ownership invariant tests |
+| Installed template identity/capability | `core/template_source.py`, `domain/template_bindings.py` | privacy integrity markers, Client/tag/variable source dependencies and native parameter shapes | INFO identity, imported source, safe redacted inspection and field capability tests |
+| Repeated event settings | `domain/shared_settings.py` | intake compilation, native collection storage owner and actual shared Google settings | compatible groups, local overrides, field blockers and fresh no-op convergence |
+| Current-run revisions | `runtime/state.py` with schema `x-owner-paths` | CLI lock/fingerprint, explicit native consumer ownership and supplemental baseline receipts | retained verified evidence, unsafe/stale guards, shared Client and prerequisite ownership tests |
 | Request compilation | `intake/request.py` | `comparison/inventory.py`, CLI prepare | request behavior and preparation inventory tests |
 | Domain graph projection | `domain/context.py` | `contract.py`, `runtime/validation.py` | graph parity and contract/run scenarios |
 | Target identity and localization | `domain/targets.py`, `domain/localization.py` | discovery, web domain coordinator | contract, web feature and adapter tests |
@@ -71,7 +74,7 @@ instructions guide the agent to the appropriate owner without losing required sa
 | First-party data and inventory consumers | `domain/first_party_data.py`, `domain/inventory.py` | web coordinator, identity and organization references | first-party, Google Ads and inventory tests |
 | Server and pipeline predicates | `domain/server.py`, `domain/pipeline.py`, `domain/pipeline_declarations.py` | phase-neutral graph, pipeline and server references | pipeline, quota/identity and packaged scenarios |
 | Dependency closure and external owners | `domain/graph.py` | contract, runtime and web validation | contract, pipeline and execution scenarios |
-| Field ownership and dependency readiness | `runtime/readiness.py` | native namespace owner, state inspection, engine and manual checkpoints | shared consent/settings, all-blocked and native-owner tests |
+| Field ownership and dependency readiness | `runtime/readiness.py` | explicit field owner bindings, derived graph demand, state inspection, engine and manual checkpoints | shared consent/settings, all-blocked and native-owner tests |
 | Durable state and evidence | `runtime/state.py`, `runtime/validation.py`, `runtime/verification.py` | run schema, CLI run | state, verification, recovery and run schema tests |
 | Writes, recovery and quota discipline | `runtime/engine.py` | adapter protocol and adapters | execution, transport and quota tests |
 | Host transport and discovery | `adapters/`, `scripts/mcp_relay.js` | MCP CLI commands and adapter references | MCP transport and SDK/relay fixtures |
@@ -92,7 +95,9 @@ instructions guide the agent to the appropriate owner without losing required sa
 | CG-68 | One canonical JSON hash function and representation | core validation/model, common schema, state/verification | Unicode/type/hash regression; current contract/run/verification schemas |
 | CG-69 | Semantic link labels and derived CLI usage/version checks | references, router, release checker | stale-label synthetic regression; every packaged command help |
 | CG-70 | Test files follow behavior owners; fixture graphs live in support | tests/support, behavior suites, architecture and ownership suites | all original test methods retained; branch coverage measured on both tags |
-| CG-71 | Field ownership is distinct from inherited requirement attribution; blockers propagate through the operation graph | runtime readiness/state, native namespace owner, field binding validation | packaged two-event shared consent scenario; independent shared settings/configuration and recovery replay |
+| CG-71 | Explicit field ownership is distinct from derived dependency demand; blockers propagate through the operation graph | runtime readiness/state, native namespace owner, field binding validation | packaged two-event shared consent scenario; independent shared settings/configuration and recovery replay |
+| CG-73 | One tag policy stores human choices; native snapshots own firing/checks/destination facts; shared policy selectors own consent membership | common schema, intake, execution/consent/page views/native template bindings, inventory/pipeline | removed authored facts rejected; native emitter/mismatch, inherited settings and source identity scenarios |
+| CG-74 | Operation authorization remains immutable; dependency demand is derived and field owners are explicit | graph/context, intake, field bindings and runtime readiness/state | shared dependency/sibling progress, native shared owner/local override and current-run revision scenarios |
 | CG-72 | Closed schema records own structural keys, including public declaration APIs; local copies are detected | common/run/contract schemas, core schema loader, runtime validation/state, field/consent/public-identifier APIs, architecture gate | existing malformed-record tests, independent schema probes, local two/five-key mutation tests |
 
 ## Limits of the checks
@@ -102,8 +107,29 @@ bodies, unused top-level names, dependency direction and cycles. Closed-record k
 compares complete literal sets of at least two keys with schema records, including function locals;
 it does not detect partial key subsets or computed sets. Its reference analysis is
 conservative; it does not prove semantic equivalence or identify every possible duplicate rule.
+Complete literal `not in` vocabulary checks are compared with schema-owned enums. Conditional
+schema restrictions and code semantic subsets remain distinct from the structural vocabulary owner.
 The inventory indexes every maintained file; function call/failure indexes are syntactic and may
 include nested function sites. Composition and leaf constraints retain their exact schema pointers.
+Schema `x-owner-paths` and `x-identity-key` pointers map current-run revision ownership; the runtime
+resolves their local and cross-document references through the same cached schema registry.
 Schema validation owns structural correctness, while positive and negative behavior scenarios
 exercise domain meaning. Coverage excludes child-process execution and is a lower bound.
 Offline transports and saved-structure tests do not certify live GTM or vendor delivery.
+
+## Host relay ownership
+
+`scripts/mcp_relay.js` is the packaged Codex host entrypoint. Its required absolute executable and
+artifact path bindings are configuration. `boundedCall` owns remote-call deadlines; `receive`
+owns session reads; `sendReply` owns identified MCP2 reply chunks and four-chunk ACK windows.
+The Python `adapters/transport.py` owns MCP1 request chunks, bounded input parsing, reply identity
+and sequence validation, and STOP cancellation. `cli/mcp.py` owns sanitized diagnostics and worker
+completion after lifecycle unwinding. The relay waits for session exit, so shutdown proof includes
+release of the operating-system run lock. Raw connector replies stay intact through this route;
+`comparison/native.py` owns all native default equivalence.
+
+`tests/test_mcp_forward.py` runs the actual JavaScript → PowerShell → Python boundary, including
+a template response above one MiB, Unicode, request/reply bounds, forbidden actions, errors and
+cancellation with lock reacquisition. `tests/test_mcp_transport.py` checks malformed identity and
+reply frames. The maintained-file map hashes the complete relay source; this explicit API map
+covers its non-Python lifecycle ownership.

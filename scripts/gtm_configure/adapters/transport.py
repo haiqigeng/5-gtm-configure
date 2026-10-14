@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import queue
+import re
 import sys
 import threading
 import time
@@ -20,6 +21,11 @@ from gtm_configure.runtime.adapter_protocol import (
 
 CHUNK_SIZE = 4096
 MAX_HEX_SIZE = 64 * 1024 * 1024
+REPLY_WINDOW = 4
+
+
+class HostCancelledError(BaseException):
+    """End the worker through its outer lifecycle boundary, releasing its run lock."""
 
 
 def configure_terminal() -> None:
@@ -66,19 +72,22 @@ class StdioTransport:
     def _read_input(self) -> None:
         line = bytearray()
         while True:
-            byte = os.read(self.input_fd, 1) if self.input_fd is not None else self.input.read(1)
-            if not byte:
+            block = (
+                os.read(self.input_fd, 4096) if self.input_fd is not None else self.input.read(4096)
+            )
+            if not block:
                 self.lines.put(None)
                 return
-            if byte in {b"\r", b"\n"}:
-                if line:
-                    self.lines.put(line.decode("ascii", errors="replace"))
-                    line.clear()
-            else:
-                line.extend(byte)
-                if len(line) > MAX_HEX_SIZE:
-                    self.lines.put(None)
-                    return
+            for byte in block:
+                if byte in {13, 10}:
+                    if line:
+                        self.lines.put(line.decode("ascii", errors="replace"))
+                        line.clear()
+                else:
+                    line.append(byte)
+                    if len(line) > CHUNK_SIZE + 128:
+                        self.lines.put(None)
+                        return
 
     def _line(self) -> str:
         try:
@@ -87,7 +96,11 @@ class StdioTransport:
             raise AmbiguousWriteError(
                 "MCP host response timed out; read back before retry"
             ) from exc
-        if value is None or value == "STOP":
+        if value == "STOP":
+            raise HostCancelledError(
+                "MCP host cancelled the worker; reconcile attempted writes before resuming"
+            )
+        if value is None:
             raise AmbiguousWriteError("MCP host session ended; read back before retry")
         return value
 
@@ -149,16 +162,33 @@ class StdioTransport:
             self.writes_attempted += 1
         chunks = []
         length = 0
-        while True:
+        total = None
+        while total is None or len(chunks) < total:
             line = self._line()
-            if line == ".":
-                break
-            length += len(line)
+            frame = re.fullmatch(r"MCP2 ([a-f0-9]{32}) (\d+)/(\d+) ([a-f0-9]+) END", line)
+            if frame is None:
+                raise AmbiguousWriteError("Invalid host reply frame")
+            reply_id, part_text, total_text, chunk = frame.groups()
+            part, observed_total = int(part_text), int(total_text)
+            if total is None:
+                total = observed_total
+            if (
+                reply_id != identifier
+                or part != len(chunks) + 1
+                or observed_total != total
+                or not 1 <= total <= MAX_HEX_SIZE // CHUNK_SIZE
+                or len(chunk) > CHUNK_SIZE
+                or len(chunk) % 4
+            ):
+                raise AmbiguousWriteError("Invalid host reply chunk sequence")
+            length += len(chunk)
             if length > MAX_HEX_SIZE:
                 raise AmbiguousWriteError(
                     "MCP response exceeds the documented in-memory transport limit"
                 )
-            chunks.append(line)
+            chunks.append(chunk)
+            if part % REPLY_WINDOW == 0 or part == total:
+                print(f"ACK {identifier} {part} END", file=self.output, flush=True)
         try:
             reply = loads_strict(bytes.fromhex("".join(chunks)).decode("utf-16-be"))
         except (ValueError, UnicodeError) as exc:

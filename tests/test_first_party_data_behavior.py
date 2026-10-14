@@ -166,7 +166,7 @@ class TestConsentAndFields(fixture_consent_and_fields.UtilityCorrectionsFixture)
             fixture_consent_and_fields.condition("{{CMP Analytics}}", "", "contains"),
         ):
             req = fixture_consent_and_fields.firing_request()
-            req["consent_topologies"][0]["web_enforcement"]["grant_condition"] = grant
+            req["consent_policies"][0]["web_enforcement"]["grant_condition"] = grant
             with self.assertRaisesRegex(ValueError, "reject missing and denied"):
                 fixture_consent_and_fields.compile_request(req)
 
@@ -186,9 +186,7 @@ class TestTransportAndState(fixture_transport_and_state.UtilityEvolutionTestFixt
             if item["object_key"] == route["consumer_object_keys"][0]
         )
         sender["intended"]["type"] = "Google Ads User-Provided Data Event"
-        route["consumer_bindings"][0].update(
-            product="google-ads", tag_type="Google Ads User-Provided Data Event"
-        )
+        route["consumer_bindings"][0].update(product="google-ads")
         fixture_transport_and_state.approve_mutations(contract)
         with self.assertRaisesRegex(
             fixture_transport_and_state.ContractValidationError, "gtm.formSubmit source event"
@@ -218,14 +216,17 @@ class TestTransportAndState(fixture_transport_and_state.UtilityEvolutionTestFixt
                         parameter["value"] = "form_submit"
             if intended.get("event_name") == "purchase":
                 intended["event_name"] = "form_submit"
+            for parameter in intended.get("parameter", []):
+                if parameter.get("key") == "eventName" and parameter.get("value") == "purchase":
+                    parameter["value"] = "form_submit"
         ads_flow = next(
             item
             for item in contract["pipelines"][0]["event_flows"]
             if item["requirement_id"] == "REQ-ADS"
         )
         ads_flow.update(source_event="form_submit", transported_event="form_submit")
-        for consent in contract["consent_topologies"]:
-            if "REQ-ADS" in consent["requirement_ids"]:
+        for consent in contract["consent_policies"]:
+            if consent["consent_policy_id"] == contract["tag_policies"][-1]["consent_policy_id"]:
                 consent["event_coverage"] = [
                     "form_submit" if event == "purchase" else event
                     for event in consent["event_coverage"]
@@ -260,12 +261,12 @@ class TestTransportAndState(fixture_transport_and_state.UtilityEvolutionTestFixt
         sender["intended"]["firingTriggerId"] = ["web-main::trigger::CMP - Analytics granted"]
         topology = next(
             item
-            for item in contract["execution_topologies"]
+            for item in contract["tag_policies"]
             if item["tag_object_key"] == sender["object_key"]
         )
-        topology["normal_triggers"][0]["trigger_object_key"] = sender["intended"][
-            "firingTriggerId"
-        ][0]
+        topology["trigger_roles"][0]["trigger_object_key"] = sender["intended"]["firingTriggerId"][
+            0
+        ]
         with self.assertRaisesRegex(
             fixture_transport_and_state.ContractValidationError,
             "must resolve on its approved source event",

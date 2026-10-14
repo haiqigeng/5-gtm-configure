@@ -85,3 +85,39 @@ def test_local_closed_record_copy_is_rejected(tmp_path, keys):
     assert any(
         "duplicated schema record keys" in error for error in inspect_architecture(tmp_path)[1]
     )
+
+
+def test_complete_structural_enum_check_is_rejected_but_semantic_subset_is_allowed(tmp_path):
+    (tmp_path / "schemas").mkdir()
+    (tmp_path / "schemas/common.schema.json").write_text(
+        json.dumps({"$defs": {"risk": {"enum": ["routine", "high-impact", "critical"]}}}),
+        encoding="utf-8",
+    )
+    write_module(
+        tmp_path,
+        "gtm_configure.runtime.reader",
+        "def read(risk):\n    return risk not in {'routine', 'high-impact', 'critical'}\nread('routine')\n",
+    )
+    assert any(
+        "duplicated structural vocabulary" in error for error in inspect_architecture(tmp_path)[1]
+    )
+    write_module(
+        tmp_path,
+        "gtm_configure.runtime.reader",
+        "def read(risk):\n    return risk not in {'high-impact', 'critical'}\nread('routine')\n",
+    )
+    assert not inspect_architecture(tmp_path)[1]
+
+
+def test_conditional_enum_restriction_is_not_a_structural_vocabulary_owner(tmp_path):
+    (tmp_path / "schemas").mkdir()
+    (tmp_path / "schemas/common.schema.json").write_text(
+        json.dumps({"if": {"properties": {"action": {"enum": ["create", "update"]}}}}),
+        encoding="utf-8",
+    )
+    write_module(
+        tmp_path,
+        "gtm_configure.runtime.reader",
+        "def read(action):\n    return action not in {'create', 'update'}\nread('create')\n",
+    )
+    assert not inspect_architecture(tmp_path)[1]

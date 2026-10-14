@@ -104,6 +104,8 @@ def compare(approved: dict[str, Any], candidate: dict[str, Any]) -> dict[str, An
             requirement_mismatches.append({"id": requirement_id, "differences": found})
 
     report = {
+        "proof": "semantic-projection-equality",
+        "source_independence_established": False,
         "pass": False,
         "expected_requirement_count": len(approved_requirements),
         "actual_requirement_count": len(candidate_requirements),

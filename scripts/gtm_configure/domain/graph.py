@@ -2,8 +2,10 @@
 
 import re
 from copy import deepcopy
+from graphlib import TopologicalSorter
 from typing import Any, Callable
 
+from gtm_configure.core.schemas import validate_definition
 from gtm_configure.domain.localization import (
     local_array,
     local_text,
@@ -42,6 +44,7 @@ def external_dependency_index(
             fail(f"{path} must be an object")
             continue
         dependency = raw
+        validate_definition(dependency, "externalDependency", fail)
         dependency_id = local_text(dependency.get("id"), f"{path}.id", error_type=fail)
         if dependency_id in output:
             fail(f"duplicate external dependency {dependency_id!r}")
@@ -54,7 +57,24 @@ def external_dependency_index(
             fail(f"{path}.requirement_ids contains unknown IDs")
         local_text(dependency.get("owner"), f"{path}.owner", error_type=fail)
         local_text(dependency.get("action"), f"{path}.action", error_type=fail)
-        if dependency.get("status") not in {"open", "resolved", "accepted"}:
-            fail(f"{path}.status is unsupported")
         output[dependency_id] = deepcopy(dependency)
     return output
+
+
+def served_requirements(operations: dict[str, dict[str, Any]]) -> dict[str, set[str]]:
+    """Derive dependency demand without modifying the authority of any operation."""
+    order = tuple(
+        TopologicalSorter(
+            {key: item["dependencies"] for key, item in operations.items()}
+        ).static_order()
+    )
+    serves = {key: set(item["requirement_ids"]) for key, item in operations.items()}
+    for key in reversed(order):
+        for dependency in operations[key]["dependencies"]:
+            serves[dependency].update(serves[key])
+    return serves
+
+
+def object_references(value: Any) -> set[str]:
+    """Collect explicit semantic references for native-consumer ownership projection."""
+    return _reference_values(value)

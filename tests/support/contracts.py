@@ -104,15 +104,9 @@ def valid_pipeline_contract(*, cutover: bool = False) -> dict:
         "receiving_target_id": "server-main",
         "request_class": "GA4 collect",
         "transport_owner": web_key,
-        "endpoint_reference": "https://tags.example.test",
         "claiming_client": {
             "object_key": client_key,
             "claim_criteria": "Default GA4 Client claims GA4 collect requests",
-        },
-        "page_view_ownership": {
-            "owner": web_key,
-            "occurrence": "initial-page-load",
-            "send_page_view": True,
         },
         "event_flows": [
             {
@@ -138,7 +132,6 @@ def valid_pipeline_contract(*, cutover: bool = False) -> dict:
                 "runtime_verification_note": "Server Preview Event Data page_location matches the web request",
             }
         ],
-        "consent_topology_ids": ["CONSENT-GA4"],
         "dedup_contract_ids": [],
         "operation_dependencies": [
             client_key,
@@ -150,7 +143,7 @@ def valid_pipeline_contract(*, cutover: bool = False) -> dict:
     pipeline["cutover_operation_key"] = web_key
     return approve_mutations(
         {
-            "schema_version": "10.0",
+            "schema_version": "11.0",
             "mode": "pipeline",
             "route": "analytics",
             "scope": {"included": ["REQ-PAGE"], "reference_only": [], "excluded": []},
@@ -178,11 +171,10 @@ def valid_pipeline_contract(*, cutover: bool = False) -> dict:
             ],
             "targets": [deepcopy(WEB_TARGET), deepcopy(SERVER_TARGET)],
             "pipelines": [pipeline],
-            "consent_topologies": [
+            "consent_policies": [
                 {
-                    "consent_topology_id": "CONSENT-GA4",
+                    "consent_policy_id": "CONSENT-GA4",
                     "destination": "GA4",
-                    "requirement_ids": ["REQ-PAGE"],
                     "consent_mode": "advanced-native",
                     "transport_behavior": "always-transported",
                     "web_enforcement": {"mechanism": "transport-trigger-only"},
@@ -191,10 +183,7 @@ def valid_pipeline_contract(*, cutover: bool = False) -> dict:
                     "signal_source": "Google Consent Mode parameters",
                     "unknown_state_behavior": "native-product-behavior",
                     "event_coverage": ["page_view"],
-                    "intentional_double_gate": False,
                     "server_tag_keys": [server_tag_key],
-                    "transporter_tag_keys": [web_key],
-                    "transporter_destination_vendor_block": False,
                 }
             ],
             "dedup_contracts": [],
@@ -203,6 +192,7 @@ def valid_pipeline_contract(*, cutover: bool = False) -> dict:
                 "field_bindings": [
                     {
                         "requirement_id": "REQ-PAGE",
+                        "owner_object_key": web_key,
                         "field_scope": "event-parameter",
                         "destination_field": "page_location",
                         "shape_compatibility": "compatible",
@@ -310,32 +300,19 @@ def valid_pipeline_contract(*, cutover: bool = False) -> dict:
                     },
                 ],
             },
-            "execution_topologies": [
+            "tag_policies": [
                 {
                     "tag_object_key": web_key,
-                    "requirement_ids": ["REQ-PAGE"],
                     "lifecycle_role": "baseline-page-load",
-                    "normal_triggers": [
+                    "trigger_roles": [
                         {
                             "trigger_object_key": consent_trigger_key,
                             "role": "cmp-readiness-grant",
-                            "type": "custom-event",
                         }
                     ],
-                    "consent_mode": "advanced-native",
-                    "consent_topology_ids": ["CONSENT-GA4"],
-                    "blocking_trigger_keys": [],
+                    "consent_policy_id": "CONSENT-GA4",
                     "blocking_event_scope": None,
-                    "built_in_consent_checks": ["analytics_storage"],
-                    "additional_consent_checks": [],
-                    "firing_option": "once-per-event",
-                    "may_precede_cmp": False,
                     "pre_cmp_policy": "not-applicable",
-                    "page_view_capable": True,
-                    "page_view_destinations": ["G-TEST123"],
-                    "page_view_occurrences": ["initial-page-load"],
-                    "ecommerce_route": "not-applicable",
-                    "manual_ecommerce_fields": [],
                     "evidence": ["official-current", "container-confirmed"],
                 }
             ],
@@ -348,7 +325,6 @@ def valid_pipeline_contract(*, cutover: bool = False) -> dict:
                     "owner": "google-tag-automatic",
                     "owner_object_key": web_key,
                     "google_tag_object_key": web_key,
-                    "send_page_view": True,
                     "external_dependency_ids": [],
                     "reason": "The Google tag is the single approved page_view owner.",
                     "evidence": ["approved-input", "official-current"],
@@ -420,7 +396,7 @@ def valid_web_contract() -> dict:
             },
         }
     )
-    topology = contract["consent_topologies"][0]
+    topology = contract["consent_policies"][0]
     topology.update(
         {
             "consent_mode": "strict-basic",
@@ -431,12 +407,9 @@ def valid_web_contract() -> dict:
             "signal_source": "CMP vendor grant and denial lifecycle",
             "unknown_state_behavior": "deny",
             "server_tag_keys": [],
-            "transporter_tag_keys": [],
         }
     )
-    contract["execution_topologies"][0]["blocking_trigger_keys"] = [block_trigger_key]
-    contract["execution_topologies"][0]["consent_mode"] = "strict-basic"
-    contract["execution_topologies"][0]["blocking_event_scope"] = ".*"
+    contract["tag_policies"][0]["blocking_event_scope"] = ".*"
     return approve_mutations(contract)
 
 
@@ -480,17 +453,18 @@ def valid_server_contract() -> dict:
     contract["mode"] = "server"
     contract["targets"] = [deepcopy(SERVER_TARGET)]
     contract["pipelines"] = []
-    contract["consent_topologies"][0].update(
+    contract["consent_policies"][0].update(
         {
             "web_enforcement": {"mechanism": "not-applicable"},
             "server_tag_keys": ["server-main::tag::GA4 - page_view"],
-            "transporter_tag_keys": [],
         }
     )
     contract["implementation"]["objects"] = [
         item for item in contract["implementation"]["objects"] if item["target_id"] == "server-main"
     ]
-    contract["execution_topologies"] = []
+    for binding in contract["implementation"]["field_bindings"]:
+        binding["owner_object_key"] = "server-main::tag::GA4 - page_view"
+    contract["tag_policies"] = []
     contract["page_view_decisions"] = []
     return contract
 
@@ -726,12 +700,11 @@ def add_nonpurchase_dual_dedup(contract: dict) -> dict:
                 "runtime_verification_note": f"Server Preview Event Data {path} matches the web request",
             }
         )
-    value["consent_topologies"].extend(
+    value["consent_policies"].extend(
         [
             {
-                "consent_topology_id": "CONSENT-META-SERVER",
+                "consent_policy_id": "CONSENT-META-SERVER",
                 "destination": "Meta CAPI",
-                "requirement_ids": ["REQ-ATC"],
                 "consent_mode": "strict-basic",
                 "transport_behavior": "always-transported",
                 "web_enforcement": {"mechanism": "transport-trigger-only"},
@@ -744,15 +717,11 @@ def add_nonpurchase_dual_dedup(contract: dict) -> dict:
                 "server_signal_path": "cmp_meta_allowed",
                 "unknown_state_behavior": "deny",
                 "event_coverage": ["add_to_cart"],
-                "intentional_double_gate": False,
                 "server_tag_keys": [server_tag_key],
-                "transporter_tag_keys": [web_key, transporter_key],
-                "transporter_destination_vendor_block": False,
             },
             {
-                "consent_topology_id": "CONSENT-META-BROWSER",
+                "consent_policy_id": "CONSENT-META-BROWSER",
                 "destination": "Meta browser",
-                "requirement_ids": ["REQ-ATC"],
                 "consent_mode": "strict-basic",
                 "transport_behavior": "blocked",
                 "web_enforcement": {"mechanism": "business-trigger-plus-vendor-block"},
@@ -761,14 +730,11 @@ def add_nonpurchase_dual_dedup(contract: dict) -> dict:
                 "signal_source": "Documented CMP Meta vendor state",
                 "unknown_state_behavior": "deny",
                 "event_coverage": ["add_to_cart"],
-                "intentional_double_gate": False,
                 "server_tag_keys": [],
-                "transporter_tag_keys": [],
-                "transporter_destination_vendor_block": False,
             },
         ]
     )
-    value["pipelines"][0]["consent_topology_ids"].append("CONSENT-META-SERVER")
+
     value["pipelines"][0]["operation_dependencies"].extend(
         [server_trigger_key, server_block_key, server_tag_key]
     )
@@ -835,60 +801,36 @@ def add_nonpurchase_dual_dedup(contract: dict) -> dict:
     )["depends_on"].append(receiver_variable_key)
     value["dedup_contracts"] = [dedup]
     value["pipelines"][0]["dedup_contract_ids"] = ["DEDUP-META-ATC"]
-    value["execution_topologies"].extend(
+    value["tag_policies"].extend(
         [
             {
                 "tag_object_key": browser_key,
-                "requirement_ids": ["REQ-ATC"],
                 "lifecycle_role": "event-driven",
-                "normal_triggers": [
+                "trigger_roles": [
                     {
                         "trigger_object_key": event_trigger_key,
                         "role": "source-event",
-                        "type": "custom-event",
                     }
                 ],
-                "consent_mode": "strict-basic",
-                "consent_topology_ids": ["CONSENT-META-BROWSER"],
-                "blocking_trigger_keys": [web_block_key],
+                "consent_policy_id": "CONSENT-META-BROWSER",
                 "blocking_event_scope": ".*",
-                "built_in_consent_checks": ["ad_storage"],
-                "additional_consent_checks": [],
-                "firing_option": "once-per-event",
-                "may_precede_cmp": False,
                 "pre_cmp_policy": "not-applicable",
-                "page_view_capable": False,
-                "page_view_destinations": [],
                 "page_view_occurrences": [],
-                "ecommerce_route": "manual",
-                "manual_ecommerce_fields": [],
                 "evidence": ["official-current", "container-confirmed"],
             },
             {
                 "tag_object_key": transporter_key,
-                "requirement_ids": ["REQ-ATC"],
                 "lifecycle_role": "event-driven",
-                "normal_triggers": [
+                "trigger_roles": [
                     {
                         "trigger_object_key": event_trigger_key,
                         "role": "source-event",
-                        "type": "custom-event",
                     }
                 ],
-                "consent_mode": "strict-basic",
-                "consent_topology_ids": ["CONSENT-META-SERVER"],
-                "blocking_trigger_keys": [],
+                "consent_policy_id": "CONSENT-META-SERVER",
                 "blocking_event_scope": None,
-                "built_in_consent_checks": [],
-                "additional_consent_checks": [],
-                "firing_option": "once-per-event",
-                "may_precede_cmp": False,
                 "pre_cmp_policy": "not-applicable",
-                "page_view_capable": False,
-                "page_view_destinations": [],
                 "page_view_occurrences": [],
-                "ecommerce_route": "manual",
-                "manual_ecommerce_fields": [],
                 "evidence": ["official-current", "container-confirmed"],
             },
         ]

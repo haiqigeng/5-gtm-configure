@@ -1,4 +1,4 @@
-// Run in Codex functions.exec with absolute pythonPath, scriptPath (configure_gtm.py),
+// Run in Codex functions.exec with absolute shellPath, pythonPath, scriptPath (configure_gtm.py),
 // runPath and profilesPath. For read-only discovery supply discoveryPath and
 // discoveryOutputPath instead of runPath. Optional callTimeoutSeconds/runTimeoutSeconds.
 // The relay starts its worker. Responses stay in memory and never enter shell code.
@@ -19,17 +19,17 @@ if (![callTimeout, runTimeout].every(value => Number.isFinite(value) && value > 
 const discoveryMode = typeof discoveryPath !== "undefined";
 const inputPath = discoveryMode ? discoveryPath : (typeof runPath === "undefined" ? undefined : runPath);
 if (discoveryMode && typeof runPath !== "undefined") throw new Error("Select execution or discovery, not both");
-if (![pythonPath, scriptPath, inputPath, profilesPath, ...(discoveryMode ? [typeof discoveryOutputPath === "undefined" ? undefined : discoveryOutputPath] : [])].every(value => typeof value === "string" && value.length)) throw new Error("Absolute runtime paths are required");
+if (![typeof shellPath === "undefined" ? undefined : shellPath, pythonPath, scriptPath, inputPath, profilesPath, ...(discoveryMode ? [typeof discoveryOutputPath === "undefined" ? undefined : discoveryOutputPath] : [])].every(value => typeof value === "string" && /^(?:[A-Za-z]:[\\/]|\\\\|\/)/.test(value))) throw new Error("Absolute runtime and shell paths are required");
 if (typeof tools.exec_command !== "function" || typeof tools.write_stdin !== "function") throw new Error("This relay requires Codex exec_command and write_stdin session tools");
 const allowed = new Set(["gtm_tag", "gtm_trigger", "gtm_variable", "gtm_folder", "gtm_client", "gtm_transformation", "gtm_template", "gtm_zone"]);
 const maxHexSize = 64 * 1024 * 1024;
 const inputArgs = discoveryMode ? `--discover (${psPath(inputPath)}) --output (${psPath(discoveryOutputPath)})` : `--run (${psPath(inputPath)})`;
-const command = `$ErrorActionPreference='Stop'; if ($PSVersionTable.PSVersion.Major -lt 7) { throw 'PowerShell 7 or newer is required' }; & (${psPath(pythonPath)}) -B (${psPath(scriptPath)}) mcp ${inputArgs} --profiles (${psPath(profilesPath)}) --call-timeout ${callTimeout}`;
+const command = `$ErrorActionPreference='Stop'; if ($PSVersionTable.PSVersion.Major -lt 7) { throw 'PowerShell 7 or newer is required' }; & (${psPath(pythonPath)}) -X utf8 -B (${psPath(scriptPath)}) mcp ${inputArgs} --profiles (${psPath(profilesPath)}) --call-timeout ${callTimeout}`;
 const started = Date.now();
 let lastUpdate = started;
 let calls = 0;
 let finished = false;
-let state = await tools.exec_command({cmd: command, shell: "pwsh", login: false, tty: true, yield_time_ms: 1000, max_output_tokens: 5000});
+let state = await tools.exec_command({cmd: command, shell: shellPath, login: false, tty: true, yield_time_ms: 1000, max_output_tokens: 5000});
 let session = state.session_id;
 let buffer = state.output || "";
 let requestId;
@@ -38,17 +38,49 @@ let totalParts = 0;
 const clean = value => value.replace(/\x1b\][^\x07]*(?:\x07|\x1b\\)/g, "").replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, "");
 async function receive(chars = "") {
   if (!session) throw new Error("Worker stopped before completion");
-  state = await tools.write_stdin({session_id: session, chars, yield_time_ms: 1000, max_output_tokens: 5000});
+  state = await tools.write_stdin({session_id: session, chars, yield_time_ms: chars ? 50 : 1000, max_output_tokens: 5000});
   buffer += state.output || "";
   session = state.session_id;
+  await progress();
+}
+async function progress() {
+  if (Date.now() - lastUpdate > 40000) {
+    notify(`GTM runtime is active: ${calls} MCP calls serviced. Bounded transfer and saved-state verification remain in progress.`);
+    lastUpdate = Date.now();
+    await yield_control();
+  }
+}
+async function boundedCall(request) {
+  let timer;
+  try {
+    return await Promise.race([
+      tools[request.tool](request.arguments),
+      new Promise((_, reject) => { timer = setTimeout(() => reject(new RelayDeadlineError("MCP call deadline reached; outcome requires readback")), Math.min(callTimeout * 1000, Math.max(1, started + runTimeout * 1000 - Date.now()))); }),
+    ]);
+  } finally { clearTimeout(timer); }
+}
+class RelayDeadlineError extends Error {}
+async function sendReply(id, payload) {
+  const chunks = payload.match(/.{1,4096}/g);
+  for (let start = 0; start < chunks.length; start += 4) {
+    const end = Math.min(start + 4, chunks.length);
+    await receive(chunks.slice(start, end).map((chunk, offset) => `MCP2 ${id} ${start + offset + 1}/${chunks.length} ${chunk} END`).join("\n") + "\n");
+    while (true) {
+      buffer = clean(buffer).replace(/[\b\r\n]/g, "");
+      const ack = buffer.match(/ACK ([a-f0-9]{32}) (\d+) END/);
+      if (ack) {
+        if (ack[1] !== id || Number(ack[2]) !== end) throw new Error("Worker reply acknowledgement differs");
+        buffer = buffer.slice(ack.index + ack[0].length);
+        break;
+      }
+      if (!session || Date.now() - started >= runTimeout * 1000) throw new Error("Worker did not acknowledge bounded reply transfer");
+      await receive();
+    }
+  }
 }
 try {
   while (Date.now() - started < runTimeout * 1000) {
-    if (Date.now() - lastUpdate > 40000) {
-      notify(`GTM runtime is active: ${calls} MCP calls serviced. Saved-state verification remains in progress.`);
-      lastUpdate = Date.now();
-      await yield_control();
-    }
+    await progress();
     // ConPTY can insert backspace+CR at a wrap boundary without removing data.
     // Frames contain only hex and fixed ASCII headers, so those controls are not payload.
     buffer = clean(buffer).replace(/[\b\r\n]/g, "");
@@ -82,11 +114,12 @@ try {
       let reply;
       try {
         if (!valid || typeof tools[request.tool] !== "function") throw new Error("Undiscovered or forbidden action");
-        reply = {id: request.id, result: await tools[request.tool](request.arguments)};
+        reply = {id: request.id, result: await boundedCall(request)};
       } catch (error) {
+        if (error instanceof RelayDeadlineError) throw error;
         // Forward only a typed HTTP rejection, never infer application status from prose.
         const status = error?.statusCode ?? error?.status;
-        const rejection = Number.isInteger(status) ? {code: status} : {};
+        const rejection = {message: typeof error?.message === "string" ? error.message : "MCP host call failed", ...(Number.isInteger(status) ? {code: status} : {})};
         if (status === 429 || status === 403) {
           const headers = error?.headers ?? error?.response?.headers;
           const hint = headers?.get?.("retry-after") ?? headers?.["retry-after"] ?? headers?.["Retry-After"];
@@ -100,7 +133,7 @@ try {
       const payload = encode(JSON.stringify(reply));
       if (payload.length > maxHexSize) throw new Error("MCP response exceeds the documented in-memory transport limit");
       parts = [];
-      await receive(payload.match(/.{1,2048}/g).join("\n") + "\n.\n");
+      await sendReply(request.id, payload);
       calls += 1;
     } else {
       if (!session) throw new Error("Worker ended without a completion frame; inspect the saved execution diagnostic");
@@ -110,5 +143,10 @@ try {
   }
   if (!finished) throw new Error("Relay deadline reached; inspect the run and read back before resuming");
 } finally {
-  if (!finished && session) await tools.write_stdin({session_id: session, chars: "STOP\n", yield_time_ms: 1000, max_output_tokens: 1000});
+  if (session) {
+    if (!finished) await receive("STOP\n");
+    const shutdownDeadline = Date.now() + 10000;
+    while (session && Date.now() < shutdownDeadline) await receive();
+    if (session) throw new Error("Worker shutdown was not confirmed; its run lock remains unproved until the session exits");
+  }
 }

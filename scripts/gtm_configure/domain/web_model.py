@@ -1,16 +1,14 @@
 """Shared current web-domain enums for configuration run."""
 
-MAPPING_STATUSES = {"pending", "mapped", "intentionally-omitted", "external", "blocked"}
-MAPPING_METHODS = {
-    "constant",
-    "custom-javascript",
-    "direct-dlv",
-    "lookup-table",
-    "native-template",
-    "regex-table",
-    "settings-variable",
-}
-SHAPE_COMPATIBILITY = {"compatible", "conversion-required"}
+from gtm_configure.core.schemas import schema_enum
+
+MAPPING_STATUSES = schema_enum("common", "$defs", "fieldBinding", "properties", "status")
+MAPPING_METHODS = schema_enum(
+    "common", "$defs", "fieldBinding", "properties", "mapping_method", "anyOf", 0
+)
+SHAPE_COMPATIBILITY = schema_enum(
+    "common", "$defs", "fieldBinding", "properties", "shape_compatibility", "anyOf", 0
+)
 EXTENDED_MAPPING_KEYS = {
     "source_authority_grade",
     "source_authority_locator",
@@ -20,30 +18,8 @@ EXTENDED_MAPPING_KEYS = {
     "mapping_method",
     "missing_behavior",
 }
-LIFECYCLE_ROLES = {"baseline-page-load", "event-driven"}
-NORMAL_TRIGGER_ROLES = {
-    "cmp-readiness-grant",
-    "initialization-page-load",
-    "source-event",
-}
-NORMAL_TRIGGER_TYPES = {
-    "click-all-elements",
-    "click-just-links",
-    "consent-initialization",
-    "custom-event",
-    "dom-ready",
-    "element-visibility",
-    "form-submission",
-    "history-change",
-    "initialization",
-    "javascript-error",
-    "page-view",
-    "scroll-depth",
-    "timer",
-    "trigger-group",
-    "window-loaded",
-    "youtube-video",
-}
+LIFECYCLE_ROLES = schema_enum("common", "$defs", "tagPolicy", "properties", "lifecycle_role")
+NORMAL_TRIGGER_ROLES = schema_enum("common", "$defs", "triggerRole", "properties", "role")
 PAGE_LOAD_TRIGGER_TYPES = {
     "consent-initialization",
     "dom-ready",
@@ -110,47 +86,12 @@ CONFIGURATION_FIELD_ALIASES = {
         "userprovideddatavariable",
     },
 }
-FIRING_OPTIONS = {"once-per-event", "once-per-page", "unlimited"}
-PRE_CMP_POLICIES = {
-    "not-applicable",
-    "source-after-readiness",
-    "later-fresh-event",
-    "drop-unconsented-occurrence",
-    "explicit-one-time-replay",
-    "external-dependency",
-}
-PAGE_VIEW_OWNERS = {
-    "google-tag-automatic",
-    "dedicated-ga4-event",
-    "internal-tag",
-    "external",
-    "intentionally-none",
-}
-PAGE_VIEW_OCCURRENCES = {"initial-page-load", "virtual-navigation"}
-ECOMMERCE_ROUTES = {
-    "not-applicable",
-    "native-data-layer",
-    "native-custom-object",
-    "manual",
-}
-FIRST_PARTY_FEATURES = {
-    "analytics-user-id",
-    "ga4-user-id",
-    "ga4-user-provided-data",
-    "google-ads-enhanced-conversions",
-    "google-ads-tag-wide-user-data",
-    "google-ads-user-provided-data-event",
-    "google-ads-server-user-data-transport",
-    "google-ads-server-user-provided-data-event",
-    "vendor-advanced-matching",
-}
-INVENTORY_DISPOSITIONS = {
-    "added",
-    "keep",
-    "update",
-    "remap",
-    "pause",
-    "remove",
-    "replace",
-    "supersede",
-}
+PRE_CMP_POLICIES = schema_enum("common", "$defs", "tagPolicy", "properties", "pre_cmp_policy")
+PAGE_VIEW_OWNERS = schema_enum("common", "$defs", "pageViewDecision", "properties", "owner")
+PAGE_VIEW_OCCURRENCES = schema_enum(
+    "common", "$defs", "pageViewDecision", "properties", "occurrence"
+)
+FIRST_PARTY_FEATURES = schema_enum("common", "$defs", "firstPartyRoute", "properties", "feature")
+INVENTORY_DISPOSITIONS = schema_enum(
+    "common", "$defs", "inventoryDisposition", "properties", "disposition"
+)

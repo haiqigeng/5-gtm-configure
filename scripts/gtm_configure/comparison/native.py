@@ -94,8 +94,17 @@ def canonical_native_fields(
     parameter_object: bool = False,
     tag_object: bool = False,
     native_object: bool = False,
+    resource_family: str | None = None,
+    container_type: str | None = None,
 ) -> Any:
     if isinstance(value, dict):
+        value = dict(value)
+        # Native readback evidence establishes omission equivalence for these exact
+        # surfaces. Mutation payloads remain untouched; every other field is strict.
+        if resource_family == "client" and (
+            "priority" not in value or type(value["priority"]) is int and value["priority"] == 0
+        ):
+            value.pop("priority", None)
         is_parameter = parameter_object or parent_key in STANDALONE_PARAMETER_FIELDS
         raw_parameter_type = value.get("type")
         parameter_type = (
@@ -130,6 +139,19 @@ def canonical_native_fields(
                 path=f"{path}.{key}",
                 parameter_array_mode=child_mode,
             )
+        if (
+            resource_family == "tag"
+            and container_type == "server"
+            and value.get("type") == "sgtmgaaw"
+            and isinstance(output.get("parameter"), list)
+        ):
+            output["parameter"] = [
+                row
+                for row in output["parameter"]
+                if row != {"type": "boolean", "key": "isMeasurementIdMandatory", "value": "false"}
+            ]
+            if not output["parameter"]:
+                output.pop("parameter")
         return output
     if isinstance(value, list):
         normalized = []
@@ -451,6 +473,8 @@ def _normalize_graph(
             path=path,
             tag_object=object_type == "tag",
             native_object=object_type in {"tag", "trigger", "variable", "client", "transformation"},
+            resource_family=object_type,
+            container_type=target_types.get(target_id) if target_types is not None else None,
         )
     return {key: normalized[key] for key in sorted(normalized)}
 

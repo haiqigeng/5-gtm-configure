@@ -8,12 +8,6 @@ from typing import Any
 from gtm_configure.domain.shapes import collection_shape
 from gtm_configure.domain.web_model import CONFIGURATION_FIELD_ALIASES
 
-NATIVE_MAPPING_SCOPES = {
-    "gaawe": "event-parameter",
-    "googtag": "configuration",
-    "gaawc": "configuration",
-}
-
 CONFIGURATION_SETTINGS_TYPES = {
     "gtcs",
     "googtagconfigsettings",
@@ -21,6 +15,13 @@ CONFIGURATION_SETTINGS_TYPES = {
     "googletagconfigurationsettings",
 }
 EVENT_SETTINGS_TYPES = {"gtes", "googtageventsettings", "googletageventsettings"}
+NATIVE_MAPPING_SCOPES = {
+    "gaawe": "event-parameter",
+    "googtag": "configuration",
+    "gaawc": "configuration",
+    **dict.fromkeys(EVENT_SETTINGS_TYPES, "event-parameter"),
+    **dict.fromkeys(CONFIGURATION_SETTINGS_TYPES, "configuration"),
+}
 USER_DATA_VARIABLE_TYPES = {"awec", "userprovideddata", "userprovideddatavariable"}
 SETTINGS_REFERENCES = {
     "configsettingsvariable": CONFIGURATION_SETTINGS_TYPES,
@@ -203,7 +204,7 @@ def effective_fields(
 
 def native_mapping_scope(target: dict) -> str | None:
     """The field namespace owned by a supported native collection tag."""
-    return NATIVE_MAPPING_SCOPES.get(target.get("type"))
+    return NATIVE_MAPPING_SCOPES.get(token(str(target.get("type", ""))))
 
 
 def supports_native_mapping(mapping: dict, target: dict) -> bool:
@@ -381,3 +382,64 @@ def direct_dlv_source(variable):
             "direct-dlv requires one untransformed version-2 Data Layer Variable source"
         )
     return fields["name"]
+
+
+def collection_field_owner(owner, operations, *, namespace, field, active=()):
+    """Locate the native object storing one effective field, including local overrides."""
+    key = owner["object_key"]
+    if key in active:
+        raise FieldResolutionError("cyclic shared field ownership")
+    native = owner.get("intended") or owner.get("pre_change") or {}
+    reference_keys, types = {
+        "event-parameter": (
+            {"eventSettingsVariable", "inheritedEventSettings"},
+            EVENT_SETTINGS_TYPES,
+        ),
+        "configuration": (
+            {"configSettingsVariable", "configurationSettingsVariable"},
+            CONFIGURATION_SETTINGS_TYPES,
+        ),
+    }[namespace]
+    local = {
+        **native,
+        "parameter": [
+            row for row in native.get("parameter", []) if row.get("key") not in reference_keys
+        ],
+    }
+    references = [
+        row.get("value") for row in native.get("parameter", []) if row.get("key") in reference_keys
+    ]
+    for reference_key in reference_keys:
+        if reference_key in local:
+            references.append(local.pop(reference_key))
+    if field in effective_collection_fields(local, {}, namespace=namespace):
+        return owner
+    variables = {
+        item["name"]: item
+        for item in operations
+        if item["resource_family"] == "variable" and item["target_id"] == owner["target_id"]
+    }
+    found = []
+    for reference in references:
+        variable = variables.get(variable_name(reference))
+        if (
+            variable is None
+            or token(
+                str((variable.get("intended") or variable.get("pre_change") or {}).get("type", ""))
+            )
+            not in types
+        ):
+            raise FieldResolutionError(
+                "shared field owner is unresolved or has the wrong native type"
+            )
+        try:
+            found.append(
+                collection_field_owner(
+                    variable, operations, namespace=namespace, field=field, active=(*active, key)
+                )
+            )
+        except KeyError:
+            continue
+    if len(found) != 1:
+        raise KeyError(field)
+    return found[0]

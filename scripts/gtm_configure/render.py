@@ -18,6 +18,12 @@ from gtm_configure.domain.native import (
     decode_parameter,
     supports_native_mapping,
 )
+from gtm_configure.domain.web_native import (
+    effective_target,
+    send_page_view_value,
+    tag_additional_consent_checks,
+    tag_firing_option,
+)
 
 
 def semantic_field_changes(operation: dict, document: dict) -> list[str]:
@@ -267,7 +273,7 @@ def render_markdown(document: dict[str, Any], *, embed_machine: bool = False) ->
             ", ".join((f"{_cell(key)} {_cell(value)}" for key, value in sorted(counts.items())))
             or "none"
         ),
-        f"- Consent topologies: {_cell(len(document['consent_topologies']))}",
+        f"- Consent policies: {_cell(len(document['consent_policies']))}",
         f"- Pipelines: {_cell(len(document['pipelines']))}",
         "- Publication: not performed; no GTM version created",
         "- Runtime recette: not performed",
@@ -279,7 +285,7 @@ def render_markdown(document: dict[str, Any], *, embed_machine: bool = False) ->
     ]
     types = {target["target_id"]: target["container_type"] for target in document["run"]["targets"]}
     inspection = inspect_validated_document(document)
-    _render_readiness(inspection=inspection, lines=lines)
+    _render_readiness(inspection=inspection, lines=lines, document=document)
     alerts = []
     _render_target_summary(
         alerts=alerts, document=document, lines=lines, operations=operations, run=run
@@ -316,7 +322,32 @@ def render_markdown(document: dict[str, Any], *, embed_machine: bool = False) ->
     return "\n".join(lines).rstrip() + "\n"
 
 
-def _render_readiness(*, inspection, lines):
+def _failure_evidence(operation: dict) -> str:
+    """Describe the actual observation boundary without inferring write success."""
+    journal = operation.get("journal", [])
+    latest = journal[-1] if journal else {}
+    evidence = latest.get("result") or {}
+    comparison = operation.get("comparison") or evidence.get("comparison")
+    saved = operation.get("saved_readback", evidence.get("saved"))
+    if comparison and comparison.get("pass") is False and saved is not None:
+        paths = [
+            row.get("path", "")
+            for obj in comparison.get("report", {}).get("object_differences", [])
+            for row in obj.get("differences", [])
+            if isinstance(row, dict)
+        ]
+        return "Saved object observed; intended comparison failed" + (
+            ": " + ", ".join(paths[:3]) if paths else ""
+        )
+    return (
+        operation.get("error")
+        or latest.get("error")
+        or latest.get("note")
+        or "Authoritative readback required"
+    )
+
+
+def _render_readiness(*, inspection, lines, document):
     """Present the same execution frontier as CLI inspection, without reclassifying it."""
     summary = [
         "## Execution readiness and recovery",
@@ -324,15 +355,48 @@ def _render_readiness(*, inspection, lines):
         f"- Ready operations: {_cell(', '.join(inspection['ready_operations']) or 'none')}",
         f"- Resumable: {_cell(str(inspection['resumable']).lower())}",
     ]
-    for operation, reasons in inspection["blocked_operations"].items():
-        summary.append(f"- Blocked {_cell(operation)}: {_cell('; '.join(reasons))}")
-    for operation, dependencies in inspection["waiting_operations"].items():
+    operations = {item["operation_id"]: item for item in document["object_changes"]}
+    incomplete_targets = {
+        item["target_id"] for item in document["container_baselines"] if not item["complete"]
+    }
+    for target in sorted(incomplete_targets):
         summary.append(
-            f"- Waiting {_cell(operation)}: {_cell(', '.join(dependencies))} must be verified."
+            f"- Root target {_cell(target)}: complete target baseline required; operations remain held until the authenticated inventory is complete."
         )
+    roots = {}
+    for operation, reasons in inspection["blocked_operations"].items():
+        for reason in reasons:
+            origin = next((key for key in operations if reason.startswith(key + ": ")), operation)
+            cause = reason[len(origin) + 2 :] if reason.startswith(origin + ": ") else reason
+            if (
+                operations[operation]["target_id"] in incomplete_targets
+                and cause == "complete target baseline required"
+            ):
+                continue
+            roots.setdefault(origin, {"causes": set(), "dependents": set()})["causes"].add(cause)
+            roots[origin]["dependents"].add(operation)
     for operation in inspection["unsafe_operations"]:
+        roots.setdefault(operation, {"causes": set(), "dependents": set()})["causes"].add(
+            "authoritative readback required before replay"
+        )
+    for origin, group in sorted(roots.items()):
+        operation = operations[origin]
+        observed = (
+            _failure_evidence(operation)
+            if operation["state"] in {"failed", "uncertain", "saved", "in_progress"}
+            else "; ".join(sorted(group["causes"]))
+        )
+        recovery = (
+            "; authoritative readback required before replay"
+            if origin in inspection["unsafe_operations"]
+            else ""
+        )
         summary.append(
-            f"- Readback required {_cell(operation)}: resolve the write outcome with authoritative saved-state evidence before replay."
+            f"- Root {_cell(operation['name'])} [{_cell(origin)} / {_cell(operation['state'])}]: {_cell(observed)}{recovery}; dependent operations held: {_cell(len(group['dependents'] - {origin}))}."
+        )
+    if inspection["waiting_operations"]:
+        summary.append(
+            f"- Waiting for verifiable prerequisites: {_cell(len(inspection['waiting_operations']))} operations; individual dependencies remain in the machine record."
         )
     position = lines.index("## Targets and baseline")
     lines[position:position] = [*summary, ""]
@@ -417,19 +481,58 @@ def _render_object_changes(*, document, lines, operations, types):
         for item in sorted(
             document["inventory_dispositions"], key=lambda value: value["source_order"]
         ):
+            linked = [op for op in operations if op["operation_id"] in item["operation_ids"]]
+            tags = [op for op in linked if op["resource_family"] == "tag"]
+            before_tags = ", ".join(
+                op.get("pre_change", {}).get("name", op["name"])
+                for op in tags
+                if op["action"] != "create"
+            )
+            after_tags = ", ".join(
+                op.get("new_name", op["name"]) for op in tags if op["action"] != "remove"
+            )
+            before_triggers = "; ".join(
+                ", ".join(op.get("pre_change", {}).get("firingTriggerId", [])) for op in tags
+            )
+            after_triggers = "; ".join(
+                ", ".join(op.get("intended", {}).get("firingTriggerId", []))
+                for op in tags
+                if op["action"] != "remove"
+            )
+            variables = "; ".join(
+                f"{op['action']}: {op['name']}"
+                for op in linked
+                if op["resource_family"] == "variable"
+            )
+            parameters = "; ".join(
+                change
+                for op in tags
+                for change in analyst_field_changes(
+                    {"parameter": op.get("pre_change", {}).get("parameter", [])},
+                    {"parameter": op.get("intended", {}).get("parameter", [])},
+                )
+            )
+            consent = "; ".join(
+                change
+                for op in tags
+                for change in field_changes(
+                    op.get("pre_change", {}).get("consentSettings", {}),
+                    op.get("intended", {}).get("consentSettings", {}),
+                )
+            )
             lines.append(
                 "| {order} | {row} | {source} | {disposition} | {before} | {after} | {trigger_before} | {trigger_after} | {variables} | {parameters} | {consent} | {rationale} |".format(
                     order=_cell(item["source_order"]),
                     row=_cell(item["row_id"]),
                     source=_cell(item["source_locator"]),
                     disposition=_cell(item["disposition"]),
-                    before=_cell(item["before_tag_name"]),
-                    after=_cell(item["after_tag_name"]),
-                    trigger_before=_cell(item["trigger_before"]),
-                    trigger_after=_cell(item["trigger_after"]),
-                    variables=_cell(item["variable_changes"]),
-                    parameters=_cell(item["parameter_changes"]),
-                    consent=_cell(item["consent_changes"]),
+                    before=_cell(before_tags),
+                    after=_cell(after_tags),
+                    trigger_before=_cell(before_triggers),
+                    trigger_after=_cell(after_triggers),
+                    variables=_cell(variables),
+                    parameters=_cell(parameters),
+                    consent=_cell(consent),
                     rationale=_cell(item["rationale"]),
                 )
             )
@@ -496,6 +599,13 @@ def _render_object_changes(*, document, lines, operations, types):
         if operation.get("comparison"):
             outcome = "passed" if operation["comparison"]["pass"] else "failed"
             lines.append(f"- Readback comparison: {_cell(outcome)}")
+            integrity = operation["comparison"].get("report", {}).get("template_source_integrity")
+            if integrity:
+                lines.append(
+                    f"- Template content proof: full-content SHA-256; exact source bytes equal={_cell(integrity['exact_bytes_equal'])}; canonical source equal={_cell(integrity['canonical_source_equal'])}; hidden values remain unreported."
+                )
+        if operation["state"] in {"failed", "uncertain", "saved", "in_progress"}:
+            lines.append(f"- Saved-state evidence: {_cell(_failure_evidence(operation))}")
         if operation.get("replacement_reason"):
             lines.append(f"- Replacement reason: {_cell(operation['replacement_reason'])}")
         if operation.get("error"):
@@ -512,10 +622,17 @@ def _render_requirement_mapping(*, document, lines, operations):
             for item in document["payload_mappings"]
             if item["requirement_id"] == requirement_id
         ]
+        policy_ids = {
+            item["consent_policy_id"]
+            for item in document["tag_policies"]
+            if item["tag_object_key"] in requirement.get("object_keys", [])
+        } | {
+            item["consent_policy_id"]
+            for item in document["consent_policies"]
+            if set(item["server_tag_keys"]) & set(requirement.get("object_keys", []))
+        }
         topologies = [
-            item
-            for item in document["consent_topologies"]
-            if requirement_id in item.get("requirement_ids", [])
+            item for item in document["consent_policies"] if item["consent_policy_id"] in policy_ids
         ]
         lines.extend(
             [
@@ -535,7 +652,7 @@ def _render_requirement_mapping(*, document, lines, operations):
                     )
                 lines.append(
                     "- Consent {identifier}: authority {authority}; web {web}; server {server}; transport {transport}; unknown {unknown}".format(
-                        identifier=_cell(topology["consent_topology_id"]),
+                        identifier=_cell(topology["consent_policy_id"]),
                         authority=_cell(topology["signal_authority"]),
                         web=_cell(topology["web_enforcement"]["mechanism"]),
                         server=_cell(topology["server_enforcement"]["mechanism"]),
@@ -559,20 +676,16 @@ def _render_requirement_mapping(*, document, lines, operations):
                 )
             )
             if mapping["status"] == "mapped":
-                binding = mapping.get("native_binding")
+                binding = mapping.get("owner_object_key")
                 owner = next(
-                    (
-                        item
-                        for item in operations
-                        if binding and item["object_key"] == binding["object_key"]
-                    ),
+                    (item for item in operations if binding and item["object_key"] == binding),
                     {},
                 )
                 target = owner.get("intended") or owner.get("pre_change") or {}
                 lines.append(
                     "  Mapping assurance: "
                     + (
-                        f"exact native event-parameter intention checked at {_cell(binding['object_key'])} / {_cell(binding['field'])}; saved equality follows operation verification."
+                        f"exact native intention checked at {_cell(binding)} / {_cell(mapping['destination_field'])}; saved binding {_cell('verified by readback' if owner.get('state') == 'verified' else 'not yet verified')} ."
                         if binding and supports_native_mapping(mapping, target)
                         else "agent-reviewed mapping declaration; native field equality and source routing are not verified for this scope/structure or automatic/product behavior."
                     )
@@ -583,33 +696,57 @@ def _render_requirement_mapping(*, document, lines, operations):
 
 
 def _render_domain_decisions(*, document, lines):
-    lines.extend(["## Per-tag web execution topology", ""])
-    if not document["execution_topologies"]:
-        lines.append("No web tag topology is recorded.")
-    for topology in document["execution_topologies"]:
+    lines.extend(["## Per-tag web execution policy", ""])
+    if not document["tag_policies"]:
+        lines.append("No web tag policy is recorded.")
+    operations = {item["object_key"]: item for item in document["object_changes"]}
+    for topology in document["tag_policies"]:
+        operation = operations[topology["tag_object_key"]]
+        target = effective_target(operation, "report tag policy")
         triggers = ", ".join(
             (
-                f"{trigger['trigger_object_key']} [{trigger['role']}/{trigger['type']}]"
-                for trigger in topology["normal_triggers"]
+                f"{trigger['trigger_object_key']} [{trigger['role']}]"
+                for trigger in topology["trigger_roles"]
             )
         )
         lines.append(
-            "- {tag}: {role}; triggers {triggers}; blocks {blocks}; consent {consent}; firing {firing}; pre-CMP {pre_cmp}; ecommerce {ecommerce}".format(
+            "- {tag}: {role}; triggers {triggers}; blocks {blocks}; consent {consent}; firing {firing}; pre-CMP {pre_cmp}".format(
                 tag=_cell(topology["tag_object_key"]),
                 role=_cell(topology["lifecycle_role"]),
                 triggers=_cell(triggers or "none"),
-                blocks=_cell(", ".join(topology["blocking_trigger_keys"]) or "none"),
-                consent=_cell(", ".join(topology.get("consent_topology_ids", [])) or "none"),
-                firing=_cell(topology["firing_option"]),
+                blocks=_cell(", ".join(target.get("blockingTriggerId", [])) or "none"),
+                consent=_cell(
+                    (topology["consent_policy_id"] or "none")
+                    + "; additional checks "
+                    + (
+                        ", ".join(tag_additional_consent_checks(target, "report tag policy"))
+                        or "none"
+                    )
+                ),
+                firing=_cell(tag_firing_option(target, "report tag policy")),
                 pre_cmp=_cell(topology["pre_cmp_policy"]),
-                ecommerce=_cell(topology["ecommerce_route"]),
             )
         )
     lines.append("")
     lines.extend(["## Page-view and first-party-data decisions", ""])
     for decision in document["page_view_decisions"]:
+        owner = operations.get(decision.get("google_tag_object_key"))
+        scoped = {
+            key: item
+            for key, item in operations.items()
+            if item["target_id"] == decision["target_id"]
+        }
+        page_view = (
+            str(
+                send_page_view_value(
+                    effective_target(owner, "report page view"), "report page view", scoped
+                )
+            ).lower()
+            if owner
+            else "not-applicable"
+        )
         lines.append(
-            f"- Page view {_cell(decision['destination'])} / {_cell(decision['occurrence'])}: {_cell(decision['owner'])}; send_page_view={_cell(str(decision['send_page_view']).lower() if decision['send_page_view'] is not None else 'not-applicable')}; Google tag={_cell(decision.get('google_tag_object_key') or 'none')}; {_cell(decision['reason'])}"
+            f"- Page view {_cell(decision['destination'])} / {_cell(decision['occurrence'])}: {_cell(decision['owner'])}; send_page_view={_cell(page_view)}; Google tag={_cell(decision.get('google_tag_object_key') or 'none')}; {_cell(decision['reason'])}"
         )
     for route in document["first_party_data_routes"]:
         fields = ", ".join((item["name"] for item in route["fields"]))
@@ -652,9 +789,13 @@ def _render_domain_decisions(*, document, lines):
 
 def _render_handoff(*, document, lines, run):
     lines.extend(["", "## Official guidance applied", ""])
+    lines.append(
+        "Review rationale records the intended implementation. Saved completion is established by operation journals and readback comparisons above."
+    )
+    lines.append("")
     for source in document["official_sources"]:
         lines.append(
-            f"- {_source_link(source)} (accessed {_cell(source['access_date'])}; requirements {_cell(', '.join(source['supports']))}): {_cell(source['decision'])}"
+            f"- {_source_link(source)} (accessed {_cell(source['access_date'])}; requirements {_cell(', '.join(source['supports']))}); review rationale: {_cell(source['decision'])}"
         )
     lines.extend(["", "## External actions, publication, and recette", ""])
     if document["external_dependencies"]:

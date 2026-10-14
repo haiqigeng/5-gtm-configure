@@ -16,6 +16,9 @@ Use that product's documented collection protocol and endpoint.
 Inspect documented GTM integrations alongside the collection API. For example, check
 [Piwik PRO's server GTM guide](https://help.piwik.pro/support/integrations/google-tag-manager-server-side-integration/)
 and [Piano's implementation-method matrix](https://developers.piano.io/analytics/data-collection/general/implementation-methods/).
+Matomo also documents a [server Client route](https://matomo.org/faq/new-to-piwik/how-to-integrate-matomo-tracking-in-server-side-google-tag-manager-sgtm/)
+that serves its script and routes its tracking requests to Matomo. Inspect that Client's actual
+claim/forward behavior and endpoint contract for the selected architecture.
 Prove which capability is being configured: serving a script, proxying a request, claiming Event
 Data, or sending destination events. The first two do not by themselves prove the latter two.
 

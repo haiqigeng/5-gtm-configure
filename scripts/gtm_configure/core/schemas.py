@@ -8,13 +8,24 @@ from jsonschema import Draft202012Validator
 from referencing import Registry, Resource
 
 
-@lru_cache(maxsize=3)
-def validator(kind):
+@lru_cache(maxsize=1)
+def _local_schemas():
     root = Path(__file__).resolve().parents[3] / "schemas"
-    documents = [json.loads(p.read_text(encoding="utf-8")) for p in root.glob("*.schema.json")]
+    return [json.loads(p.read_text(encoding="utf-8")) for p in root.glob("*.schema.json")]
+
+
+@lru_cache(maxsize=1)
+def _registry():
+    documents = _local_schemas()
     registry = Registry().with_resources(
         (doc["$id"], Resource.from_contents(doc)) for doc in documents
     )
+    return registry
+
+
+@lru_cache(maxsize=3)
+def validator(kind):
+    documents = _local_schemas()
     schema = next(
         doc
         for doc in documents
@@ -22,7 +33,12 @@ def validator(kind):
             "common.schema.json" if kind == "common" else f"configuration-{kind}.schema.json"
         )
     )
-    return Draft202012Validator(schema, registry=registry)
+    return Draft202012Validator(schema, registry=_registry())
+
+
+def schema_resolver(kind):
+    """Resolve nested references with the owning local document as their origin."""
+    return _registry().resolver_with_root(Resource.from_contents(validator(kind).schema))
 
 
 def validate_structure(value, kind, fail):
@@ -56,3 +72,16 @@ def field_collections():
     return {
         name: row["x-field-model"] for name, row in properties.items() if "x-field-model" in row
     }
+
+
+@lru_cache(maxsize=None)
+def schema_enum(kind, *path):
+    """Read immutable vocabularies from their closed schema owner."""
+    value = validator(kind).schema
+    resolver = schema_resolver(kind)
+    for key in path:
+        value = value[key]
+    while "$ref" in value:
+        resolved = resolver.lookup(value["$ref"])
+        value, resolver = resolved.contents, resolved.resolver
+    return frozenset(value["enum"])

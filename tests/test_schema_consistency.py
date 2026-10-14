@@ -49,8 +49,6 @@ class SharedSchemaTests(unittest.TestCase):
             (run, validate_run, RunValidationError),
         ):
             with self.subTest(phase=document["schema_version"]):
-                document["consent_topologies"][0]["web_enforcement"]["mechanism"] = (
-                    "unreviewed-gate"
-                )
+                document["consent_policies"][0]["web_enforcement"]["mechanism"] = "unreviewed-gate"
                 with self.assertRaisesRegex(error, "mechanism.*unreviewed-gate.*is not one of"):
                     validate(document)

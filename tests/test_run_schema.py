@@ -17,6 +17,7 @@ from gtm_configure.core.model import (  # noqa: E402
     RUN_STATUSES,
     SCHEMA_VERSION,
 )
+from gtm_configure.core.schemas import definition_validator, schema_enum
 from gtm_configure.core.validation import RunValidationError
 from gtm_configure.domain.web_model import FIRST_PARTY_FEATURES
 from gtm_configure.runtime.state import create_from_contract
@@ -46,18 +47,25 @@ class ConfigurationRunSchemaTest(unittest.TestCase):
     def test_schema_and_python_authority_enums_stay_in_sync(self) -> None:
         value = schema()
         properties = value["properties"]
-        operation = value["$defs"]["operation"]["properties"]
-        run = value["$defs"]["run"]["properties"]
-        first_party = json.loads((ROOT / "schemas/common.schema.json").read_text())["$defs"][
-            "firstPartyRoute"
-        ]["properties"]
         self.assertEqual(properties["schema_version"]["const"], SCHEMA_VERSION)
-        self.assertEqual(set(operation["action"]["enum"]), ACTIONS)
-        self.assertEqual(set(operation["resource_family"]["enum"]), RESOURCE_FAMILIES)
-        self.assertEqual(set(operation["state"]["enum"]), OPERATION_STATES)
-        self.assertEqual(set(run["phase"]["enum"]), RUN_PHASES)
-        self.assertEqual(set(value["$defs"]["status"]["enum"]), RUN_STATUSES)
-        self.assertEqual(set(first_party["feature"]["enum"]), FIRST_PARTY_FEATURES)
+        for name, expected in (
+            ("action", ACTIONS),
+            ("state", OPERATION_STATES),
+        ):
+            self.assertEqual(schema_enum("run", "$defs", "operation", "properties", name), expected)
+        # The target-aware registry owns families; the shared schema owns their text shape.
+        self.assertTrue(
+            all(
+                definition_validator("resourceFamily").is_valid(family)
+                for family in RESOURCE_FAMILIES
+            )
+        )
+        self.assertEqual(schema_enum("run", "$defs", "run", "properties", "phase"), RUN_PHASES)
+        self.assertEqual(schema_enum("run", "$defs", "status"), RUN_STATUSES)
+        self.assertEqual(
+            schema_enum("common", "$defs", "firstPartyRoute", "properties", "feature"),
+            FIRST_PARTY_FEATURES,
+        )
 
     def test_schema_and_python_reject_unknown_mutation_fields(self) -> None:
         document = create_from_contract(

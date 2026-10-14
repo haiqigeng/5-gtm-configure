@@ -7,49 +7,12 @@ decision to an exact native field and literal; they do not authenticate its auth
 from __future__ import annotations
 
 import hashlib
-import json
 import re
 from typing import Any
 from urllib.parse import urlsplit
 
-from gtm_configure.core.json_io import loads_strict
 from gtm_configure.core.schemas import definition_validator
-
-
-def canonical_template_source(value: str) -> str:
-    """Normalize native serialization while retaining all sections and code interiors.
-
-    BOM, CRLF, section boundary whitespace and JSON object serialization are
-    representational. Arrays, JSON strings, permissions and full INFO stay significant.
-    Malformed or duplicate sections stay byte-exact.
-    """
-    source = value.lstrip("\ufeff").replace("\r\n", "\n")
-    sections = re.split(r"(?m)^(___[A-Z_]+___)[ \t]*$", source)
-    headers = sections[1::2]
-    if not headers or len(headers) != len(set(headers)):
-        return value
-    json_sections = {
-        "___INFO___",
-        "___TEMPLATE_PARAMETERS___",
-        "___WEB_PERMISSIONS___",
-        "___SERVER_PERMISSIONS___",
-    }
-    output = [sections[0].strip()]
-    try:
-        for header, body in zip(headers, sections[2::2]):
-            body = body.strip()
-            if header in json_sections:
-                body = json.dumps(
-                    loads_strict(body),
-                    sort_keys=True,
-                    separators=(",", ":"),
-                    ensure_ascii=False,
-                    allow_nan=False,
-                )
-            output.extend((header, body))
-    except (ValueError, TypeError):
-        return value
-    return "\n".join(output)
+from gtm_configure.core.template_source import canonical_template_source, valid_source_integrity
 
 
 def _matches_reviewed_template(literal: Any, record: dict, declaration: dict) -> bool:
@@ -134,7 +97,7 @@ def validate_public_identifiers(document: dict) -> None:
                 raise ValueError("Template fixtures must bind the exact templateData source")
             if path == ["templateData"] and not template_fixture:
                 raise ValueError(
-                    "Template source requires inspected inspected-template-source classification"
+                    "Template source requires inspected-template-source classification"
                 )
             if (
                 not isinstance(path, list)
@@ -177,7 +140,18 @@ def validate_public_identifiers(document: dict) -> None:
                 raise ValueError(
                     "public identifier path does not resolve in intended native fields"
                 ) from exc
-            if not _matches(literal, digest) or not literal or literal.strip().startswith("{{"):
+            source_proved = (
+                template_fixture
+                and isinstance(literal, dict)
+                and valid_source_integrity(literal.get("source_integrity"))
+                and literal["source_integrity"]["source_sha256"] == digest
+            )
+            if (
+                not (_matches(literal, digest) or source_proved)
+                or not literal
+                or isinstance(literal, str)
+                and literal.strip().startswith("{{")
+            ):
                 raise ValueError(
                     "public identifier declaration must bind the exact intended literal"
                 )
@@ -194,7 +168,13 @@ def validate_public_identifiers(document: dict) -> None:
                 if (
                     not isinstance(previous, str)
                     or not re.fullmatch(r"[a-f0-9]{64}", previous)
-                    or not _matches(previous_value, previous)
+                    or not (
+                        _matches(previous_value, previous)
+                        or template_fixture
+                        and isinstance(previous_value, dict)
+                        and valid_source_integrity(previous_value.get("source_integrity"))
+                        and previous_value["source_integrity"]["source_sha256"] == previous
+                    )
                 ):
                     raise ValueError("previous public identifier digest must bind pre_change")
             url = declaration["source_url"]

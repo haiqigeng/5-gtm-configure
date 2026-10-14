@@ -32,7 +32,9 @@ def generated_contract():
         "justification": "Reuse the inspected occurrence-scoped generator",
         "evidence": ["container-confirmed"],
         "risk": "routine",
-        "intended": {"templateData": "Synthetic inspected template source"},
+        "intended": {
+            "templateData": '___INFO___\n{"id":"cvt_123_456"}\n___TEMPLATE_PARAMETERS___\n[]\n___SANDBOXED_JS_FOR_WEB_TEMPLATE___\nreturn "synthetic occurrence id";\n'
+        },
     }
     contract["implementation"]["objects"].append(template)
     variable = next(
@@ -45,7 +47,6 @@ def generated_contract():
     dedup["source_type"] = "generated-event-id"
     dedup["generation"] = {
         "template_object_key": template_key,
-        "template_type": "cvt_123_456",
         "review_locator": "Synthetic source and permission review; same-event repeated reads stable",
         "consumer_bindings": [
             {"object_key": key, "field_path": ["event_id"]}
@@ -64,7 +65,7 @@ class SharedEventIdTestFixture(unittest.TestCase):
         validate_generated_event_ids(
             contract["dedup_contracts"],
             contract["implementation"]["objects"],
-            contract["execution_topologies"],
+            contract["tag_policies"],
             {item["target_id"]: item["container_type"] for item in contract["targets"]},
             errors.append,
         )

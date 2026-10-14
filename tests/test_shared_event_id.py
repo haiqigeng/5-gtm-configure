@@ -5,7 +5,7 @@ import tempfile
 from copy import deepcopy
 from pathlib import Path
 
-from gtm_configure.contract import validate_document
+from gtm_configure.contract import ContractValidationError, validate_document
 from gtm_configure.domain.deduplication import validate_generated_event_ids  # noqa: E402
 from gtm_configure.runtime.adapter_protocol import atomic_write
 from gtm_configure.runtime.engine import (
@@ -111,7 +111,7 @@ class SharedEventIdTest(SharedEventIdTestFixture):
         validate_generated_event_ids(
             contract["dedup_contracts"],
             contract["implementation"]["objects"],
-            contract["execution_topologies"],
+            contract["tag_policies"],
             {"web-main": "web", "server-main": "server"},
             errors.append,
             baselines,
@@ -124,7 +124,7 @@ class SharedEventIdTest(SharedEventIdTestFixture):
             ({"trigger_object_key": "web-main::trigger::Different event"}, "exact source-event"),
         ):
             contract = generated_contract()
-            contract["execution_topologies"][-1]["normal_triggers"][0].update(change)
+            contract["tag_policies"][-1]["trigger_roles"][0].update(change)
             self.assert_generation_rejected(contract, message)
 
     def test_purchase_stays_on_stable_order_identity(self):
@@ -152,6 +152,26 @@ class SharedEventIdTest(SharedEventIdTestFixture):
             else:
                 by_key[dedup["source_variable_key"]]["depends_on"] = []
             self.assert_generation_rejected(contract, message)
+
+    def test_installed_source_identity_owns_generator_type(self):
+        contract = generated_contract()
+        generation = contract["dedup_contracts"][0]["generation"]
+        template = next(
+            row
+            for row in contract["implementation"]["objects"]
+            if row["object_key"] == generation["template_object_key"]
+        )
+        template["intended"]["templateData"] = template["intended"]["templateData"].replace(
+            "cvt_123_456", "cvt_999_456"
+        )
+        with self.assertRaisesRegex(ContractValidationError, "matching installed source"):
+            validate_document(approve_mutations(contract))
+
+    def test_generation_rejects_authored_native_type_copy(self):
+        contract = generated_contract()
+        contract["dedup_contracts"][0]["generation"]["template_type"] = "cvt_123_456"
+        with self.assertRaisesRegex(ContractValidationError, "template_type.*unexpected"):
+            validate_document(contract)
 
     def test_native_keyed_parameter_binding_and_duplicate_rejection(self):
         contract = generated_contract()

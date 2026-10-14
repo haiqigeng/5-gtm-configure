@@ -33,24 +33,33 @@ class TestNativeBoundaries(fixture_native_boundaries.NativeBoundaryTestsFixture)
 class TestPhaseContracts(fixture_phase_contracts.CurrentContractAndRunTestFixture):
     def test_consent_rejects_accidental_double_gate_and_missing_event_coverage(self) -> None:
         contract = fixture_phase_contracts.valid_pipeline_contract()
-        topology = contract["consent_topologies"][0]
+        topology = contract["consent_policies"][0]
         topology.update(
             {
                 "signal_authority": "third-party-cmp",
                 "server_signal_path": "cmp.analytics.allowed",
                 "unknown_state_behavior": "deny",
                 "transport_behavior": "blocked",
-                "transporter_tag_keys": [],
                 "server_enforcement": {"mechanism": "server-template-native-consent"},
             }
         )
+        blocked_web = fixture_phase_contracts.valid_web_contract()
+        block = fixture_phase_contracts.deepcopy(blocked_web["implementation"]["objects"][-1])
+        contract["implementation"]["objects"].append(block)
+        sender = contract["implementation"]["objects"][0]
+        sender["intended"]["blockingTriggerId"] = [block["object_key"]]
+        sender["depends_on"].append(block["object_key"])
+        topology["web_enforcement"] = {"mechanism": "cmp-lifecycle-plus-vendor-block"}
+        from support.contracts import approve_mutations
+
+        approve_mutations(contract)
         with self.assertRaisesRegex(
             fixture_phase_contracts.ContractValidationError, "duplicates a transport block"
         ):
             fixture_phase_contracts.validate_contract(contract)
 
         contract = fixture_phase_contracts.valid_pipeline_contract()
-        contract["consent_topologies"][0]["event_coverage"] = ["purchase"]
+        contract["consent_policies"][0]["event_coverage"] = ["purchase"]
         with self.assertRaisesRegex(
             fixture_phase_contracts.RunValidationError, "missing transported event coverage"
         ):
@@ -119,7 +128,7 @@ class TestDurableEvidence(fixture_durable_evidence.CurrentRegressionHardeningTes
             fixture_durable_evidence.validate_contract(contract)
 
         contract = fixture_durable_evidence.valid_server_contract()
-        contract["consent_topologies"] = []
+        contract["consent_policies"] = []
         with self.assertRaisesRegex(
             fixture_durable_evidence.ContractValidationError, "consent topology"
         ):
@@ -144,16 +153,15 @@ class TestDurableEvidence(fixture_durable_evidence.CurrentRegressionHardeningTes
         ]
         fixture_durable_evidence.approve_mutations(contract)
         with self.assertRaisesRegex(
-            fixture_durable_evidence.ContractValidationError, "must not carry"
+            fixture_durable_evidence.ContractValidationError, "vendor blocking"
         ):
             fixture_durable_evidence.validate_contract(contract)
 
         contract = fixture_durable_evidence.valid_pipeline_contract()
-        topology = contract["consent_topologies"][0]
-        topology["intentional_double_gate"] = True
+        topology = contract["consent_policies"][0]
         topology["double_gate_justification"] = "Declared twice without two configurable gates."
         with self.assertRaisesRegex(
-            fixture_durable_evidence.ContractValidationError, "without two configurable gates"
+            fixture_durable_evidence.ContractValidationError, "requires two configurable gates"
         ):
             fixture_durable_evidence.validate_contract(contract)
 
@@ -192,7 +200,7 @@ class TestConsentAndFields(fixture_consent_and_fields.UtilityCorrectionsFixture)
         req = fixture_consent_and_fields.ungated_request()
         req["route"] = "media"
         req["requirements"][0].update(destination="Meta", event_name="Lead")
-        req["consent_topologies"][0]["destination"] = "Meta"
+        req["consent_policies"][0]["destination"] = "Meta"
         req["objects"][0]["intended"].update(
             type="cvt_42",
             parameter=[
@@ -200,7 +208,22 @@ class TestConsentAndFields(fixture_consent_and_fields.UtilityCorrectionsFixture)
                 fixture_consent_and_fields.param("eventName", "Lead"),
             ],
         )
-        req["execution_topologies"][0]["built_in_consent_checks"] = []
+        template_key = "web-main::template::Inspected Meta fixture"
+        req["objects"][0]["depends_on"] = [template_key]
+        req["reuse_candidates"].append(
+            {
+                "resource_family": "template",
+                "name": "Inspected Meta fixture",
+                "object_key": template_key,
+                "action": "reuse",
+                "intended": {
+                    "templateData": '___INFO___\n{"id":"cvt_42"}\n___TEMPLATE_PARAMETERS___\n[{"name":"pixelId","type":"TEXT"},{"name":"eventName","type":"TEXT"}]\n___SANDBOXED_JS_FOR_WEB_TEMPLATE___\nreturn true;\n'
+                },
+                "justification": "Synthetic inspected matching native fields",
+                "evidence": ["container-confirmed"],
+                "risk": "routine",
+            }
+        )
         doc, backend = fixture_consent_and_fields.execute(req)
         self.assertEqual(doc["run"]["status"], "Configured")
         self.assertEqual(len(backend.writes), 1)
@@ -215,7 +238,7 @@ class TestConsentAndFields(fixture_consent_and_fields.UtilityCorrectionsFixture)
     def test_ungated_policy_requires_authority_and_scope(self):
         for field in ("locator", "scope", "grade"):
             req = fixture_consent_and_fields.ungated_request()
-            del req["consent_topologies"][0]["web_enforcement"]["client_policy"][field]
+            del req["consent_policies"][0]["web_enforcement"]["client_policy"][field]
             with (
                 self.subTest(field=field),
                 self.assertRaisesRegex(ValueError, "approved-input client_policy"),
@@ -224,7 +247,7 @@ class TestConsentAndFields(fixture_consent_and_fields.UtilityCorrectionsFixture)
 
     def test_ungated_policy_rejects_cmp_behavior(self):
         req = fixture_consent_and_fields.ungated_request()
-        req["execution_topologies"][0].update(may_precede_cmp=True, pre_cmp_policy="drop")
+        req["tag_policies"][0].update(pre_cmp_policy="drop")
         with self.assertRaisesRegex(ValueError, "pre_cmp_policy"):
             fixture_consent_and_fields.compile_request(req)
 
@@ -244,11 +267,8 @@ class TestConsentAndFields(fixture_consent_and_fields.UtilityCorrectionsFixture)
     def test_additional_checks_require_real_denied_default_and_initialization(self):
         execution = {
             "tag_object_key": "event",
-            "blocking_trigger_keys": [],
             "blocking_event_scope": None,
             "lifecycle_role": "event-driven",
-            "firing_option": "once-per-event",
-            "additional_consent_checks": ["analytics_storage"],
         }
         enforcement = {
             "mechanism": "additional-consent-checks",
@@ -261,7 +281,19 @@ class TestConsentAndFields(fixture_consent_and_fields.UtilityCorrectionsFixture)
             },
         }
         operations = {
-            "event": {"depends_on": ["cmp"]},
+            "event": {
+                "depends_on": ["cmp"],
+                "intended": {
+                    "tagFiringOption": "oncePerEvent",
+                    "consentSettings": {
+                        "consentStatus": "needed",
+                        "consentType": {
+                            "type": "list",
+                            "list": [{"type": "template", "value": "analytics_storage"}],
+                        },
+                    },
+                },
+            },
             "cmp": {
                 "action": "reuse",
                 "resource_family": "tag",
@@ -289,8 +321,7 @@ class TestConsentAndFields(fixture_consent_and_fields.UtilityCorrectionsFixture)
 class TestTransportAndState(fixture_transport_and_state.UtilityEvolutionTestFixture):
     def test_basic_cannot_mean_always_on_google_native_transport(self):
         contract = fixture_transport_and_state.valid_pipeline_contract()
-        contract["consent_topologies"][0]["consent_mode"] = "strict-basic"
-        contract["execution_topologies"][0]["consent_mode"] = "strict-basic"
+        contract["consent_policies"][0]["consent_mode"] = "strict-basic"
         with self.assertRaisesRegex(
             fixture_transport_and_state.ContractValidationError, "strict-basic cannot"
         ):
@@ -298,7 +329,7 @@ class TestTransportAndState(fixture_transport_and_state.UtilityEvolutionTestFixt
         self.assertEqual(
             fixture_transport_and_state.validate_document(
                 fixture_transport_and_state.valid_pipeline_contract()
-            )["consent_topologies"][0]["consent_mode"],
+            )["consent_policies"][0]["consent_mode"],
             "advanced-native",
         )
 
@@ -310,26 +341,22 @@ class TestTransportAndState(fixture_transport_and_state.UtilityEvolutionTestFixt
         sender = contract["implementation"]["objects"][0]
         sender["intended"]["blockingTriggerId"] = [block["object_key"]]
         sender["depends_on"].append(block["object_key"])
-        topology = contract["consent_topologies"][0]
+        topology = contract["consent_policies"][0]
         topology.update(
             consent_mode="strict-basic",
             transport_behavior="blocked",
             web_enforcement={"mechanism": "cmp-lifecycle-plus-vendor-block"},
-            transporter_destination_vendor_block=True,
-            intentional_double_gate=False,
         )
         topology.pop("double_gate_justification", None)
-        execution = contract["execution_topologies"][0]
+        execution = contract["tag_policies"][0]
         execution.update(
-            consent_mode="strict-basic",
-            blocking_trigger_keys=[block["object_key"]],
             blocking_event_scope=".*",
         )
         fixture_transport_and_state.approve_mutations(contract)
         run = fixture_transport_and_state.create_from_contract(
             contract, run_id="BASIC", source_locator="synthetic explicit basic authority"
         )
-        self.assertEqual(run["consent_topologies"][0]["consent_mode"], "strict-basic")
+        self.assertEqual(run["consent_policies"][0]["consent_mode"], "strict-basic")
 
 
 class TestGoogleSettings(fixture_google_settings.BuiltInTriggerTestFixture):
@@ -337,11 +364,10 @@ class TestGoogleSettings(fixture_google_settings.BuiltInTriggerTestFixture):
         contract = fixture_google_settings.valid_pipeline_contract()
         owner = contract["implementation"]["objects"][0]
         owner["intended"]["firingTriggerId"] = ["2147479573"]
-        contract["execution_topologies"][0]["normal_triggers"] = [
+        contract["tag_policies"][0]["trigger_roles"] = [
             {
                 "trigger_object_key": "2147479573",
                 "role": "initialization-page-load",
-                "type": "initialization",
             }
         ]
         fixture_google_settings.approve_mutations(contract)

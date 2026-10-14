@@ -36,12 +36,12 @@ class TestDurableEvidence(fixture_durable_evidence.CurrentRegressionHardeningTes
         contract["implementation"]["objects"][0]["intended"]["send_page_view"] = False
         fixture_durable_evidence.approve_mutations(contract)
         with self.assertRaisesRegex(
-            fixture_durable_evidence.ContractValidationError, "send_page_view"
+            fixture_durable_evidence.ContractValidationError, "native page_view"
         ):
             fixture_durable_evidence.validate_contract(contract)
 
     def test_malformed_pipeline_records_fail_as_validation_errors_not_key_errors(self) -> None:
-        for field in ("consent_topologies", "dedup_contracts"):
+        for field in ("consent_policies", "dedup_contracts"):
             run = fixture_durable_evidence.materialize(
                 fixture_durable_evidence.valid_pipeline_contract()
             )
@@ -112,7 +112,7 @@ class TestAdapters(fixture_adapters.CurrentAdapterRuntimeTestFixture):
                 "Google tag - Web transport": {
                     "type": "googtag",
                     "measurement_id": "G-CHANGED",
-                    "send_page_view": True,
+                    "native page_view": True,
                     "tagManagerUrl": "https://tagmanager.google.com/ignored-metadata",
                 }
             }

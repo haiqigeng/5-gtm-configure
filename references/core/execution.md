@@ -2,7 +2,7 @@
 
 ## Use one durable run artifact
 
-Use one `configuration-run@8.0` artifact for each configuration task, including isolated changes.
+Use one `configuration-run@9.0` artifact for each configuration task, including isolated changes.
 The [contract](authoring.md) owns approved requirements, targets, intended actions and feature
 relationships. The run owns operation state, target evidence, recovery and the configuration result.
 [The run schema](../../schemas/configuration-run.schema.json) validates structure; shared domain
@@ -14,13 +14,22 @@ and resolve their uncertain writes before preparing a new run. Resumed input fol
 
 ## Materialize deterministically
 
-`init` validates contract 10.0 and creates target-scoped operations with stable IDs. Replacing an
-existing output requires `--replace-planned` and an artifact with no write history.
+`init` validates contract 11.0 and creates stable target-scoped operation IDs at a new output path.
+The current run retains approved requirement and exact field fingerprints, native intentions, policy relationships,
+readbacks and its authenticated baseline. Runtime APIs update execution evidence and derived results.
 
-Materialized requirements, target identity, object intention/dependencies, mappings, topologies,
-deduplication, evidence and external/publication declarations remain bound to their contract
-fingerprints. Update implementation decisions in the contract before execution. The runtime alone
-updates capabilities, baseline, journal, readbacks, comparisons and derived results through its APIs.
+Revise the remaining graph through `run revise` using the current durable run, an approved contract,
+inspection's `run_fingerprint`, and a rationale. The locked transition rejects stale inspection and
+unreconciled dispatched writes. Verified operations keep their IDs, authority, journals, saved proof
+and bound source/policy semantics. Planned work can change; an already completed intention requires
+an authorized follow-on operation. The run keeps the prior/new contract fingerprints, timestamp and
+changed planned object keys. A revision with no approved change preserves the existing run through
+an explicit no-change rejection. New required resource families receive supplemental authenticated
+capture receipts before their operations become ready; the original baseline evidence remains intact.
+Semantic owners determine the protected proof: a verified shared source or settings variable keeps
+its native intent and exact approved fields; executing consumers keep their event and product policies.
+Planned consumers can correct their own approved event, lifecycle and receiver flows while their
+verified prerequisites retain the original authority, receipts and journals.
 
 Capture each target's relevant families and workspace changes with exhausted pagination before
 mutation. An isolated run includes required dependency/consumer closure; refonte includes every
@@ -55,10 +64,11 @@ Each target has its own baseline, capability matrix, journal and recovery fronti
 are planned, have complete target baselines and verified dependencies, and have resolved owned
 fields. Authentication failure holds the affected target until revalidation.
 
-Readiness distinguishes field ownership from inherited requirement attribution. Explicit bindings
-identify owners; supported native namespaces resolve unbound configuration/event fields; unclassified
-fields attach to their executing consumers. A complete shared dependency remains usable by a ready
-requirement. An unresolved field on the shared owner blocks that owner and its dependents.
+Every outgoing field binds its semantic owner directly through `owner_object_key`; pipeline fields
+bind `receiver_owner`. Readiness uses those owners, including shared settings variables, and derives
+dependency demand independently of operation authorization. A complete shared dependency remains
+usable by a ready requirement. An unresolved field on the shared owner blocks that owner and every
+dependent consumer; unresolved event overrides hold their own consumers.
 
 Failure, uncertainty and field blockers propagate with their originating reason. `waiting` identifies
 a dependency that can still complete; `blocked` identifies a prerequisite requiring resolution.
@@ -66,6 +76,14 @@ Independent authorized subtrees can continue. Pipeline sender cutover follows al
 receiver operations under [pipeline ordering](../pipeline/architecture-and-workflow.md#build-receiver-first).
 
 ## Resume only from proved state
+
+After authoritative reconciliation, use the same run for a revised approved graph:
+
+```powershell
+python "<skill-dir>/scripts/configure_gtm.py" run inspect --run configuration-run.json
+python "<skill-dir>/scripts/configure_gtm.py" run revise --run configuration-run.json --contract contract.json --expected-fingerprint "sha256:<inspection fingerprint>" --note "Approved remaining graph correction"
+```
+
 
 Validate the run before adapter calls. Resolve `in_progress` or `uncertain` through authoritative
 readback, recorded with `run checkpoint --saved-readback`: verify an applied matching write,
@@ -105,7 +123,14 @@ values travel through ephemeral secure input and an appropriate bound credential
 Readback can establish secret-field presence and non-secret equality. Record secret comparisons as
 `present-not-compared` with `value_equality_claimed: false`. A delta involving a hidden value needs
 a safe reference/version/rotation locator; otherwise hold that comparison. Redacted markers carry
-presence evidence only.
+presence evidence for hidden values. A redacted template source additionally retains full-content
+UTF-8 SHA-256 and canonical-source SHA-256, plus native identity/field-type facts extracted before
+redaction. The comparison reports exact-byte agreement and canonical source agreement separately;
+this proves the integrity of the complete template, including code, permissions, INFO and tests,
+without exposing or claiming equality of individual hidden credential values. Representation
+normalization covers native line endings and JSON object serialization; source semantics stay
+bound to the complete-content proof. Recovery reacquires executable source from its approved
+immutable origin before a template write.
 
 Detection covers credential-named Parameter rows, generic value cells, auth headers/literals and
 flattened adjacent name/value header rows. Inspect credential-bearing custom code before persistence:

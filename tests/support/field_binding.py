@@ -39,10 +39,7 @@ def lead_request():
             "template_field": "eventSettingsTable.lead_type",
             "missing_behavior": "omit when absent",
             "status": "mapped",
-            "native_binding": {
-                "object_key": "web-main::tag::GA4 - generate_lead",
-                "field": "lead_type",
-            },
+            "owner_object_key": "web-main::tag::GA4 - generate_lead",
         }
     ]
     variable = deepcopy(value["reuse_candidates"][2])

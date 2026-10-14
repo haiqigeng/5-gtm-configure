@@ -18,14 +18,20 @@ class TestMutationRecovery(fixture_mutation_recovery.NativeAndRecoveryTestsFixtu
                         {
                             "type": "text",
                             "text": fixture_mutation_recovery.json.dumps(
-                                {"error": {"code": code, "message": "must not persist raw detail"}}
+                                {
+                                    "error": {
+                                        "code": code,
+                                        "message": "Unknown entity type; api_secret=PRIVATE_DIAGNOSTIC",
+                                    }
+                                }
                             ),
                         }
                     ],
                 }
                 with self.subTest(code=code, mutation=mutation), self.assertRaises(cls) as caught:
                     fixture_mutation_recovery.unwrap(response, mutation=mutation)
-                self.assertNotIn("raw detail", str(caught.exception))
+                self.assertIn("Unknown entity type", str(caught.exception))
+                self.assertNotIn("PRIVATE_DIAGNOSTIC", str(caught.exception))
                 self.assertNotIsInstance(
                     caught.exception, fixture_mutation_recovery.AmbiguousWriteError
                 )

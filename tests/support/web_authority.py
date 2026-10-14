@@ -41,9 +41,11 @@ def settings_contract(*, action="update"):
             "intended": {"type": "gtcs", "send_page_view": False},
         }
     ]
-    contract["execution_topologies"] = []
+    contract["requirements"][0]["parameters"] = {}
+    contract["implementation"]["field_bindings"] = []
+    contract["tag_policies"] = []
     contract["page_view_decisions"] = []
-    contract["consent_topologies"] = []
+    contract["consent_policies"] = []
     if action == "remove":
         contract["implementation"]["objects"][0].pop("intended")
     return approve_mutations(contract)
@@ -60,17 +62,14 @@ def separate_page_view_contract(*, virtual=False):
     initial["intended"].pop("send_page_view")
     initial["depends_on"].append(google["object_key"])
     google["intended"]["send_page_view"] = False
-    initial_topology = deepcopy(contract["execution_topologies"][0])
+    initial_topology = deepcopy(contract["tag_policies"][0])
     initial_topology["tag_object_key"] = initial["object_key"]
-    contract["execution_topologies"][0].update(
-        page_view_capable=False, page_view_destinations=[], page_view_occurrences=[]
-    )
+    initial_topology["page_view_occurrences"] = ["initial-page-load"]
+    contract["tag_policies"][0].update(page_view_occurrences=[])
     contract["implementation"]["objects"].append(initial)
-    contract["execution_topologies"].append(initial_topology)
+    contract["tag_policies"].append(initial_topology)
     decision = contract["page_view_decisions"][0]
-    decision.update(
-        owner="dedicated-ga4-event", owner_object_key=initial["object_key"], send_page_view=False
-    )
+    decision.update(owner="dedicated-ga4-event", owner_object_key=initial["object_key"])
     if virtual:
         history = {
             "target_id": "web-main",
@@ -94,16 +93,15 @@ def separate_page_view_contract(*, virtual=False):
             tag_object_key=tag["object_key"],
             lifecycle_role="event-driven",
             page_view_occurrences=["virtual-navigation"],
-            normal_triggers=[
+            trigger_roles=[
                 {
                     "trigger_object_key": history["object_key"],
-                    "type": "history-change",
                     "role": "source-event",
                 }
             ],
         )
         contract["implementation"]["objects"].extend([history, tag])
-        contract["execution_topologies"].append(topology)
+        contract["tag_policies"].append(topology)
         contract["external_dependencies"].append(
             {
                 "id": "HISTORY-OWNER",

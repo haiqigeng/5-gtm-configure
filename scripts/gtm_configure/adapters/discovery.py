@@ -10,6 +10,7 @@ from gtm_configure.comparison.native import (
     REFERENCE_FIELDS,
 )
 from gtm_configure.core.json_io import write_json_atomic
+from gtm_configure.core.model import RUN_MODES
 from gtm_configure.core.privacy import redact_for_persistence
 from gtm_configure.domain.targets import validate_targets
 from gtm_configure.runtime.adapter_protocol import (
@@ -27,7 +28,7 @@ def discovery_targets(request):
         raise ValueError(
             "Discovery input needs mode, approved targets and selected resource_families"
         )
-    if request["mode"] not in {"web", "server", "pipeline"}:
+    if request["mode"] not in RUN_MODES:
         raise ValueError("Unsupported discovery mode")
     targets = list(validate_targets(request["targets"], request["mode"]).values())
     selected = request["resource_families"]

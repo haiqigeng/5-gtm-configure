@@ -20,9 +20,9 @@ from gtm_configure.core.privacy import (
     redact_for_persistence,
 )
 from gtm_configure.core.public_identifiers import (
-    canonical_template_source,
     public_identifier_paths,
 )
+from gtm_configure.core.template_source import canonical_template_source, template_source_integrity
 from gtm_configure.core.validation import canonical_sha256
 
 
@@ -41,7 +41,12 @@ def expected_graph(operation: dict[str, Any]) -> dict[str, Any]:
 def _redacted_presence_projection(value: Any, *, path: str = "$") -> tuple[Any, list[str]]:
     """Project redacted fields to path-only presence evidence, never value equality."""
     if is_redacted(value):
-        return {"secret_state": REDACTED_STATE, "path_only": True}, [path]
+        projected = {"secret_state": REDACTED_STATE, "path_only": True}
+        if "source_integrity" in value:
+            projected["source_integrity"] = {
+                "canonical_sha256": value["source_integrity"]["canonical_sha256"]
+            }
+        return projected, [path]
     if isinstance(value, dict):
         projected: dict[str, Any] = {}
         paths: list[str] = []
@@ -59,6 +64,35 @@ def _redacted_presence_projection(value: Any, *, path: str = "$") -> tuple[Any, 
             paths.extend(item_paths)
         return projected_items, paths
     return deepcopy(value), []
+
+
+def _template_integrity_evidence(expected: Any, saved: Any) -> dict[str, Any] | None:
+    def proof(value: Any) -> dict | None:
+        if isinstance(value, dict) and "objects" in value:
+            objects = value["objects"]
+            value = objects[0] if isinstance(objects, list) and len(objects) == 1 else None
+        source = value.get("templateData") if isinstance(value, dict) else None
+        if isinstance(source, str):
+            return template_source_integrity(source)
+        if is_redacted(source):
+            return deepcopy(source.get("source_integrity"))
+        return None
+
+    left, right = proof(expected), proof(saved)
+    if left is None and right is None:
+        return None
+    return {
+        "expected": left,
+        "saved": right,
+        "exact_bytes_equal": bool(
+            left and right and left["source_sha256"] == right["source_sha256"]
+        ),
+        "canonical_source_equal": bool(
+            left and right and left["canonical_sha256"] == right["canonical_sha256"]
+        ),
+        "proof": "full-content-sha256",
+        "hidden_value_equality_claimed": False,
+    }
 
 
 def build_verification_comparison(
@@ -153,6 +187,11 @@ def build_verification_comparison(
         "value_equality_claimed": False,
         "presence_paths_match": same_secret_presence,
     }
+    if operation["resource_family"] == "template":
+        integrity = _template_integrity_evidence(safe_expected, safe_saved)
+        if integrity is not None:
+            report["template_source_integrity"] = integrity
+            report["pass"] = report["pass"] and integrity["canonical_source_equal"]
     comparison = {
         "schema_version": VERIFICATION_SCHEMA_VERSION,
         "method": "target-scoped-object-graph",
@@ -246,8 +285,8 @@ def materialization_projection(document: dict[str, Any]) -> dict[str, Any]:
         "pipelines": deepcopy(document["pipelines"]),
         "object_changes": operations,
         "payload_mappings": deepcopy(document["payload_mappings"]),
-        "consent_topologies": deepcopy(document["consent_topologies"]),
-        "execution_topologies": deepcopy(document["execution_topologies"]),
+        "consent_policies": deepcopy(document["consent_policies"]),
+        "tag_policies": deepcopy(document["tag_policies"]),
         "page_view_decisions": deepcopy(document["page_view_decisions"]),
         "first_party_data_routes": deepcopy(document["first_party_data_routes"]),
         "inventory_dispositions": deepcopy(document["inventory_dispositions"]),
@@ -267,6 +306,8 @@ def materialization_fingerprints(document: dict[str, Any]) -> dict[str, str]:
 
 def _redacted_references(value: Any, *, path: str = "$") -> dict[str, str | None]:
     if is_redacted(value):
+        if path.endswith(".templateData") and "source_integrity" in value:
+            return {}
         reference = value.get("reference")
         return {path: reference if isinstance(reference, str) and reference.strip() else None}
     output: dict[str, str | None] = {}
@@ -343,10 +384,18 @@ def build_pre_write_comparison(operation: dict[str, Any], saved: Any) -> tuple[d
         expected = {"name": operation["name"], **expected}
     native_object = family in {"tag", "trigger", "variable", "client", "transformation"}
     expected = canonical_native_fields(
-        expected, tag_object=family == "tag", native_object=native_object
+        expected,
+        tag_object=family == "tag",
+        native_object=native_object,
+        resource_family=family,
+        container_type=operation.get("container_type"),
     )
     canonical_saved = canonical_native_fields(
-        safe_saved, tag_object=family == "tag", native_object=native_object
+        safe_saved,
+        tag_object=family == "tag",
+        native_object=native_object,
+        resource_family=family,
+        container_type=operation.get("container_type"),
     )
     if family == "template":
         for body in (expected, canonical_saved):
@@ -362,6 +411,9 @@ def build_pre_write_comparison(operation: dict[str, Any], saved: Any) -> tuple[d
     )
     same_secret_presence = set(expected_paths) <= set(saved_paths)
     passed = not differences and same_secret_presence and reference_proved
+    integrity = _template_integrity_evidence(expected, safe_saved) if family == "template" else None
+    if integrity is not None:
+        passed = passed and integrity["canonical_source_equal"]
     comparison = {
         "schema_version": VERIFICATION_SCHEMA_VERSION,
         "method": "pre-change-subset",
@@ -380,4 +432,6 @@ def build_pre_write_comparison(operation: dict[str, Any], saved: Any) -> tuple[d
             "reference_proved": reference_proved,
         },
     }
+    if integrity is not None:
+        comparison["template_source_integrity"] = integrity
     return comparison, safe_saved

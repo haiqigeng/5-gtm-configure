@@ -8,7 +8,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 from gtm_configure.contract import ContractValidationError, validate_document
 from gtm_configure.core.validation import RunValidationError
-from gtm_configure.domain.execution import validate_execution_topologies
+from gtm_configure.domain.execution import validate_tag_policies
 from gtm_configure.runtime.state import create_from_contract  # noqa: E402
 from support.contracts import approve_mutations, valid_web_contract  # noqa: E402
 
@@ -63,39 +63,33 @@ class ConsentPredicateBindingTest(unittest.TestCase):
                 ("trigger::Vendor block", self.block),
             )
         }
+        self.consent = {
+            "consent_mode": "strict-basic",
+            "web_enforcement": {"mechanism": "business-trigger-plus-vendor-block"},
+        }
         self.topology = {
+            "consent_policy_id": "CONSENT",
             "tag_object_key": "tag::Measurement",
-            "requirement_ids": ["REQ-1"],
             "lifecycle_role": "event-driven",
-            "normal_triggers": [
+            "trigger_roles": [
                 {
                     "trigger_object_key": "trigger::Source",
                     "role": "source-event",
-                    "type": "custom-event",
                 },
             ],
-            "consent_mode": "strict-basic",
-            "blocking_trigger_keys": ["trigger::Vendor block"],
             "blocking_event_scope": ".*",
-            "built_in_consent_checks": ["analytics_storage"],
-            "additional_consent_checks": [],
-            "firing_option": "once-per-event",
-            "may_precede_cmp": False,
             "pre_cmp_policy": "not-applicable",
-            "page_view_capable": False,
-            "page_view_destinations": [],
             "page_view_occurrences": [],
-            "ecommerce_route": "not-applicable",
-            "manual_ecommerce_fields": [],
             "evidence": ["Synthetic offline GTM Condition fixture"],
         }
 
     def validate(self) -> dict:
-        return validate_execution_topologies(
+        return validate_tag_policies(
             [self.topology],
             requirement_ids={"REQ-1"},
             operations=self.operations,
             baseline_trigger_types={},
+            consent_by_id={"CONSENT": self.consent},
         )
 
     def test_valid_business_filters_and_native_plus_block_are_preserved(self) -> None:
@@ -118,7 +112,7 @@ class ConsentPredicateBindingTest(unittest.TestCase):
             with self.subTest(selector=selector):
                 self.normal["customEventFilter"] = selector
                 self.topology["lifecycle_role"] = "baseline-page-load"
-                self.topology["normal_triggers"][0]["role"] = "cmp-readiness-grant"
+                self.topology["trigger_roles"][0]["role"] = "cmp-readiness-grant"
                 before = deepcopy((self.operations, self.topology))
                 self.validate()
                 self.assertEqual((self.operations, self.topology), before)
@@ -130,7 +124,7 @@ class ConsentPredicateBindingTest(unittest.TestCase):
         ):
             with self.subTest(lifecycle=lifecycle):
                 self.topology["lifecycle_role"] = lifecycle
-                self.topology["normal_triggers"][0]["role"] = role
+                self.topology["trigger_roles"][0]["role"] = role
                 self.normal["filter"] = [grant()]
                 with self.assertRaisesRegex(RunValidationError, "duplicated consent predicate"):
                     self.validate()
@@ -256,15 +250,13 @@ class ConsentPredicateBindingTest(unittest.TestCase):
         extra["intended"]["filter"] = [grant()]
         self.operations["extra"] = extra
         self.tag["firingTriggerId"].append(extra["object_key"])
-        self.topology["normal_triggers"].append(
+        self.topology["trigger_roles"].append(
             {
                 "trigger_object_key": extra["object_key"],
-                "type": "custom-event",
                 "role": "source-event",
             }
         )
         self.tag["blockingTriggerId"].insert(0, "trigger::Other block")
-        self.topology["blocking_trigger_keys"].insert(0, "trigger::Other block")
         other = deepcopy(self.operations["trigger::Vendor block"])
         other.update(operation_id="other", object_key="trigger::Other block")
         other["intended"]["filter"] = [
@@ -298,49 +290,10 @@ class ConsentPredicateBindingTest(unittest.TestCase):
                 with self.assertRaisesRegex(RunValidationError, "duplicated consent predicate"):
                     self.validate()
 
-    def test_invented_google_native_checks_are_rejected_by_actual_tag_class(self) -> None:
-        for tag_type in (
-            "googtag",
-            "Google tag",
-            "gaawc",
-            "gaawe",
-            "GA4 Event",
-            "awct",
-            "sp",
-            "flc",
-            "fls",
-            "gclidw",
-        ):
-            with self.subTest(tag_type=tag_type):
-                self.tag["type"] = tag_type
-                self.topology["built_in_consent_checks"] = ["invented_vendor_consent"]
-                with self.assertRaisesRegex(RunValidationError, "built_in_consent_checks.*Google"):
-                    self.validate()
-
-    def test_google_native_checks_can_coexist_with_strict_basic_vendor_block(self) -> None:
-        for tag_type, checks in (
-            ("googtag", ["analytics_storage", "ad_storage", "ad_user_data", "ad_personalization"]),
-            ("gaawe", ["analytics_storage"]),
-            ("awct", ["ad_storage", "ad_user_data"]),
-            ("sp", ["ad_storage", "ad_personalization"]),
-            ("flc", ["ad_storage"]),
-            ("fls", ["ad_storage"]),
-            ("gclidw", ["ad_storage"]),
-        ):
-            with self.subTest(tag_type=tag_type):
-                self.tag["type"] = tag_type
-                self.topology["built_in_consent_checks"] = checks
-                self.validate()
-
-    def test_custom_template_consent_types_are_not_restricted_to_google_names(self) -> None:
-        for tag_type in ("cvt_123_456", "Google partner custom template", "baut"):
-            with self.subTest(tag_type=tag_type):
-                self.tag["type"] = tag_type
-                self.topology["built_in_consent_checks"] = [
-                    "vendor_measurement",
-                    "functionality_storage",
-                ]
-                self.validate()
+    def test_template_capability_facts_are_not_authored_tag_policy(self):
+        self.topology["built_in_consent_checks"] = ["invented_vendor_consent"]
+        with self.assertRaisesRegex(RunValidationError, "Additional properties"):
+            self.validate()
 
     def test_additional_consent_checks_remain_distinct_from_native_behavior(self) -> None:
         self.tag["consentSettings"] = {
@@ -352,25 +305,25 @@ class ConsentPredicateBindingTest(unittest.TestCase):
                 ],
             },
         }
-        self.topology["additional_consent_checks"] = ["analytics_storage"]
         with self.assertRaisesRegex(RunValidationError, "must be empty under strict-basic"):
             self.validate()
 
     def test_advanced_native_behavior_still_requires_no_defeating_block(self) -> None:
-        self.topology["consent_mode"] = "advanced-native"
+        self.consent["consent_mode"] = "advanced-native"
         with self.assertRaisesRegex(RunValidationError, "must not carry a defeating block"):
             self.validate()
-        self.topology["blocking_trigger_keys"] = []
         self.topology["blocking_event_scope"] = None
         self.tag["blockingTriggerId"] = []
         self.validate()
 
     def test_public_contract_and_materialization_use_the_predicate_gate(self) -> None:
         contract = valid_web_contract()
-        topology = contract["execution_topologies"][0]
+        topology = contract["tag_policies"][0]
         objects = {item["object_key"]: item for item in contract["implementation"]["objects"]}
-        normal = objects[topology["normal_triggers"][0]["trigger_object_key"]]["intended"]
-        block = objects[topology["blocking_trigger_keys"][0]]["intended"]
+        normal = objects[topology["trigger_roles"][0]["trigger_object_key"]]["intended"]
+        block = objects[objects[topology["tag_object_key"]]["intended"]["blockingTriggerId"][0]][
+            "intended"
+        ]
         normal["customEventFilter"] = [condition("equals", "{{_event}}", "cmp_analytics_granted")]
         block["customEventFilter"] = [condition("matchRegex", "{{_event}}", ".*")]
         block["filter"] = [grant(negate="true")]
@@ -378,7 +331,7 @@ class ConsentPredicateBindingTest(unittest.TestCase):
         approve_mutations(contract)
         validate_document(contract)
         run = create_from_contract(contract, run_id="CONSENT-BINDING", source_locator="synthetic")
-        self.assertEqual(run["schema_version"], "8.0")
+        self.assertEqual(run["schema_version"], "9.0")
         normal["filter"].append(grant())
         approve_mutations(contract)
         with self.assertRaisesRegex(ContractValidationError, "duplicated consent predicate"):

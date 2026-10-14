@@ -10,6 +10,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 from gtm_configure.core.privacy import sensitive_paths  # noqa: E402
 from gtm_configure.core.public_identifiers import public_identifier_paths  # noqa: E402
+from gtm_configure.core.template_source import inspect_template_identity
 from gtm_configure.runtime.adapter_protocol import atomic_write
 from gtm_configure.runtime.engine import (
     TargetAdapterRegistry,
@@ -52,7 +53,8 @@ def chatgpt_contract():
     def param(key, value, type="template"):
         return {"key": key, "type": type, "value": value}
 
-    tag["intended"]["type"] = "cvt_1_123"
+    source = (ROOT / "tests/fixtures/openai-web-template.tpl").read_text(encoding="utf-8")
+    tag["intended"]["type"] = inspect_template_identity(source)
     tag["intended"]["parameter"] = [
         param("pixelId", "synthetic-pixel"),
         param("sendEvent", "true", "boolean"),
@@ -69,7 +71,6 @@ def chatgpt_contract():
             ],
         },
     ]
-    source = (ROOT / "tests/fixtures/openai-web-template.tpl").read_text(encoding="utf-8")
     objects.append(
         {
             "target_id": "web-main",
@@ -106,9 +107,7 @@ def chatgpt_contract():
             "supports": ["REQ-PAGE"],
         }
     )
-    topology = contract["execution_topologies"][0]
-    topology["built_in_consent_checks"] = []
-    contract["consent_topologies"][0].update(
+    contract["consent_policies"][0].update(
         destination="ChatGPT Ads",
         event_coverage=["purchase"],
         signal_source="Synthetic CMP ChatGPT gate, denied includes unknown",

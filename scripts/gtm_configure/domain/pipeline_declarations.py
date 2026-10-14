@@ -24,6 +24,7 @@ from gtm_configure.core.model import (
     UNKNOWN_STATE_BEHAVIORS,
     WEB_CONSENT_MECHANISMS,
 )
+from gtm_configure.core.schemas import field_collections
 from gtm_configure.domain.graph import active_tag
 
 
@@ -362,11 +363,8 @@ def validate_dedup_contracts(raw: Any, requirement_ids: set[str]) -> dict[str, d
 def validate_field_flow(value: Any, path: str, requirement_ids: set[str]) -> dict[str, Any]:
     field = object(value, path)
     field_scope = field.get("field_scope")
-    if field_scope not in {
-        "event-parameter",
-        "user-property",
-        "item-parameter",
-        "control",
+    if field_scope not in {"control"} | {
+        m["payload_scope"] for m in field_collections().values() if m["payload_scope"]
     }:
         raise ContractValidationError(f"{path}.field_scope is unsupported")
     text(field.get("destination_field"), f"{path}.destination_field")

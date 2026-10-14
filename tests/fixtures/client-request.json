@@ -47,7 +47,14 @@
         "approved-input",
         "container-confirmed"
       ],
-      "risk": "routine"
+      "risk": "routine",
+      "assertions": {
+        "client_claim": {
+          "description": "Synthetic reviewed default GA4 Client: claim supported GA4 collect requests at default paths with priority 0, preserving event_name and consent signals.",
+          "evidence_locator": "synthetic://inspection/standalone-client9",
+          "native_sha256": "sha256:ee8109ac55bb0775c17da1e6bc1ea660a80743956ec2fbdbec769d98e5ead5cd"
+        }
+      }
     }
   ],
   "evidence": [

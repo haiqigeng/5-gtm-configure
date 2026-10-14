@@ -39,7 +39,7 @@ Treat these as approved analytics semantics:
 
 - included business requirements;
 - destination event and classification;
-- outgoing event, item, user-property, and other payload fields;
+- outgoing event, item, user-property, and configuration fields;
 - literals, source paths, approved transformations, and missing-data behavior;
 - source event, success moment, repeatability, and business filters.
 
@@ -83,14 +83,19 @@ For a `ga4-tracking-plan` delivery, use
 canonical plan and every inventoried artifact by SHA-256, and emits one normalized approved
 semantic requirement per event. That machine path is authoritative for configuration intake; the
 XLSX remains the human review surface and must not be reparsed into a competing interpretation.
-The supported producer contract is `ga4-tracking-plan` 3.0.0: handoff `2.0.0`, canonical plan
-schema `6.0.0`. Older handoffs are rejected without migration. Event identity becomes
+The supported `ga4-tracking-plan` artifact contract is handoff `2.0.0` with canonical plan
+schema `6.0.0`; the producer release version is retained as provenance. Older handoffs are rejected without migration. Event identity becomes
 `GA4::<event_name>`. Import routing follows the declared destination and requires its matching
-scope: event parameter, item parameter, user property, or implementation-only field. The imported
-record retains paths, destinations, conditional and nullable semantics, business timing and
-clear-before-push instructions. Identity (`ga4_user_id`) and unspecified (`other`) destinations
-produce a blocking routing decision: author the approved identity or destination contract using
-the [first-party data model](../data/identity.md) before configuring those requirements.
+scope. The shared [collection field model](../core/authoring.md#collection-field-model) owns each
+destination namespace. The imported record retains paths, destinations, conditional and nullable
+semantics, business timing and clear-before-push instructions. `ga4_user_id` becomes the
+`configuration_fields.user_id` setting, preserving the original source name. Preparation binds it
+to the authorized Google configuration tag and the approved [identity lifecycle](../data/identity.md).
+An `other` destination remains in `unresolved_fields`: its field is known, but its destination surface
+is unspecified. Resolve it through revised approved requirements identifying the actual destination;
+retain the original delivery and the amendment as evidence. The importer preserves these records,
+and execution readiness blocks their dependent operations until the approved destination and
+implementation are resolved.
 If only a suite workbook is supplied, request
 its complete approved delivery directory. Do not relabel its version or reconstruct missing
 machine authority from the workbook. Independent client plans still use the general intake above.
@@ -131,7 +136,7 @@ output (`approved-semantics.json`) directly when available. Require:
 - identical included requirement IDs;
 - identical destination and source event names;
 - identical business timing, repeatability, and filters;
-- exact parameter/property/item-field set equality;
+- exact field set and destination-namespace equality;
 - exact approved source path or literal for every outgoing field;
 - zero unauthorized additions, removals, substitutions, or hidden-scope inclusions.
 
@@ -151,10 +156,13 @@ equality and never guesses workbook semantics.
 
 Each JSON document contains:
 
-- `scope`, normally with `included`, `reference_only`, and `excluded` collections;
+- `scope`, with `included`, `reference_only`, and `excluded` collections;
 - `requirements`, a list of objects with unique stable string `id` values;
 - collection-semantic fields, with `parameters` represented as a mapping when parameter order is
   irrelevant.
+
+Both projections must satisfy the shared closed requirement schema and approved-scope rules before
+equality is evaluated. An identical invalid projection cannot pass conformance.
 
 Requirement and scope-list order is non-semantic. Nested arrays within a requirement remain
 order-sensitive. Adapter and repository metadata may remain outside `scope` and `requirements` and

@@ -1,5 +1,51 @@
 # Changelog
 
+## 13.0.0
+
+Released 2026-10-14.
+
+### Why This Release Matters
+
+Complete the path from approved field destinations to executable native configuration. Preserve
+User-ID and unspecified destinations during import, then resolve implementation under the same
+field model used by contract validation, execution readiness and saved-state verification.
+
+### What Changed
+
+- Make the common schema the field-namespace registry consumed by import, preparation and validation.
+  GA4 User-ID is a configuration setting; unspecified fields retain their source and remain blocked.
+- Prove supported scalar Google configuration bindings against the correct local/shared namespace,
+  exact approved DLV source and approved identity lifecycle. Share exact-name collection resolution
+  across event/configuration bindings and identity consumers, and source proof with preparation.
+- Use one operation readiness predicate for execution inspection and checkpoints. Unresolved fields
+  block dependent operations before writes while independent operations can proceed.
+- Validate both conformance projections against the shared closed schema and scope semantics.
+  Compare saved evidence and rendered changes with type-strict JSON equality.
+- Report uninspected workspace changes truthfully; repair and ship the standalone Client scenario.
+- Extend the complete file map with byte hashes, document links, schema constraints, function calls
+  and failure sites. Advance contract to 10.0 and run to 8.0 without compatibility paths.
+
+### What Users Should Do
+
+Replace the installed folder and prepare fresh contract 10.0/run 8.0 artifacts from approved inputs.
+An imported User-ID needs its authorized Google configuration mapping and lifecycle. An `other`
+destination needs revised approved requirements specifying its actual destination. Preserve the
+original delivery and any amendment as evidence. Resolve uncertain writes before starting a new run.
+
+### Validation
+
+482 repository tests, 508 subtests and 29 packaged scenarios pass. See
+[the full evaluation](docs/release-13.0-validation.md) for all tests,
+independent forward testing, same-input v12 comparisons, privacy, recovery and performance evidence.
+
+### Known Limits
+
+No live GTM test was run; field testing remains pending explicit authorization. Native proof covers
+supported scalar event/configuration bindings; other mappings require inspected agent review.
+An approved lifecycle record does not certify website runtime behavior. Unspecified destinations
+remain business decisions, not values the skill may invent.
+
+
 ## 12.0.0
 
 Released 2026-10-13.

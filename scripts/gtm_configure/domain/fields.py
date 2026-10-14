@@ -7,7 +7,7 @@ from typing import Any
 import gtm_configure.core.validation as validation
 import gtm_configure.domain.web_model as web_model
 import gtm_configure.domain.web_native as web_native
-from gtm_configure.core.schemas import validate_definition
+from gtm_configure.core.schemas import field_collections, validate_definition
 from gtm_configure.core.validation import (
     RunValidationError,
     array,
@@ -16,6 +16,7 @@ from gtm_configure.core.validation import (
     text,
 )
 from gtm_configure.domain.native import (
+    direct_dlv_source,
     supports_native_mapping,
     variable_name,
 )
@@ -38,7 +39,11 @@ def validate_payload_mappings(raw: Any, requirement_ids: set[str]) -> list[dict[
         if requirement_id not in requirement_ids:
             raise RunValidationError(f"{path}.requirement_id is unknown")
         field_scope = text(item.get("field_scope"), f"{path}.field_scope")
-        if field_scope not in {"event-parameter", "user-property", "item-parameter"}:
+        if field_scope not in {
+            model["payload_scope"]
+            for model in field_collections().values()
+            if model["payload_scope"]
+        }:
             raise RunValidationError(f"{path}.field_scope has unsupported value {field_scope!r}")
         destination_field = text(item.get("destination_field"), f"{path}.destination_field")
         identity = (requirement_id, field_scope, destination_field)
@@ -55,6 +60,10 @@ def validate_payload_mappings(raw: Any, requirement_ids: set[str]) -> list[dict[
                 except ValueError as exc:
                     raise RunValidationError(f"{path}.{shape_field}: {exc}") from exc
         status = text(item.get("status"), f"{path}.status")
+        if field_scope == "unresolved" and status != "blocked":
+            raise RunValidationError(
+                f"{path}: unresolved destinations remain blocked until the approved field contract specifies a destination surface"
+            )
         if status not in MAPPING_STATUSES:
             raise RunValidationError(f"{path}.status has unsupported value {status!r}")
         text(item.get("provenance_locator"), f"{path}.provenance_locator")
@@ -152,12 +161,10 @@ def validate_payload_mappings(raw: Any, requirement_ids: set[str]) -> list[dict[
 
 def field_mappings(requirement: dict[str, Any]) -> list[dict[str, Any]]:
     mappings: list[dict[str, Any]] = []
-    field_scopes = {
-        "parameters": "event-parameter",
-        "user_properties": "user-property",
-        "item_parameters": "item-parameter",
-    }
-    for map_name, field_scope in field_scopes.items():
+    for map_name, model in field_collections().items():
+        field_scope = model["payload_scope"]
+        if field_scope is None:
+            continue
         for field_name, field in requirement.get(map_name, {}).items():
             source = field.get("source")
             if source is None and "literal" in field:
@@ -187,8 +194,12 @@ def field_mappings(requirement: dict[str, Any]) -> list[dict[str, Any]]:
                     "mapping_method": None,
                     "gtm_resolution": None,
                     "template_field": None,
-                    "missing_behavior": None,
-                    "status": "pending",
+                    "missing_behavior": (
+                        "An approved destination surface is required"
+                        if field_scope == "unresolved"
+                        else None
+                    ),
+                    "status": "blocked" if field_scope == "unresolved" else "pending",
                     "provenance_locator": field["provenance"]["locator"],
                 }
             )
@@ -227,7 +238,7 @@ def materialize_payload_mappings(contract: dict[str, Any]) -> list[dict[str, Any
 
 
 def validate_native_mappings(mappings, operations, fail):
-    """Prove supported event mappings; leave other native structures agent-reviewed."""
+    """Prove supported scalar destination mappings; other native structures stay agent-reviewed."""
     by_key = {item.get("object_key"): item for item in operations}
     for mapping in mappings:
         if mapping["status"] != "mapped":
@@ -246,7 +257,7 @@ def validate_native_mappings(mappings, operations, fail):
             or set(binding) != {"object_key", "field"}
             or not all(isinstance(binding[key], str) and binding[key].strip() for key in binding)
         ):
-            fail("mapped scalar GA4 event parameter requires native_binding object_key and field")
+            fail("mapped scalar native field requires native_binding object_key and field")
             continue
         owner = by_key.get(binding["object_key"], {})
         if (
@@ -274,8 +285,10 @@ def validate_native_mappings(mappings, operations, fail):
                 raise ValueError("native mapping owner is paused")
             if not supports_native_mapping(mapping, target):
                 continue
-            value = web_native.resolved_event_parameter(owner, operations, variables, field)
-            if value != mapping["gtm_resolution"]:
+            value = web_native.resolved_mapping_value(owner, operations, variables, mapping)
+            if validation.canonical_sha256(value) != validation.canonical_sha256(
+                mapping["gtm_resolution"]
+            ):
                 raise ValueError("native mapping value differs from gtm_resolution")
             if mapping.get("mapping_method") == "direct-dlv":
                 if (
@@ -285,17 +298,7 @@ def validate_native_mappings(mappings, operations, fail):
                 ):
                     raise ValueError("direct-dlv requires a native variable reference")
                 variable = variables[variable_name(value)]
-                if variable.get("type") != "v":
-                    raise ValueError("direct-dlv must reference a Data Layer Variable")
-                # Native DLV source is parameter[name], not the resource display name.
-                source = next(
-                    (
-                        row.get("value")
-                        for row in variable.get("parameter", [])
-                        if row.get("key") == "name"
-                    ),
-                    None,
-                )
+                source = direct_dlv_source(variable)
                 if source != mapping["source"]:
                     raise ValueError("direct-dlv source differs from the approved source")
         except (ValueError, KeyError, TypeError) as exc:

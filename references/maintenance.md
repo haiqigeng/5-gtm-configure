@@ -12,7 +12,10 @@ Neither check certifies live GTM, template behavior, runtime delivery, or every 
 type-strict equality with native normalization; `core` owns JSON, privacy, errors and enums.
 The JSON schemas own structural validation; cached validators resolve only packaged schemas.
 `common.schema.json` owns requirement fields, execution, page-view, identity, payload and external
-dependency declarations, assertions, consent, field flows and approval hashes. Contract requirements
+dependency declarations, assertions, consent, field flows and approval hashes. Its field registry
+drives destination import, mappings and preparation. Approved projections share schema and scope
+validation with contract intake. Runtime state uses one readiness predicate for inspection and
+manual/executor checkpoints, including unresolved field dependencies. Contract requirements
 carry full approved semantics; run requirements are closed execution summaries using the same
 semantic field definitions. Run status and operation links belong to the run schema.
 `domain/context.py` converts each phase once into `ConfigurationGraph`; domain validators consume
@@ -24,9 +27,9 @@ Reference folders follow the task's decisions, with separate host and vendor sur
 
 Repository maintainers run `tools/check_release.py` for architecture, schema versions, routed links,
 file labels, CLI usage and package checks. `tools/check_architecture.py --output ownership.json`
-derives the full file/import map. Tests are grouped by behavior owner; reusable native graphs and
+derives the full file/import map, schema constraints, function failure sites and document links. Tests are grouped by behavior owner; reusable native graphs and
 adapters live in `tests/support`. Repository-only checks and fixtures stay outside the installed skill.
 
-Current release is 12.0.0, contract 9.0, run 7.0. No old entry points, schema migrations or
+Current release is 13.0.0, contract 10.0, run 8.0. No old entry points, schema migrations or
 compatibility fallbacks are shipped. Re-author a pending change with the current model; retain
 historical executed artifacts as evidence and resolve uncertain writes before starting another run.

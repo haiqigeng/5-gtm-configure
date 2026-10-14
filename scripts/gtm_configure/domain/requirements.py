@@ -4,11 +4,18 @@ from __future__ import annotations
 
 from typing import Any
 
-from gtm_configure.core.contract_validation import ContractValidationError, object, text
-from gtm_configure.core.model import EVIDENCE_GRADES, REQUIREMENT_KINDS
+from gtm_configure.core.contract_validation import (
+    ContractValidationError,
+    array,
+    object,
+    text,
+    unique_texts,
+)
+from gtm_configure.core.model import EVIDENCE_GRADES, REQUIREMENT_KINDS, ROUTES
+from gtm_configure.core.schemas import field_collections
 from gtm_configure.domain.shapes import collection_shape
 
-SEMANTIC_FIELD_MAPS = {"parameters", "user_properties", "item_parameters"}
+SEMANTIC_FIELD_MAPS = set(field_collections())
 
 
 def _validate_provenance(value: Any, *, path: str, route: str) -> None:
@@ -94,3 +101,42 @@ def validate_requirement(raw: Any, *, index: int, route: str) -> str:
                     f"{field_path}.source_shape requires source or literal"
                 )
     return requirement_id
+
+
+def validate_scope_and_requirements(contract: dict[str, Any], route: str) -> set[str]:
+    route = text(route, "$.route")
+    if route not in ROUTES:
+        raise ContractValidationError(f"$.route has unsupported value {route!r}")
+    scope = object(contract["scope"], "$.scope")
+    partitions = {
+        name: set(unique_texts(scope.get(name), f"$.scope.{name}"))
+        for name in ("included", "reference_only", "excluded")
+    }
+    for left, right in (
+        ("included", "reference_only"),
+        ("included", "excluded"),
+        ("reference_only", "excluded"),
+    ):
+        overlap = sorted(partitions[left] & partitions[right])
+        if overlap:
+            raise ContractValidationError(
+                f"$.scope.{left} and $.scope.{right} overlap: {', '.join(overlap)}"
+            )
+    requirement_ids: set[str] = set()
+    for index, raw in enumerate(array(contract["requirements"], "$.requirements")):
+        try:
+            requirement_id = validate_requirement(
+                raw,
+                index=index,
+                route=route,
+            )
+        except ValueError as exc:
+            raise ContractValidationError(str(exc)) from exc
+        if requirement_id in requirement_ids:
+            raise ContractValidationError(f"duplicate requirement id {requirement_id!r}")
+        requirement_ids.add(requirement_id)
+    if requirement_ids != partitions["included"]:
+        raise ContractValidationError(
+            "$.scope.included must equal the IDs represented in $.requirements"
+        )
+    return requirement_ids

@@ -178,16 +178,12 @@ Use only a client-generated, stable, opaque, non-PII identifier. Enforce the cur
 length of 256 characters. Do not use an email address, hashed email, phone number, name, device ID,
 advertising ID, blank value, dummy value, or literal `null`/`undefined` string.
 
-Implement the lifecycle explicitly:
-
-1. before authentication, omit `user_id`;
-2. after the authenticated identity is available, set the approved identifier on the Google tag;
-3. on logout or identity clearance, send JavaScript `null` through the documented Google-tag
-   lifecycle so the previous identity is not retained;
-4. verify account switching, SPA state changes, and every shared consumer;
-5. never register `user_id` as a custom dimension or duplicate it as a user property.
-
-Do not assume that hashing an email creates a valid `user_id`.
+The `ga4-user-id` route records `identity_lifecycle` with approved-input authority. The shared
+schema owns its four states: `initial: omit`, `authenticated: set`, `cleared: javascript-null`,
+and `changed: replace`. Bind the source to `configuration_fields.user_id` and the authorized
+Google configuration consumer. Saved-state verification proves that mapping; runtime QA must
+verify authentication, logout, account switching, SPA changes and every shared consumer against
+the approved lifecycle. The User-ID setting remains separate from user properties and custom dimensions.
 
 ## Apply consent independently
 

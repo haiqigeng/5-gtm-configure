@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from gtm_configure.core.json_io import StrictJsonError, load_json, write_json_atomic
+from gtm_configure.core.schemas import field_collections
 from gtm_configure.domain.shapes import plan_shape
 
 
@@ -50,7 +51,7 @@ def verify_delivery(delivery: Path) -> tuple[dict[str, Any], dict[str, Any]]:
         raise HandoffError(
             "Unsupported GA4 tracking-plan handoff version: this importer requires "
             "handoff 2.0.0 / plan 6.0.0. Request a complete approved delivery from "
-            "ga4-tracking-plan 3.0.0; do not edit version fields or reinterpret its workbook."
+            "ga4-tracking-plan; do not edit version fields or reinterpret its workbook."
         )
     if handoff.get("skill", {}).get("name") != "ga4-tracking-plan":
         raise HandoffError("The handoff does not come from ga4-tracking-plan.")
@@ -108,20 +109,6 @@ CLASSIFICATIONS = {"official", "official_ecommerce", "custom", "context"}
 PARAMETER_SCOPES = {"event", "item", "user", "implementation"}
 PARAMETER_TYPES = {"string", "integer", "number", "boolean", "array", "object"}
 PARAMETER_REQUIREMENTS = {"required", "conditional", "optional"}
-PARAMETER_DESTINATIONS = {
-    "ga4_event_parameter",
-    "ga4_item_parameter",
-    "ga4_user_property",
-    "ga4_user_id",
-    "implementation_only",
-    "other",
-}
-DESTINATION_COLLECTIONS = {
-    "ga4_event_parameter": ("event", "parameters"),
-    "ga4_item_parameter": ("item", "item_parameters"),
-    "ga4_user_property": ("user", "user_properties"),
-    "implementation_only": ("implementation", "implementation_fields"),
-}
 
 
 def _text(value: Any, path: str) -> str:
@@ -197,7 +184,9 @@ def _validated_events(plan: dict[str, Any]) -> list[dict[str, Any]]:
                 _text(parameter.get("condition"), f"{parameter_path}.condition")
             _text(parameter.get("data_layer_path"), f"{parameter_path}.data_layer_path")
             destination = _text(parameter.get("destination"), f"{parameter_path}.destination")
-            if destination not in PARAMETER_DESTINATIONS:
+            if destination not in {
+                model["plan_destination"] for model in field_collections().values()
+            }:
                 raise HandoffError(f"{parameter_path}.destination is unsupported.")
             key = (scope, name)
             if key in parameter_keys:
@@ -220,29 +209,23 @@ def normalized_approved_semantics(handoff: dict[str, Any], plan: dict[str, Any])
             )
         requirement_ids.add(requirement_id)
         included.append(requirement_id)
-        collections = {
-            "parameters": {},
-            "item_parameters": {},
-            "user_properties": {},
-            "implementation_fields": {},
+        collections = {name: {} for name in field_collections()}
+        routes = {
+            model["plan_destination"]: (name, model) for name, model in field_collections().items()
         }
         for parameter in event["parameters"]:
             key = parameter["name"]
             destination = parameter["destination"]
-            route = DESTINATION_COLLECTIONS.get(destination)
-            if route is None:
-                raise HandoffError(
-                    f"{requirement_id} / {parameter['scope']}::{key}: destination "
-                    f"{destination!r} needs an approved configuration route before import. "
-                    "Provide a first_party_data_routes decision for identity data or "
-                    "an explicit destination field contract for other products."
-                )
-            expected_scope, collection = route
-            if parameter["scope"] != expected_scope:
+            collection, model = routes[destination]
+            expected_scope = model["plan_scope"]
+            if expected_scope is not None and parameter["scope"] != expected_scope:
                 raise HandoffError(
                     f"{requirement_id} / {key}: destination {destination!r} requires "
                     f"scope {expected_scope!r}; received {parameter['scope']!r}."
                 )
+            destination_field = model.get("destination_field", key)
+            if destination_field in collections[collection]:
+                raise HandoffError(f"{requirement_id}: duplicate destination {destination_field!r}")
             provenance = {
                 "grade": "approved-input",
                 "locator": (
@@ -250,7 +233,7 @@ def normalized_approved_semantics(handoff: dict[str, Any], plan: dict[str, Any])
                     f"{parameter.get('scope')}::{parameter.get('name')}"
                 ),
             }
-            collections[collection][key] = {
+            collections[collection][destination_field] = {
                 "name": parameter.get("name"),
                 "scope": parameter.get("scope"),
                 "source": parameter.get("data_layer_path"),

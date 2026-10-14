@@ -19,11 +19,12 @@ from gtm_configure.core.public_identifiers import (
     public_identifier_paths,
     validate_public_identifiers,
 )
+from gtm_configure.core.schemas import field_collections
 from gtm_configure.domain.actions import build_mutation_approval
 from gtm_configure.domain.fields import field_mappings
-from gtm_configure.domain.native import supports_native_mapping, variable_name
+from gtm_configure.domain.native import direct_dlv_source, supports_native_mapping, variable_name
 from gtm_configure.domain.resources import semantic_object_key
-from gtm_configure.domain.web_native import resolved_event_parameter
+from gtm_configure.domain.web_native import resolved_mapping_value
 
 
 def derive_exact_declarations(contract: dict, objects: list[dict]) -> None:
@@ -103,7 +104,12 @@ def derive_exact_declarations(contract: dict, objects: list[dict]) -> None:
                 ),
                 None,
             )
-            field = requirement.get("parameters", {}).get(mapping["destination_field"], {})
+            collection = next(
+                name
+                for name, model in field_collections().items()
+                if model["payload_scope"] == mapping["field_scope"]
+            )
+            field = requirement.get(collection, {}).get(mapping["destination_field"], {})
             missing = (existing or {}).get("missing_behavior") or field.get("missing_behavior")
             if (
                 not missing
@@ -128,24 +134,14 @@ def derive_exact_declarations(contract: dict, objects: list[dict]) -> None:
                     and item["target_id"] == owner["target_id"]
                 }
                 try:
-                    value = resolved_event_parameter(
-                        owner, objects, variables, mapping["destination_field"]
-                    )
+                    value = resolved_mapping_value(owner, objects, variables, mapping)
                     variable = variables[variable_name(value)]
                 except (ValueError, KeyError, TypeError):
                     continue
-                params = variable.get("parameter", [])
-                versions = [
-                    row.get("value") for row in params if row.get("key") == "dataLayerVersion"
-                ]
-                if variable.get("formatValue") or versions != ["2"]:
-                    continue
-                if variable.get("type") != "v" or any(
-                    row.get("key") not in {"name", "dataLayerVersion"} for row in params
-                ):
-                    continue
-                names = [row.get("value") for row in params if row.get("key") == "name"]
-                if names != [mapping["source"]]:
+                try:
+                    if direct_dlv_source(variable) != mapping["source"]:
+                        continue
+                except ValueError:
                     continue
                 matches.append((owner, value))
             if len(matches) != 1:

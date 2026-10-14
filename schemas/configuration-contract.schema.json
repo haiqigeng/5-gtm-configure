@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/haiqigeng/5-gtm-configure/schemas/configuration-contract.schema.json",
-  "title": "configure-gtm configuration-contract@9.0",
+  "title": "configure-gtm configuration-contract@10.0",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -24,7 +24,7 @@
   ],
   "properties": {
     "schema_version": {
-      "const": "9.0"
+      "const": "10.0"
     },
     "mode": {
       "enum": [
@@ -43,24 +43,7 @@
       ]
     },
     "scope": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "included",
-        "reference_only",
-        "excluded"
-      ],
-      "properties": {
-        "included": {
-          "$ref": "https://github.com/haiqigeng/5-gtm-configure/schemas/common.schema.json#/$defs/uniqueStrings"
-        },
-        "reference_only": {
-          "$ref": "https://github.com/haiqigeng/5-gtm-configure/schemas/common.schema.json#/$defs/uniqueStrings"
-        },
-        "excluded": {
-          "$ref": "https://github.com/haiqigeng/5-gtm-configure/schemas/common.schema.json#/$defs/uniqueStrings"
-        }
-      }
+      "$ref": "https://github.com/haiqigeng/5-gtm-configure/schemas/common.schema.json#/$defs/approvedScope"
     },
     "requirements": {
       "type": "array",

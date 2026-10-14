@@ -1,7 +1,7 @@
 """Shared enums and immutable policy constants for configuration run."""
 
-SCHEMA_VERSION = "7.0"
-CONTRACT_SCHEMA_VERSION = "9.0"
+SCHEMA_VERSION = "8.0"
+CONTRACT_SCHEMA_VERSION = "10.0"
 MATERIALIZATION_METHOD = f"contract-{CONTRACT_SCHEMA_VERSION}-deterministic"
 VERIFICATION_SCHEMA_VERSION = "2.0"
 

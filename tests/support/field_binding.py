@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 from fixtures.mcp_behavior_scenario import param, request
 from gtm_configure.cli.mcp import execute
-from gtm_configure.domain.native import FieldResolutionError, effective_event_parameters
+from gtm_configure.domain.native import FieldResolutionError, effective_collection_fields
 from gtm_configure.intake.request import compile_request
 from gtm_configure.render import render_markdown
 from gtm_configure.runtime.adapter_protocol import atomic_write
@@ -133,7 +133,7 @@ __all__ = [
     "compile_request",
     "create_from_contract",
     "deepcopy",
-    "effective_event_parameters",
+    "effective_collection_fields",
     "lead_request",
     "param",
     "render_markdown",

@@ -6,18 +6,18 @@ object graph, preserves approved measurement semantics and consent, and never pu
 
 ## Current release
 
-**[v12.0.0](https://github.com/haiqigeng/5-gtm-configure/releases/tag/v12.0.0)** gives contract and run
-validation one domain graph, shared closed declaration schemas and one canonical hash format.
-GA4 imports preserve destination semantics and block unresolved identity or other-product routes.
-Release checks enforce module boundaries and detect copied implementations and stale documentation.
-See the [changelog](CHANGELOG.md) for changes, validation and limitations.
+**[v13.0.0](https://github.com/haiqigeng/5-gtm-configure/releases/tag/v13.0.0)** completes the field
+model from approved import through execution. A shared schema registry preserves each destination;
+Google User-ID binds to configuration with an approved lifecycle. Unspecified destinations remain
+visible and block only their dependent operations. Conformance and manual checkpoints share the
+same validation boundaries as preparation and execution. See the [changelog](CHANGELOG.md).
 
-Only `configuration-contract@9.0` and `configuration-run@7.0` are supported. Create fresh contracts
+Only `configuration-contract@10.0` and `configuration-run@8.0` are supported. Create fresh contracts
 and runs from approved inputs. Obsolete commands and schema migrations are intentionally absent.
 
 ## Install
 
-Download `configure-gtm-v12.0.0.zip` from the release and extract its `configure-gtm` folder into your
+Download `configure-gtm-v13.0.0.zip` from the release and extract its `configure-gtm` folder into your
 host's skills directory. Replace the previous skill folder completely so removed paths do not remain.
 Keep any active run artifacts separately; they are not installation files.
 
@@ -100,21 +100,20 @@ python -m pip install -e ".[dev]"
 python -m ruff format --no-cache --check scripts tests tools
 python -m ruff check --no-cache scripts tests tools
 python -B -m pytest tests -q -p no:cacheprovider
-python tools/check_release.py --tag v12.0.0
-python tools/build_skill_package.py --output dist/configure-gtm-v12.0.0.zip
+python tools/check_release.py --tag v13.0.0
+python tools/build_skill_package.py --output dist/configure-gtm-v13.0.0.zip
 git diff --check
 ```
 
 CI runs on Linux/Python 3.11 and Windows/Python 3.13, with Node.js 22 and PowerShell 7 for relay tests.
-Tagging the checked commit `v12.0.0` triggers release validation and deterministic archive creation.
+Tagging the checked commit `v13.0.0` triggers release validation and deterministic archive creation.
 The workflow publishes the current changelog section, archive and SHA-256 checksum. The archive
 contains the skill and its self-contained regression suite, excluding repository-only tooling and
 the broader development fixtures.
 
-Compared with v11.0.0, the same offline large-container task uses 51 API calls and the 20-event
-batch uses 63 calls. The measured batch takes 1.9 seconds of local compute versus 1.8 seconds;
-its run is 521 KB versus 519 KB after canonical hashes gained an explicit prefix. These are
-synthetic local measurements, not live latency or billing claims. Entry instructions are unchanged. See the [validation record](docs/release-12.0-validation.md).
+Offline validation, call counts, package measurements and remaining field-test limits are recorded
+in the [validation record](docs/release-13.0-validation.md). Live GTM validation remains a separately
+authorized next step.
 
 Read [CONTRIBUTING.md](CONTRIBUTING.md) and [SECURITY.md](SECURITY.md) before contributing.
 Licensed under [MIT](LICENSE).

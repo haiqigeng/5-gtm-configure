@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import argparse
 import ast
+import hashlib
 import json
+import re
 import subprocess
 from collections import defaultdict
 from pathlib import Path
@@ -150,18 +152,107 @@ def file_map(root=ROOT):
         path = root / relative
         if not path.is_file():
             continue
-        record = {"path": relative, "packaged": relative in packaged}
+        record = {
+            "path": relative,
+            "packaged": relative in packaged,
+            "bytes": path.stat().st_size,
+            "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+            "layer": relative.split("/")[0],
+        }
         if path.suffix == ".py":
             tree = ast.parse(path.read_text(encoding="utf-8"))
             record["imports"] = sorted(
                 {n.module for n in ast.walk(tree) if isinstance(n, ast.ImportFrom) and n.module}
             )
+            record["functions"] = python_functions(tree)
         elif path.name.endswith("schema.json"):
             document = json.loads(path.read_text(encoding="utf-8-sig"))
             record["schema_id"] = document.get("$id")
             record["definitions"] = sorted(document.get("$defs", {}))
+            record["rules"] = schema_rules(document)
+        elif path.suffix == ".md":
+            source = path.read_text(encoding="utf-8")
+            record["words"] = len(re.findall(r"\b[\w-]+\b", source))
+            record["links"] = [
+                {"label": label, "target": target}
+                for label, target in re.findall(r"\[([^\]]+)\]\(([^)]+)\)", source)
+            ]
         files.append(record)
     return {"files": files, "modules": records, "errors": errors}
+
+
+def python_functions(tree):
+    """Index behavior and failure sites without claiming semantic proof from names."""
+    result = []
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        calls = sorted(
+            {ast.unparse(call.func) for call in ast.walk(node) if isinstance(call, ast.Call)}
+        )
+        failure_sites = []
+        for child in ast.walk(node):
+            if isinstance(child, (ast.Raise, ast.Assert)):
+                failure_sites.append({"line": child.lineno, "expression": ast.unparse(child)})
+            elif isinstance(child, ast.Call) and ast.unparse(child.func) in {
+                "fail",
+                "fail_validation",
+            }:
+                failure_sites.append({"line": child.lineno, "expression": ast.unparse(child)})
+        result.append(
+            {"name": node.name, "line": node.lineno, "calls": calls, "failure_sites": failure_sites}
+        )
+    return result
+
+
+def schema_rules(document):
+    """Map every structural constraint and reference to its exact JSON pointer."""
+    rules = []
+    keywords = {
+        "$ref",
+        "type",
+        "required",
+        "additionalProperties",
+        "unevaluatedProperties",
+        "enum",
+        "const",
+        "pattern",
+        "minimum",
+        "maximum",
+        "minLength",
+        "maxLength",
+        "exclusiveMinimum",
+        "exclusiveMaximum",
+        "multipleOf",
+        "allOf",
+        "anyOf",
+        "oneOf",
+        "not",
+        "if",
+        "then",
+        "else",
+        "minProperties",
+        "maxProperties",
+        "minItems",
+        "maxItems",
+        "uniqueItems",
+        "dependentRequired",
+        "x-field-model",
+    }
+
+    def visit(value, pointer):
+        if isinstance(value, dict):
+            for key, child in value.items():
+                location = pointer + "/" + key.replace("~", "~0").replace("/", "~1")
+                if key in keywords:
+                    rules.append({"pointer": location, "rule": key, "value": child})
+                visit(child, location)
+        elif isinstance(value, list):
+            for index, child in enumerate(value):
+                visit(child, pointer + "/" + str(index))
+
+    visit(document, "")
+    return rules
 
 
 def main():

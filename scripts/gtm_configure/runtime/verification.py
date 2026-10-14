@@ -5,11 +5,11 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
+from gtm_configure.comparison.json_values import differences
 from gtm_configure.comparison.native import (
     ID_FIELDS,
     ROOT_METADATA_KEYS,
     canonical_native_fields,
-    differences,
     normalize_graph,
     semantic_references,
 )
@@ -204,7 +204,7 @@ def validate_verification_comparison(
     if comparison["target_id"] != operation["target_id"]:
         raise ValueError("comparison target_id does not match")
     rebuilt, safe_saved = build_verification_comparison(operation, saved)
-    if rebuilt != comparison:
+    if differences(rebuilt, comparison):
         raise ValueError("comparison is not bound to the intended object and saved readback")
     secret_comparison = comparison["report"].get("secret_comparison", {})
     if secret_comparison.get("value_equality_claimed") is not False:

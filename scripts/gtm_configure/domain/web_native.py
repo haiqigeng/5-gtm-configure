@@ -16,7 +16,7 @@ from gtm_configure.core.validation import (
 )
 from gtm_configure.domain.native import (
     FieldResolutionError,
-    effective_event_parameters,
+    effective_collection_fields,
     effective_fields,
     field_key,
     local_fields,
@@ -83,15 +83,29 @@ def field_value(fields: dict[str, Any], names: set[str]) -> tuple[bool, Any]:
     return (True, fields[next(iter(matches))]) if matches else (False, None)
 
 
-def resolved_fields(target, operations, path, *, event_settings=True):
-    variables = {
+def _native_variables(operations, path):
+    return {
         item["name"]: effective_target(item, path)
         for item in (operations or {}).values()
         if (item.get("object_type") or item.get("resource_family")) == "variable"
         and item.get("action") not in NON_EXECUTING_TAG_ACTIONS
     }
+
+
+def resolved_collection_fields(target, operations, path, *, namespace):
     try:
-        return effective_fields(target, variables, event_settings=event_settings)
+        return effective_collection_fields(
+            target, _native_variables(operations, path), namespace=namespace
+        )
+    except FieldResolutionError as exc:
+        raise RunValidationError(f"{path}: {exc}") from exc
+
+
+def resolved_fields(target, operations, path, *, event_settings=True):
+    try:
+        return effective_fields(
+            target, _native_variables(operations, path), event_settings=event_settings
+        )
     except FieldResolutionError as exc:
         raise RunValidationError(f"{path}: {exc}") from exc
 
@@ -237,11 +251,11 @@ def configured_destinations(
 
 def resolved_event_parameter(owner, operations, variables, field):
     """Use associated Google-tag defaults only for an absent event-level field."""
-    event_fields = effective_event_parameters(effective_target(owner, "native mapping"), variables)
+    event_fields = effective_collection_fields(effective_target(owner, "native mapping"), variables)
     if field in event_fields:
         return event_fields[field]
     base = associated_google_tag(owner, operations)
-    return effective_event_parameters(base or {}, variables)[field]
+    return effective_collection_fields(base or {}, variables)[field]
 
 
 def associated_google_tag(
@@ -398,3 +412,16 @@ def trigger_filter_predicates(
             signature = canonical_sha256({"type": operator, "parameters": parameters})
             predicates[(signature, negate)] = row_path
     return predicates, event_context
+
+
+def resolved_mapping_value(owner, operations, variables, mapping):
+    """Read only the native namespace authorized by this mapping."""
+    field = mapping["destination_field"]
+    if mapping["field_scope"] == "configuration":
+        fields = effective_collection_fields(
+            effective_target(owner, "$.mapping.owner"), variables, namespace="configuration"
+        )
+        if field not in fields:
+            raise FieldResolutionError(f"configuration field {field!r} is absent")
+        return fields[field]
+    return resolved_event_parameter(owner, operations, variables, field)

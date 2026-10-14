@@ -20,7 +20,7 @@ def contract(*requirements: dict, scope: dict | None = None) -> dict:
         or {
             "included": [requirement["id"] for requirement in requirements],
             "reference_only": [],
-            "excluded": {},
+            "excluded": [],
         },
         "requirements": list(requirements),
         "infrastructure": {"workspace": "ignored by collection comparison"},
@@ -37,8 +37,20 @@ def requirement(
         "destination": "GA4",
         "event_name": event_name,
         "source_event": event_name,
-        "business_moment": "confirmed success",
-        "parameters": parameters or {"method": {"source": "event.method"}},
+        "business_timing": "confirmed success",
+        "authority": {"grade": "approved-input", "locator": "synthetic conformance fixture"},
+        "parameters": {
+            key: {
+                "provenance": {
+                    "grade": "approved-input",
+                    "locator": "synthetic conformance fixture",
+                },
+                "source_shape": "scalar:string",
+                "destination_shape": "scalar:string",
+                **value,
+            }
+            for key, value in (parameters or {"method": {"source": "event.method"}}).items()
+        },
     }
 
 
@@ -87,7 +99,7 @@ class ContractConformanceTest(unittest.TestCase):
                 },
             ),
             scope={
-                "excluded": {},
+                "excluded": [],
                 "reference_only": [],
                 "included": ["REQ-2", "REQ-1"],
             },
@@ -104,9 +116,14 @@ class ContractConformanceTest(unittest.TestCase):
 
     def test_nested_requirement_array_order_is_semantic(self) -> None:
         approved_requirement = requirement("REQ-1")
-        approved_requirement["transformation_steps"] = ["normalize", "hash"]
+        approved_requirement["business_filters"] = [
+            {"field": "status", "operator": "equals", "value": "confirmed"},
+            {"field": "kind", "operator": "equals", "value": "account"},
+        ]
         candidate_requirement = requirement("REQ-1")
-        candidate_requirement["transformation_steps"] = ["hash", "normalize"]
+        candidate_requirement["business_filters"] = list(
+            reversed(approved_requirement["business_filters"])
+        )
 
         result = self.run_comparator(
             contract(approved_requirement),
@@ -116,7 +133,7 @@ class ContractConformanceTest(unittest.TestCase):
         self.assertEqual(result.returncode, 1)
         report = json.loads(result.stdout)
         differences = report["requirement_mismatches"][0]["differences"]
-        self.assertTrue(any(item["path"].endswith("transformation_steps") for item in differences))
+        self.assertTrue(any(item["path"].endswith("business_filters") for item in differences))
 
     def test_extra_parameter_and_event_substitution_fail(self) -> None:
         approved = contract(requirement("REQ-1"))
@@ -149,14 +166,13 @@ class ContractConformanceTest(unittest.TestCase):
         self.assertTrue(report["scope_mismatches"])
 
     def test_invalid_contract_returns_schema_error(self) -> None:
-        result = self.run_comparator(
-            {"scope": {}, "requirements": [{"event_name": "missing_id"}]},
-            contract(requirement("REQ-1")),
-        )
+        invalid = contract(requirement("REQ-1"))
+        del invalid["requirements"][0]["id"]
+        result = self.run_comparator(invalid, contract(requirement("REQ-1")))
         self.assertEqual(result.returncode, 2)
         report = json.loads(result.stdout)
         self.assertFalse(report["pass"])
-        self.assertIn("non-empty string id", report["error"])
+        self.assertIn("'id' is a required property", report["error"])
 
     def test_ga4_delivery_requirement_ids_survive_event_reordering(self) -> None:
         def event(name: str) -> dict:

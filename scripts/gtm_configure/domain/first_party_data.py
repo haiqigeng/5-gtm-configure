@@ -39,6 +39,7 @@ from gtm_configure.domain.web_native import (
     effective_target,
     field_value,
     normalized_token,
+    resolved_collection_fields,
     resolved_fields,
     tag_type,
 )
@@ -178,6 +179,10 @@ def first_party_binding_value(
     operations: dict[str, dict[str, Any]] | None = None,
 ) -> tuple[bool, Any]:
     """Resolve an inspected event override without guessing a native Ads parameter name."""
+    if route.get("feature") == "ga4-user-id":
+        fields = resolved_collection_fields(target, operations, path, namespace="configuration")
+        name = route["destination_field"]
+        return name in fields, fields.get(name)
     native_matching = route.get("feature") == "vendor-advanced-matching" and any(
         "user_data_path" in binding for binding in route.get("consumer_bindings", [])
     )
@@ -189,7 +194,6 @@ def first_party_binding_value(
                 target,
                 operations,
                 path,
-                event_settings=route.get("feature") != "ga4-user-id",
             ),
             {route["destination_field"]},
         )
@@ -336,16 +340,12 @@ def validate_first_party_data_routes(
     payload_mappings: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
     operation_by_key = {item["object_key"]: item for item in operations.values()}
-    mapped_fields = {
-        (item["requirement_id"], item["destination_field"])
-        for item in payload_mappings
-        if item["status"] == "mapped"
-    }
-    mapping_by_identity = {
-        (item["requirement_id"], item["destination_field"]): item
-        for item in payload_mappings
-        if item["status"] == "mapped"
-    }
+    mapping_by_identity = {}
+    for mapping in payload_mappings:
+        if mapping["status"] == "mapped":
+            mapping_by_identity.setdefault(
+                (mapping["requirement_id"], mapping["destination_field"]), []
+            ).append(mapping)
     identities: set[tuple[str, str, str]] = set()
     records: list[dict[str, Any]] = []
     for index, item_raw in enumerate(array(raw, "$.first_party_data_routes")):
@@ -361,10 +361,13 @@ def validate_first_party_data_routes(
             item.get("destination_field"),
             f"{path}.destination_field",
         )
-        if (requirement_id, destination_field) not in mapped_fields:
+        matching_fields = mapping_by_identity.get((requirement_id, destination_field), [])
+        if len(matching_fields) != 1:
             raise RunValidationError(
                 f"{path} must bind to a mapped payload field {requirement_id}::{destination_field}"
             )
+        if feature == "ga4-user-id" and matching_fields[0]["field_scope"] != "configuration":
+            raise RunValidationError(f"{path}.ga4-user-id binds the configuration namespace")
         identity = (
             requirement_id,
             feature,
@@ -403,10 +406,10 @@ def validate_first_party_data_routes(
                 raise RunValidationError(
                     f"{path}.consumer {object_key!r} does not configure {destination_field!r}"
                 )
-            expected_binding = mapping_by_identity[(requirement_id, destination_field)].get(
-                "gtm_resolution"
-            )
-            if expected_binding is not None and configured_value != expected_binding:
+            expected_binding = matching_fields[0].get("gtm_resolution")
+            if expected_binding is not None and validation.canonical_sha256(
+                configured_value
+            ) != validation.canonical_sha256(expected_binding):
                 raise RunValidationError(
                     f"{path}.consumer {object_key!r} {destination_field!r} binding differs "
                     "from the approved field binding"
@@ -414,7 +417,7 @@ def validate_first_party_data_routes(
             if feature == "vendor-advanced-matching" and any(
                 "user_data_path" in binding for binding in item.get("consumer_bindings", [])
             ):
-                mapping = mapping_by_identity[(requirement_id, destination_field)]
+                mapping = matching_fields[0]
                 if item.get("timing") != "same-event":
                     raise RunValidationError(f"{path} native matching requires same-event timing")
                 if item["fields"][0].get("source") != mapping.get("source"):
@@ -459,6 +462,10 @@ def validate_first_party_data_routes(
             unique_texts(field.get("normalization"), f"{field_path}.normalization")
             if field.get("empty_behavior") != "omit":
                 raise RunValidationError(f"{field_path}.empty_behavior must be 'omit'")
+        if feature == "ga4-user-id" and fields[0]["source"] != matching_fields[0]["source"]:
+            raise RunValidationError(
+                f"{path}.identity source differs from its approved configuration mapping"
+            )
         consent_types = set(unique_texts(item.get("consent_types"), f"{path}.consent_types"))
         dependency_ids = set(
             unique_texts(

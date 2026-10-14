@@ -495,19 +495,13 @@ def checkpoint_validated_operation(
     value = document
     operation = find_operation(value, operation_id)
     current = operation["state"]
-    if state in {"in_progress", "saved", "verified"} and not any(
-        baseline["target_id"] == operation["target_id"] and baseline.get("complete") is True
-        for baseline in value["container_baselines"]
-    ):
-        raise RunValidationError(
-            "target baseline must be complete before execution or verification"
-        )
     if state in {"in_progress", "saved", "verified"}:
-        dependency_states = {
-            item["operation_id"]: item["state"] for item in value["object_changes"]
-        }
-        if any(dependency_states[key] != "verified" for key in operation["dependencies"]):
-            raise RunValidationError("every dependency must be verified before execution")
+        blockers, waiting = _operation_readiness(operation, _execution_context(value))
+        if blockers or waiting:
+            raise RunValidationError(
+                "execution requires resolved fields, complete baseline and every dependency verified: "
+                + "; ".join(blockers + waiting)
+            )
     if not transition_allowed(current, state):
         raise RunValidationError(f"operation transition {current!r} -> {state!r} is not allowed")
     delta_actions = {
@@ -699,41 +693,69 @@ def inspect_document(document: dict[str, Any]) -> dict[str, Any]:
     return inspect_validated_document(validate_document(document))
 
 
+def _execution_context(document):
+    field_blockers = {}
+    for row in document["payload_mappings"]:
+        if row["status"] in {"pending", "blocked"}:
+            field_blockers.setdefault(row["requirement_id"], []).append(
+                f"field {row['field_scope']}::{row['destination_field']} is {row['status']}"
+            )
+    for pipeline in document["pipelines"]:
+        for row in pipeline["field_flows"]:
+            if row["status"] != "proved":
+                for requirement in row["requirement_ids"]:
+                    field_blockers.setdefault(requirement, []).append(
+                        f"pipeline field {row['destination_field']} is {row['status']}"
+                    )
+    return {
+        "states": {item["operation_id"]: item["state"] for item in document["object_changes"]},
+        "missing_baselines": {
+            item["target_id"]
+            for item in document["container_baselines"]
+            if item.get("complete") is not True
+        },
+        "authentication_blocked": {
+            item["target_id"]
+            for item in document["object_changes"]
+            if item["state"] in {"failed", "uncertain"}
+            and item.get("journal")
+            and str(item["journal"][-1].get("error", "")).startswith("authentication_required:")
+        },
+        "field_blockers": field_blockers,
+    }
+
+
+def _operation_readiness(operation, context):
+    blockers = []
+    if operation["target_id"] in context["missing_baselines"]:
+        blockers.append("complete target baseline required")
+    if operation["target_id"] in context["authentication_blocked"]:
+        blockers.append("target authentication requires revalidation")
+    for requirement in operation["requirement_ids"]:
+        blockers.extend(context["field_blockers"].get(requirement, []))
+    states = context["states"]
+    blockers.extend(
+        key
+        for key in operation["dependencies"]
+        if states[key] in {"failed", "uncertain", "skipped"}
+    )
+    waiting = [key for key in operation["dependencies"] if states[key] != "verified"]
+    return sorted(set(blockers)), waiting
+
+
 def inspect_validated_document(value: dict[str, Any]) -> dict[str, Any]:
-    states = {item["operation_id"]: item["state"] for item in value["object_changes"]}
+    context = _execution_context(value)
     ready: list[str] = []
     waiting: dict[str, list[str]] = {}
     blocked: dict[str, list[str]] = {}
-    missing_baselines = {
-        item["target_id"]
-        for item in value["container_baselines"]
-        if item.get("complete") is not True
-    }
-    authentication_blocked = {
-        item["target_id"]
-        for item in value["object_changes"]
-        if item["state"] in {"failed", "uncertain"}
-        and item.get("journal")
-        and str(item["journal"][-1].get("error", "")).startswith("authentication_required:")
-    }
     for operation in value["object_changes"]:
         if operation["state"] != "planned":
             continue
-        if operation["target_id"] in missing_baselines:
-            blocked[operation["operation_id"]] = ["complete target baseline required"]
-            continue
-        if operation["target_id"] in authentication_blocked:
-            blocked[operation["operation_id"]] = ["target authentication requires revalidation"]
-            continue
-        dependencies = operation["dependencies"]
-        failed = [
-            value for value in dependencies if states[value] in {"failed", "uncertain", "skipped"}
-        ]
-        pending = [value for value in dependencies if states[value] != "verified"]
-        if failed:
-            blocked[operation["operation_id"]] = failed
-        elif pending:
-            waiting[operation["operation_id"]] = pending
+        blockers, dependencies = _operation_readiness(operation, context)
+        if blockers:
+            blocked[operation["operation_id"]] = blockers
+        elif dependencies:
+            waiting[operation["operation_id"]] = dependencies
         else:
             ready.append(operation["operation_id"])
     unsafe = [

@@ -150,7 +150,7 @@ def valid_pipeline_contract(*, cutover: bool = False) -> dict:
     pipeline["cutover_operation_key"] = web_key
     return approve_mutations(
         {
-            "schema_version": "9.0",
+            "schema_version": "10.0",
             "mode": "pipeline",
             "route": "analytics",
             "scope": {"included": ["REQ-PAGE"], "reference_only": [], "excluded": []},

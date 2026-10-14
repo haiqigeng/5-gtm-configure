@@ -11,6 +11,8 @@ from typing import Any
 from gtm_configure.comparison.json_values import differences
 from gtm_configure.contract import ContractValidationError, validate_document
 from gtm_configure.core.json_io import StrictJsonError, load_json
+from gtm_configure.core.schemas import validate_definition
+from gtm_configure.domain.requirements import validate_scope_and_requirements
 
 
 class ContractError(ValueError):
@@ -22,15 +24,25 @@ class ContractError(ValueError):
 
 
 def _validate_unversioned_comparison(value: Any) -> None:
-    """Accept the current normalized collection projection, never a mutation contract."""
-    if not isinstance(value, dict):
-        raise ContractError("unversioned comparison input must be an object")
-    scope = value.get("scope")
-    requirements = value.get("requirements")
-    if not isinstance(scope, dict):
-        raise ContractError("unversioned comparison input needs $.scope as an object")
-    if not isinstance(requirements, list):
-        raise ContractError("unversioned comparison input needs $.requirements as an array")
+    """Validate the same approved projection used by configuration preflight."""
+    if not isinstance(value, dict) or "scope" not in value or "requirements" not in value:
+        raise ContractError("normalized comparison input needs explicit $.scope and $.requirements")
+
+    def fail(message):
+        raise ContractError(message)
+
+    try:
+        validate_definition(
+            {"scope": value["scope"], "requirements": value["requirements"]},
+            "approvedProjection",
+            fail,
+        )
+        route = value.get(
+            "route", "combined" if any("kind" in r for r in value["requirements"]) else "analytics"
+        )
+        validate_scope_and_requirements(value, route)
+    except ValueError as exc:
+        raise ContractError(str(exc)) from exc
 
 
 def load_contract(path: Path) -> dict[str, Any]:
@@ -63,25 +75,16 @@ def canonical(value: Any, *, sort_lists: bool = False) -> Any:
     return value
 
 
-def requirement_index(contract: dict[str, Any], label: str) -> dict[str, dict[str, Any]]:
-    index: dict[str, dict[str, Any]] = {}
-    for position, requirement in enumerate(contract["requirements"]):
-        if not isinstance(requirement, dict):
-            raise ContractError(f"{label}: requirement at index {position} must be an object")
-        requirement_id = requirement.get("id")
-        if not isinstance(requirement_id, str) or not requirement_id.strip():
-            raise ContractError(
-                f"{label}: requirement at index {position} needs a non-empty string id"
-            )
-        if requirement_id in index:
-            raise ContractError(f"{label}: duplicate requirement id {requirement_id!r}")
-        index[requirement_id] = canonical(requirement)
-    return index
+def requirement_index(contract: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """Index an already validated approved projection."""
+    return {row["id"]: canonical(row) for row in contract["requirements"]}
 
 
 def compare(approved: dict[str, Any], candidate: dict[str, Any]) -> dict[str, Any]:
-    approved_requirements = requirement_index(approved, "approved")
-    candidate_requirements = requirement_index(candidate, "candidate")
+    _validate_unversioned_comparison(approved)
+    _validate_unversioned_comparison(candidate)
+    approved_requirements = requirement_index(approved)
+    candidate_requirements = requirement_index(candidate)
     approved_ids = set(approved_requirements)
     candidate_ids = set(candidate_requirements)
 

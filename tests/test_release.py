@@ -124,7 +124,13 @@ def test_shape_cannot_bypass_native_proof(shape):
 def test_type_strict_conformance(a, b):
     approved = {
         "scope": {"included": ["R"], "reference_only": [], "excluded": []},
-        "requirements": [{"id": "R", "business_filters": [{"value": a}]}],
+        "requirements": [
+            {
+                "id": "R",
+                "authority": {"grade": "approved-input", "locator": "Synthetic"},
+                "business_filters": [{"field": "consent", "operator": "equals", "value": a}],
+            }
+        ],
     }
     candidate = deepcopy(approved)
     candidate["requirements"][0]["business_filters"][0]["value"] = b
@@ -349,7 +355,9 @@ def folder_adapter():
     return FakeFolderAdapter()
 
 
-@pytest.mark.parametrize("fixture", ["web-request.json", "pipeline-request.json"])
+@pytest.mark.parametrize(
+    "fixture", ["web-request.json", "pipeline-request.json", "client-request.json"]
+)
 def test_independent_native_scenarios(fixture):
     value = json.loads((FIXTURES / fixture).read_text(encoding="utf-8"))
     for e in value["evidence"]:

@@ -1,7 +1,8 @@
 # Rule ownership and validation map
 
 The runtime package has one command router and seven implementation concerns. Generate the full
-maintained-file inventory, package membership, Python import graph, definitions and schema owners
+maintained-file inventory, package membership, Python import graph, function calls/failure sites, schema constraint pointers, Markdown links,
+word counts and per-file byte hashes
 with `python tools/check_architecture.py --output ownership-map.json`. The release attaches that
 map to the same tag as the archive. It includes repository-only tests, tools and workflow files.
 
@@ -26,6 +27,7 @@ release gate rejects reversed core/domain dependencies, cycles and private cross
 | Authority and approved scope | `domain/requirements.py` and `contract.py` | core authority references, contract and runtime validation | authority, contract and runtime tests |
 | Closed record structure | `schemas/common.schema.json` | contract/run schemas, `core/schemas.py` | schema consistency, run schema, ownership invariant tests |
 | Phase-specific record structure | contract/run schemas | cached core schema loader | schema and packaged release tests |
+| Destination namespaces | `schemas/common.schema.json` field registry | importer, requirement validation, compiler, mappings and pipeline declarations | destination and schema parity tests |
 | Enums, versions and state transitions | `core/model.py` | domain, state, verification; schema enum representations | schema consistency and release version checks |
 | JSON values, typed access and canonical hash | `core/validation.py` | contract validation bindings, state, verification, comparison | ownership invariants and durable evidence tests |
 | Secrets and public identifiers | `core/privacy.py`, `core/public_identifiers.py` | persistence, adapters, renderer | privacy and redaction shape tests |
@@ -55,9 +57,9 @@ release gate rejects reversed core/domain dependencies, cycles and private cross
 | --- | --- | --- | --- |
 | CG-64 | One enum owner; execution uses the same supported consent vocabulary | core model, domain execution/consent, common schema, consent web reference | product-specific contract-to-run scenario; duplicate-owner gate |
 | CG-65 | Schema owns key sets and record types; Python owns cross-record meaning | all three schemas, core schema loader, contract/runtime validators, domain fields | unknown requirement and nested-record keys rejected; shared definition checks |
-| CG-66 | Destination selects the outgoing collection; unresolved routing stops import | intake GA4 destination table, analytics intake reference | supported-destination matrix, scope mismatch, unresolved User-ID/other and input preservation |
+| CG-66 | One schema-owned destination model preserves every field; readiness blocks unresolved dependent operations | common field registry, intake GA4, domain fields/native/identity, runtime state | full delivery import, configuration User-ID/source/lifecycle proof, unresolved-field isolation and input preservation |
 | CG-67 | One phase-neutral graph and feature-owned validators; public module boundaries | context/localization/targets, contract, runtime validation, web/server/pipeline, comparison inventory | both phase scenarios, import graph gate, recovery/forward tests |
-| CG-68 | One canonical JSON hash function and representation | core validation/model, common schema, state/verification | Unicode/type/hash regression; contract 9.0/run 7.0/verification 2.0 |
+| CG-68 | One canonical JSON hash function and representation | core validation/model, common schema, state/verification | Unicode/type/hash regression; current contract/run/verification schemas |
 | CG-69 | Semantic link labels and derived CLI usage/version checks | references, router, release checker | stale-label synthetic regression; every packaged command help |
 | CG-70 | Test files follow behavior owners; fixture graphs live in support | tests/support, behavior suites, architecture and ownership suites | all original test methods retained; branch coverage measured on both tags |
 
@@ -66,6 +68,8 @@ release gate rejects reversed core/domain dependencies, cycles and private cross
 Static ownership analysis catches literal constant duplication, identical substantial function
 bodies, unused top-level names, dependency direction and cycles. Its reference analysis is
 conservative; it does not prove semantic equivalence or identify every possible duplicate rule.
+The inventory indexes every maintained file; function call/failure indexes are syntactic and may
+include nested function sites. Composition and leaf constraints retain their exact schema pointers.
 Schema validation owns structural correctness, while positive and negative behavior scenarios
 exercise domain meaning. Coverage excludes child-process execution and is a lower bound.
 Offline transports and saved-structure tests do not certify live GTM or vendor delivery.

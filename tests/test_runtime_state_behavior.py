@@ -219,7 +219,7 @@ class TestPhaseContracts(fixture_phase_contracts.CurrentContractAndRunTestFixtur
                     source_locator="approved input",
                     timestamp="2026-08-18T00:00:00Z",
                 )
-                self.assertEqual(run["schema_version"], "7.0")
+                self.assertEqual(run["schema_version"], "8.0")
                 self.assertEqual(run["run"]["mode"], contract["mode"])
                 self.assertEqual(len(run["object_changes"]), expected_operations)
                 self.assertEqual(

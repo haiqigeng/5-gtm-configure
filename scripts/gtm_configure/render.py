@@ -9,6 +9,7 @@ import unicodedata
 from typing import Any
 from urllib.parse import quote, urlsplit
 
+from gtm_configure.comparison.json_values import differences as value_differences
 from gtm_configure.comparison.native import ID_FIELDS, GraphError, normalize_graph
 from gtm_configure.core.privacy import redact_for_persistence, sensitive_findings
 from gtm_configure.core.public_identifiers import public_identifier_paths
@@ -139,7 +140,9 @@ def _at_path(value: Any, path: str) -> Any:
     return value
 
 
-def _workspace_change_summary(items: Any) -> str:
+def _workspace_change_summary(items: Any, *, complete: bool) -> str:
+    if not complete:
+        return "not inspected"
     if not items:
         return "none"
     if not isinstance(items, list):
@@ -156,7 +159,7 @@ def _workspace_change_summary(items: Any) -> str:
 
 def field_changes(before: Any, after: Any, path: str = "$") -> list[str]:
     """Describe only changed fields; ordered lists remain order-sensitive."""
-    if before == after:
+    if not value_differences(before, after):
         return []
     if isinstance(before, dict) and isinstance(after, dict):
         changes = []
@@ -371,7 +374,7 @@ def _render_target_summary(*, alerts, document, lines, operations, run):
     for target in run["targets"]:
         baseline = baselines[target["target_id"]]
         lines.append(
-            f"| {_cell(target['target_id'])} | {_cell(target['container_type'])} | {_cell(target['account_id'])} | {_cell(target['container_id'])} | {_cell(target['workspace_id'])} | {_cell(baseline['complete'])} | {_cell(_workspace_change_summary(baseline.get('preexisting_workspace_changes')))} |"
+            f"| {_cell(target['target_id'])} | {_cell(target['container_type'])} | {_cell(target['account_id'])} | {_cell(target['container_id'])} | {_cell(target['workspace_id'])} | {_cell(baseline['complete'])} | {_cell(_workspace_change_summary(baseline.get('preexisting_workspace_changes'), complete=baseline['complete']))} |"
         )
 
 

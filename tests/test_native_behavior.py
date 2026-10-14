@@ -117,9 +117,7 @@ class TestGoogleSettingsGoogleTagInheritance(
                 )
                 base["intended"]["parameter"][-1]["value"] = "{{Unresolved base settings}}"
                 errors = self.check_mapping(operations, mapping)
-                self.assertTrue(
-                    any("shared event settings are unresolved" in error for error in errors)
-                )
+                self.assertTrue(any("shared settings are unresolved" in error for error in errors))
                 if explicit == "settings":
                     event["intended"]["parameter"].append(
                         fixture_google_settings.param("eventSettingsVariable", "{{Shared}}")
@@ -445,18 +443,18 @@ class TestFieldBinding(fixture_field_binding.NativeMappingTestFixture):
         value = fixture_field_binding.lead_request()
         table = value["objects"][0]["intended"]["parameter"][-1]
         self.assertEqual(
-            fixture_field_binding.effective_event_parameters(value["objects"][0]["intended"], {}),
+            fixture_field_binding.effective_collection_fields(value["objects"][0]["intended"], {}),
             {"lead_type": "{{DLV - lead_type}}"},
         )
         table["key"] = "eventParameters"
         table["list"][0]["map"][0]["key"] = "name"
         table["list"][0]["map"][1]["key"] = "value"
         self.assertEqual(
-            fixture_field_binding.effective_event_parameters(value["objects"][0]["intended"], {}),
+            fixture_field_binding.effective_collection_fields(value["objects"][0]["intended"], {}),
             {},
         )
         self.assertEqual(
-            fixture_field_binding.effective_event_parameters(
+            fixture_field_binding.effective_collection_fields(
                 {"parameter": [fixture_field_binding.param("eventSettingsVariable", "{{Shared}}")]},
                 {"Shared": {"type": "gtes", "parameter": [table]}},
             ),
@@ -487,24 +485,24 @@ class TestFieldBinding(fixture_field_binding.NativeMappingTestFixture):
         row[0]["value"] = "LEAD_TYPE"
         row[1]["value"] = "different"
         self.assertEqual(
-            fixture_field_binding.effective_event_parameters(target, shared),
+            fixture_field_binding.effective_collection_fields(target, shared),
             {"lead_type": "{{DLV - lead_type}}", "LEAD_TYPE": "different"},
         )
         row[0]["value"] = "lead_type"
         row[1]["value"] = ""
         self.assertEqual(
-            fixture_field_binding.effective_event_parameters(target, shared), {"lead_type": ""}
+            fixture_field_binding.effective_collection_fields(target, shared), {"lead_type": ""}
         )
         target["parameter"][-1]["list"].append(
             fixture_field_binding.deepcopy(target["parameter"][-1]["list"][0])
         )
         with self.assertRaises(fixture_field_binding.FieldResolutionError):
-            fixture_field_binding.effective_event_parameters(target, shared)
+            fixture_field_binding.effective_collection_fields(target, shared)
         shared["Shared"]["parameter"].append(
             fixture_field_binding.param("eventSettingsVariable", "{{Shared}}")
         )
         with self.assertRaises(fixture_field_binding.FieldResolutionError):
-            fixture_field_binding.effective_event_parameters(
+            fixture_field_binding.effective_collection_fields(
                 {"parameter": [fixture_field_binding.param("eventSettingsVariable", "{{Shared}}")]},
                 shared,
             )

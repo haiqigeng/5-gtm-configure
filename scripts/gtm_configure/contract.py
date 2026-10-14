@@ -28,7 +28,6 @@ from gtm_configure.core.model import (
     EVIDENCE_GRADES,
     HIGH_IMPACT_ACTIONS,
     MUTATING_ACTIONS,
-    ROUTES,
     RUN_MODES,
 )
 from gtm_configure.core.privacy import sensitive_paths
@@ -61,42 +60,6 @@ HIGH_IMPACT_RESOURCE_FAMILIES = {
     "transformation",
     "zone",
 }
-
-
-def _validate_scope_and_requirements(contract: dict[str, Any], route: str) -> set[str]:
-    scope = object(contract["scope"], "$.scope")
-    partitions = {
-        name: set(unique_texts(scope.get(name), f"$.scope.{name}"))
-        for name in ("included", "reference_only", "excluded")
-    }
-    for left, right in (
-        ("included", "reference_only"),
-        ("included", "excluded"),
-        ("reference_only", "excluded"),
-    ):
-        overlap = sorted(partitions[left] & partitions[right])
-        if overlap:
-            raise ContractValidationError(
-                f"$.scope.{left} and $.scope.{right} overlap: {', '.join(overlap)}"
-            )
-    requirement_ids: set[str] = set()
-    for index, raw in enumerate(array(contract["requirements"], "$.requirements")):
-        try:
-            requirement_id = requirement_support.validate_requirement(
-                raw,
-                index=index,
-                route=route,
-            )
-        except ValueError as exc:
-            raise ContractValidationError(str(exc)) from exc
-        if requirement_id in requirement_ids:
-            raise ContractValidationError(f"duplicate requirement id {requirement_id!r}")
-        requirement_ids.add(requirement_id)
-    if requirement_ids != partitions["included"]:
-        raise ContractValidationError(
-            "$.scope.included must equal the IDs represented in $.requirements"
-        )
-    return requirement_ids
 
 
 def _object_is_high_impact(item: dict[str, Any]) -> bool:
@@ -312,9 +275,7 @@ def validate_document(value: Any) -> dict[str, Any]:
     if mode not in RUN_MODES:
         raise ContractValidationError(f"$.mode has unsupported value {mode!r}")
     route = text(contract["route"], "$.route")
-    if route not in ROUTES:
-        raise ContractValidationError(f"$.route has unsupported value {route!r}")
-    requirement_ids = _validate_scope_and_requirements(contract, route)
+    requirement_ids = requirement_support.validate_scope_and_requirements(contract, route)
     targets = validate_targets(contract["targets"], mode)
     implementation = object(contract["implementation"], "$.implementation")
     execution_mode = text(implementation["execution_mode"], "$.implementation.execution_mode")

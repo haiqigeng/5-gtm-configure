@@ -36,12 +36,17 @@ class TestInputAndExecution(fixture_input_and_execution.AuditRegressionsFixture)
             with self.assertRaisesRegex(ValueError, "Duplicate handoff artifact role"):
                 fixture_input_and_execution.verify_delivery(delivery)
 
-    def test_verified_delivery_requires_explicit_identity_routing(self):
+    def test_verified_delivery_preserves_configuration_identity(self):
         fixture = fixture_input_and_execution.ROOT / "tests/fixtures/tracking-plan-delivery"
         handoff, plan = fixture_input_and_execution.verify_delivery(fixture)
         before = fixture_input_and_execution.deepcopy(plan)
-        with self.assertRaisesRegex(ValueError, "ga4_user_id.*approved configuration route"):
-            fixture_input_and_execution.normalized_approved_semantics(handoff, plan)
+        imported = fixture_input_and_execution.normalized_approved_semantics(handoff, plan)
+        self.assertTrue(
+            any(
+                "user_id" in item.get("configuration_fields", {})
+                for item in imported["requirements"]
+            )
+        )
         self.assertEqual(plan, before)
         self.assertEqual(handoff["skill"]["name"], "ga4-tracking-plan")
 
@@ -77,8 +82,13 @@ class TestAuthenticatedDelivery(fixture_authenticated_delivery.Audit102FollowupF
         fixture = fixture_authenticated_delivery.ROOT / "tests/fixtures/tracking-plan-delivery"
         handoff, plan = fixture_authenticated_delivery.verify_delivery(fixture)
         before = fixture_authenticated_delivery.deepcopy(plan)
-        with self.assertRaisesRegex(ValueError, "ga4_user_id.*approved configuration route"):
-            fixture_authenticated_delivery.normalized_approved_semantics(handoff, plan)
+        imported = fixture_authenticated_delivery.normalized_approved_semantics(handoff, plan)
+        self.assertTrue(
+            any(
+                "user_id" in item.get("configuration_fields", {})
+                for item in imported["requirements"]
+            )
+        )
         self.assertEqual(plan, before)
         self.assertEqual(handoff["skill"]["name"], "ga4-tracking-plan")
         provenance = fixture_authenticated_delivery.json.loads(

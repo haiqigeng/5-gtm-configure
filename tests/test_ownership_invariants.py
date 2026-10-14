@@ -62,11 +62,16 @@ def test_import_routes_by_destination(destination, scope, collection):
 
 
 @pytest.mark.parametrize("destination,scope", [("ga4_user_id", "user"), ("other", "event")])
-def test_unresolved_destination_blocks_without_reclassification(destination, scope):
+def test_destination_is_preserved_without_reclassification(destination, scope):
     plan = plan_with(destination, scope)
     before = deepcopy(plan)
-    with pytest.raises(HandoffError, match="approved configuration route"):
-        normalized_approved_semantics({}, plan)
+    result = normalized_approved_semantics({}, plan)
+    collection, name = (
+        ("configuration_fields", "user_id")
+        if destination == "ga4_user_id"
+        else ("unresolved_fields", "method")
+    )
+    assert result["requirements"][0][collection][name]["destination"] == destination
     assert plan == before
 
 

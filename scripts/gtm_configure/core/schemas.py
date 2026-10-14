@@ -47,3 +47,12 @@ def _validate(value, schema_validator, fail):
             f"[{part}]" if isinstance(part, int) else f".{part}" for part in error.absolute_path
         )
         fail(f"{path}: {error.message}")
+
+
+@lru_cache(maxsize=1)
+def field_collections():
+    """The shared schema owns collection namespaces and producer destination routes."""
+    properties = validator("common").schema["$defs"]["requirementSemantics"]["properties"]
+    return {
+        name: row["x-field-model"] for name, row in properties.items() if "x-field-model" in row
+    }

@@ -164,11 +164,13 @@
           ]
         },
         "field_scope": {
-          "enum": [
-            "event-parameter",
-            "user-property",
-            "item-parameter",
-            "control"
+          "anyOf": [
+            {
+              "$ref": "https://github.com/haiqigeng/5-gtm-configure/schemas/common.schema.json#/$defs/payloadScope"
+            },
+            {
+              "const": "control"
+            }
           ]
         },
         "destination_field": {
@@ -586,6 +588,11 @@
           },
           "additionalProperties": {
             "$ref": "https://github.com/haiqigeng/5-gtm-configure/schemas/common.schema.json#/$defs/collectionField"
+          },
+          "x-field-model": {
+            "payload_scope": "event-parameter",
+            "plan_destination": "ga4_event_parameter",
+            "plan_scope": "event"
           }
         },
         "user_properties": {
@@ -595,6 +602,11 @@
           },
           "additionalProperties": {
             "$ref": "https://github.com/haiqigeng/5-gtm-configure/schemas/common.schema.json#/$defs/collectionField"
+          },
+          "x-field-model": {
+            "payload_scope": "user-property",
+            "plan_destination": "ga4_user_property",
+            "plan_scope": "user"
           }
         },
         "item_parameters": {
@@ -604,6 +616,11 @@
           },
           "additionalProperties": {
             "$ref": "https://github.com/haiqigeng/5-gtm-configure/schemas/common.schema.json#/$defs/collectionField"
+          },
+          "x-field-model": {
+            "payload_scope": "item-parameter",
+            "plan_destination": "ga4_item_parameter",
+            "plan_scope": "item"
           }
         },
         "implementation_fields": {
@@ -613,6 +630,11 @@
           },
           "additionalProperties": {
             "$ref": "https://github.com/haiqigeng/5-gtm-configure/schemas/common.schema.json#/$defs/collectionField"
+          },
+          "x-field-model": {
+            "payload_scope": null,
+            "plan_destination": "implementation_only",
+            "plan_scope": "implementation"
           }
         },
         "timing": {
@@ -620,6 +642,35 @@
         },
         "repeatability": {
           "$ref": "https://github.com/haiqigeng/5-gtm-configure/schemas/common.schema.json#/$defs/nonEmpty"
+        },
+        "configuration_fields": {
+          "type": "object",
+          "propertyNames": {
+            "$ref": "https://github.com/haiqigeng/5-gtm-configure/schemas/common.schema.json#/$defs/nonEmpty"
+          },
+          "additionalProperties": {
+            "$ref": "https://github.com/haiqigeng/5-gtm-configure/schemas/common.schema.json#/$defs/collectionField"
+          },
+          "x-field-model": {
+            "payload_scope": "configuration",
+            "plan_destination": "ga4_user_id",
+            "plan_scope": "user",
+            "destination_field": "user_id"
+          }
+        },
+        "unresolved_fields": {
+          "type": "object",
+          "propertyNames": {
+            "$ref": "https://github.com/haiqigeng/5-gtm-configure/schemas/common.schema.json#/$defs/nonEmpty"
+          },
+          "additionalProperties": {
+            "$ref": "https://github.com/haiqigeng/5-gtm-configure/schemas/common.schema.json#/$defs/collectionField"
+          },
+          "x-field-model": {
+            "payload_scope": "unresolved",
+            "plan_destination": "other",
+            "plan_scope": null
+          }
         }
       }
     },
@@ -1074,6 +1125,9 @@
         },
         "external_receiver_dependency_id": {
           "$ref": "https://github.com/haiqigeng/5-gtm-configure/schemas/common.schema.json#/$defs/nonEmpty"
+        },
+        "identity_lifecycle": {
+          "$ref": "https://github.com/haiqigeng/5-gtm-configure/schemas/common.schema.json#/$defs/identityLifecycle"
         }
       },
       "allOf": [
@@ -1120,6 +1174,20 @@
                 }
               }
             }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "feature": {
+                "const": "ga4-user-id"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "identity_lifecycle"
+            ]
           }
         }
       ]
@@ -1237,11 +1305,7 @@
           "$ref": "https://github.com/haiqigeng/5-gtm-configure/schemas/common.schema.json#/$defs/nonEmpty"
         },
         "field_scope": {
-          "enum": [
-            "event-parameter",
-            "item-parameter",
-            "user-property"
-          ]
+          "$ref": "https://github.com/haiqigeng/5-gtm-configure/schemas/common.schema.json#/$defs/payloadScope"
         },
         "destination_field": {
           "$ref": "https://github.com/haiqigeng/5-gtm-configure/schemas/common.schema.json#/$defs/nonEmpty"
@@ -1327,11 +1391,7 @@
           "$ref": "https://github.com/haiqigeng/5-gtm-configure/schemas/common.schema.json#/$defs/nonEmpty"
         },
         "field_scope": {
-          "enum": [
-            "event-parameter",
-            "item-parameter",
-            "user-property"
-          ]
+          "$ref": "https://github.com/haiqigeng/5-gtm-configure/schemas/common.schema.json#/$defs/payloadScope"
         },
         "destination_field": {
           "$ref": "https://github.com/haiqigeng/5-gtm-configure/schemas/common.schema.json#/$defs/nonEmpty"
@@ -1530,6 +1590,94 @@
     "canonicalHash": {
       "type": "string",
       "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "payloadScope": {
+      "enum": [
+        "configuration",
+        "event-parameter",
+        "item-parameter",
+        "unresolved",
+        "user-property"
+      ]
+    },
+    "approvedProjection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scope",
+        "requirements"
+      ],
+      "properties": {
+        "scope": {
+          "$ref": "https://github.com/haiqigeng/5-gtm-configure/schemas/common.schema.json#/$defs/approvedScope"
+        },
+        "requirements": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "https://github.com/haiqigeng/5-gtm-configure/schemas/common.schema.json#/$defs/approvedRequirement"
+          }
+        }
+      }
+    },
+    "approvedScope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "included",
+        "reference_only",
+        "excluded"
+      ],
+      "properties": {
+        "included": {
+          "$ref": "https://github.com/haiqigeng/5-gtm-configure/schemas/common.schema.json#/$defs/uniqueStrings"
+        },
+        "reference_only": {
+          "$ref": "https://github.com/haiqigeng/5-gtm-configure/schemas/common.schema.json#/$defs/uniqueStrings"
+        },
+        "excluded": {
+          "$ref": "https://github.com/haiqigeng/5-gtm-configure/schemas/common.schema.json#/$defs/uniqueStrings"
+        }
+      }
+    },
+    "identityLifecycle": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "initial",
+        "authenticated",
+        "cleared",
+        "changed",
+        "authority"
+      ],
+      "properties": {
+        "initial": {
+          "const": "omit"
+        },
+        "authenticated": {
+          "const": "set"
+        },
+        "cleared": {
+          "const": "javascript-null"
+        },
+        "changed": {
+          "const": "replace"
+        },
+        "authority": {
+          "allOf": [
+            {
+              "$ref": "https://github.com/haiqigeng/5-gtm-configure/schemas/common.schema.json#/$defs/authority"
+            },
+            {
+              "properties": {
+                "grade": {
+                  "const": "approved-input"
+                }
+              }
+            }
+          ]
+        }
+      }
     }
   }
 }

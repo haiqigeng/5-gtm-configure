@@ -83,7 +83,7 @@ def decode_parameter(value: Any) -> Any:
     return value
 
 
-def local_fields(target: dict[str, Any]) -> dict[str, Any]:
+def local_fields(target: dict[str, Any], *, event_settings: bool = True) -> dict[str, Any]:
     """Decode current adapter fields and native tables; ambiguous ownership is an error."""
     result = {}
 
@@ -112,6 +112,8 @@ def local_fields(target: dict[str, Any]) -> dict[str, Any]:
             if key != "tagId" or (key not in native_keys and not str(value).isdecimal()):
                 add(key, value)
     for key in containers:
+        if not event_settings and key == "eventParameters":
+            continue
         container = target.get(key)
         if isinstance(container, dict):
             for name, value in container.items():
@@ -123,6 +125,8 @@ def local_fields(target: dict[str, Any]) -> dict[str, Any]:
                 ):
                     raise FieldResolutionError("native parameter entry needs a key")
                 name = item.get("key") or item["name"]
+                if not event_settings and token(name) in {"eventsettingstable", "eventparameters"}:
+                    continue
                 if token(name) not in TABLES:
                     add(name, decode_parameter(item))
                     continue
@@ -164,7 +168,7 @@ def effective_fields(
     event_settings: bool = True,
     active: tuple[str, ...] = (),
 ) -> dict[str, Any]:
-    local = local_fields(target)
+    local = local_fields(target, event_settings=event_settings)
     inherited = {}
     for key, types in SETTINGS_REFERENCES.items():
         reference = local.pop(key, None)
@@ -192,37 +196,51 @@ def effective_fields(
 
 
 def supports_native_mapping(mapping: dict, target: dict) -> bool:
-    """Deterministic ordinary-field proof is limited to scalar GA4 event parameters."""
+    """Resolve the native namespace selected by the approved field contract."""
+    scopes = {"gaawe": "event-parameter", "googtag": "configuration", "gaawc": "configuration"}
     return (
-        target.get("type") == "gaawe"
-        and mapping.get("field_scope") == "event-parameter"
+        target.get("type") in scopes
+        and scopes[target["type"]] == mapping.get("field_scope")
         and collection_shape(mapping.get("destination_shape")).startswith("scalar:")
         and mapping.get("mapping_method") != "native-template"
     )
 
 
-def effective_event_parameters(
+def effective_collection_fields(
     target: dict[str, Any],
     variables: dict[str, dict[str, Any]],
     *,
+    namespace: str = "event-parameter",
     active: tuple[str, ...] = (),
 ) -> dict[str, Any]:
-    """Exact GA4 event names, excluding configuration controls and other namespaces.
+    """Resolve exact collection names within one native settings namespace.
 
-    Read only represented native event tables and event-settings references. Local
-    rows override inherited rows by exact name; configuration field aliases never apply.
+    Local rows override inherited rows by exact name. Native control aliases belong
+    to effective_fields and cannot establish collection-field equality.
     """
+    table, reference_keys, settings_types = {
+        "event-parameter": (
+            "eventSettingsTable",
+            {"eventSettingsVariable", "inheritedEventSettings"},
+            EVENT_SETTINGS_TYPES,
+        ),
+        "configuration": (
+            "configSettingsTable",
+            {"configSettingsVariable", "configurationSettingsVariable"},
+            CONFIGURATION_SETTINGS_TYPES,
+        ),
+    }[namespace]
     local, references = {}, []
     for entry in target.get("parameter", []):
         key = entry.get("key")
-        if key in {"eventSettingsVariable", "inheritedEventSettings"}:
+        if key in reference_keys:
             reference = decode_parameter(entry)
             if reference not in (None, ""):
                 references.append(reference)
-        elif key == "eventSettingsTable":
+        elif key == table:
             rows = decode_parameter(entry)
             if not isinstance(rows, list):
-                raise FieldResolutionError("native event table must contain map rows")
+                raise FieldResolutionError("native settings table must contain map rows")
             for row in rows:
                 if (
                     not isinstance(row, dict)
@@ -231,31 +249,29 @@ def effective_event_parameters(
                     or "parameterValue" not in row
                 ):
                     raise FieldResolutionError(
-                        "native event row needs its parameter name and value"
+                        "native settings row needs its parameter name and value"
                     )
                 name = row["parameter"]
                 if name in local:
-                    raise FieldResolutionError(f"duplicate native event parameter {name!r}")
+                    raise FieldResolutionError(f"duplicate native field {name!r}")
                 local[name] = row["parameterValue"]
     inherited = {}
     for reference in references:
         if not isinstance(reference, str):
-            raise FieldResolutionError("shared event settings must identify one variable")
+            raise FieldResolutionError("shared settings must identify one variable")
         name = variable_name(reference)
         if name in active:
-            raise FieldResolutionError("cyclic shared event settings reference")
+            raise FieldResolutionError("cyclic shared settings reference")
         settings = variables.get(name)
-        if settings is None or token(str(settings.get("type", ""))) not in EVENT_SETTINGS_TYPES:
-            raise FieldResolutionError(
-                "shared event settings are unresolved or have the wrong type"
-            )
-        for field, value in effective_event_parameters(
-            settings, variables, active=(*active, name)
+        if settings is None or token(str(settings.get("type", ""))) not in settings_types:
+            raise FieldResolutionError("shared settings are unresolved or have the wrong type")
+        for field, value in effective_collection_fields(
+            settings, variables, namespace=namespace, active=(*active, name)
         ).items():
             if field in local:
                 continue
             if field in inherited:
-                raise FieldResolutionError(f"ambiguous shared event parameter {field!r}")
+                raise FieldResolutionError(f"ambiguous shared field {field!r}")
             inherited[field] = value
     return {**inherited, **local}
 
@@ -336,3 +352,22 @@ def variable_consumers(operation: dict, tags: list[dict], variables: list[dict])
         for item in tags
         if isinstance(item.get("name"), str) and references(item) & names
     }
+
+
+def direct_dlv_source(variable):
+    """An untransformed version-2 native DLV establishes the exact source path."""
+    rows = variable.get("parameter", [])
+    fields = {row.get("key"): row.get("value") for row in rows}
+    if (
+        variable.get("type") != "v"
+        or variable.get("formatValue")
+        or len(rows) != 2
+        or set(fields) != {"name", "dataLayerVersion"}
+        or fields["dataLayerVersion"] != "2"
+        or not isinstance(fields["name"], str)
+        or not fields["name"].strip()
+    ):
+        raise FieldResolutionError(
+            "direct-dlv requires one untransformed version-2 Data Layer Variable source"
+        )
+    return fields["name"]

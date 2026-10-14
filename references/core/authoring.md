@@ -4,7 +4,7 @@
 
 - [Purpose and priority](#purpose-and-priority)
 - [Keep business and implementation authority separate](#keep-business-and-implementation-authority-separate)
-- [Use configuration-contract 9.0](#use-configuration-contract-90)
+- [Use configuration-contract 10.0](#use-configuration-contract-100)
 - [Map requirements and targets](#map-requirements-and-targets)
 - [Map target-scoped object actions](#map-target-scoped-object-actions)
 - [Map pipeline flow](#map-pipeline-flow)
@@ -31,9 +31,9 @@ completion. Never weaken a higher priority to make a graph look complete.
 Technical infrastructure must serve approved requirements. A field does not gain analytics or media
 authority merely because an implementation object supports it.
 
-## Use configuration-contract 9.0
+## Use configuration-contract 10.0
 
-Every new mutation map uses `"schema_version": "9.0"` and
+Every new mutation map uses `"schema_version": "10.0"` and
 [`configuration-contract.schema.json`](../../schemas/configuration-contract.schema.json):
 
 | Section | Contents |
@@ -45,7 +45,7 @@ Every new mutation map uses `"schema_version": "9.0"` and
 | `targets` | Explicitly authorized stable web/server workspaces with independent target IDs |
 | `implementation.execution_mode` | `isolated-durable`, or `refonte-durable` |
 | `implementation.objects` | Exact target-scoped GTM actions, intended state, and dependencies |
-| `implementation.field_bindings` | Explicit resolution for every approved event, item or user field, including ordinary dataLayer parameters; pending fields are rejected before execution |
+| `implementation.field_bindings` | Resolution for every outgoing field in its approved namespace; readiness blocks dependent operations while fields are pending or blocked |
 | `pipelines` | Sender/receiver graph, request/Client, page-view, event/field flow, and cutover |
 | `consent_topologies` | Per-destination web, transport, server mechanism, signal, and event coverage |
 | `execution_topologies` | One bound firing/blocking/consent/lifecycle decision per executing web tag |
@@ -56,7 +56,7 @@ Every new mutation map uses `"schema_version": "9.0"` and
 | `evidence` | Approved, official-current, container-confirmed, and sample provenance |
 | `external_dependencies` | Structured work outside the saved GTM graphs: `id`, affected `requirement_ids`, `owner`, `action`, and `status` (`open`, `resolved`, or `accepted`) |
 
-Only version 9.0 is accepted. Older and unversioned inputs cannot authorize mutation.
+Only version 10.0 is accepted. Older and unversioned inputs cannot authorize mutation.
 
 ## Map requirements and targets
 
@@ -77,10 +77,18 @@ at least one authorized web sender and server receiver are required.
 
 ## Collection field model
 
-Use exact destination names as map keys: `parameters` for event parameters,
-`user_properties` for user fields, and `item_parameters` for item fields.
-The approved GA4 importer places implementation-only fields in `implementation_fields`;
-they preserve provenance but do not become outgoing collection mappings.
+The schema's field registry owns the destination namespaces. Use exact destination names as map keys:
+
+| Requirement collection | Meaning | Binding scope |
+| --- | --- | --- |
+| `parameters` | Event parameters | `event-parameter` |
+| `user_properties` | User properties | `user-property` |
+| `item_parameters` | Item fields | `item-parameter` |
+| `configuration_fields` | Product configuration settings, including GA4 `user_id` | `configuration` |
+| `unresolved_fields` | Approved fields whose destination surface is unspecified | `unresolved`; blocked until approved input resolves the destination |
+| `implementation_fields` | Implementation context retained with provenance | No outgoing mapping |
+
+Source names remain in the field record even when the destination uses a different name.
 Use `source_shape` and `destination_shape` from this closed vocabulary:
 `scalar:string`, `scalar:number`, `scalar:integer`, `scalar:boolean`, `array`, `object`.
 Nullable behavior remains explicit; it does not change the base shape.
@@ -211,7 +219,7 @@ declared outgoing field set, and approved sources/literals. The scoped native ev
 connect supported implementation fields to that declaration; other structures and automatic
 product behavior remain inspected ownership decisions.
 
-The validated contract deterministically materializes active `configuration-run@7.0` sections.
+The validated contract deterministically materializes active `configuration-run@8.0` sections.
 Do not hand-edit requirements, pipelines, immutable operation intention/dependencies, payload maps,
 consent topologies, dedup contracts, or publication dependencies; section fingerprints detect
 drift. Adapters may populate baselines, journals, readbacks, comparisons, and results only.
@@ -220,17 +228,20 @@ Resolve field implementation in the contract, not by editing the materialized ru
 `implementation.field_bindings` row requires `requirement_id`, `field_scope`,
 `destination_field`, `status`,
 `shape_compatibility`, `mapping_method`, `gtm_resolution`, `template_field`, and `missing_behavior`.
-Deterministic native mapping proof covers explicit scalar GA4 Event (`gaawe`) event parameters,
-excluding `native-template` mappings. These require
+Deterministic native mapping proof covers explicit scalar GA4 Event (`gaawe`) event parameters
+and Google tag (`googtag`, `gaawc`) configuration settings, excluding `native-template` mappings.
+These require
 `native_binding: {"object_key": "target::tag::name", "field": "lead_type"}`.
 The owner must be an active tag for the requirement. `field` must equal the approved destination
-exactly, including case and punctuation. Only native `eventSettingsTable` LIST rows containing
+exactly, including case and punctuation. Configuration bindings resolve local/shared configuration
+settings; event settings cannot establish configuration equality. Native `eventSettingsTable` LIST rows containing
 `parameter` / `parameterValue` MAP cells establish event-parameter equality.
 Shared event settings via native `eventSettingsVariable` / `inheritedEventSettings` references
 are resolved with exact-name local overrides. Configuration tables, metadata, user properties,
 and item fields cannot supply event-parameter proof. The effective value must equal `gtm_resolution`;
 a `direct-dlv` reference must resolve to a represented native `v` variable whose `parameter[name]`
-equals the approved source. Use a scalar value/reference, not prose, in `gtm_resolution`.
+equals the approved source, with version 2 and no value transformation. Use a scalar value/reference,
+not prose, in `gtm_resolution`.
 
 User-property and item-parameter scopes, other tag/template structures, automatic `native-template`
 fields, and whole ecommerce payloads remain supported as **agent-reviewed mapping declarations**.

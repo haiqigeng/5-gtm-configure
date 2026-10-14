@@ -868,7 +868,7 @@ class TestDurableEvidence(fixture_durable_evidence.CurrentRegressionHardeningTes
                 "capture_evidence": baseline["capture_evidence"],
             }
         )
-        self.assertEqual(fixture_durable_evidence.validate_run(run)["schema_version"], "7.0")
+        self.assertEqual(fixture_durable_evidence.validate_run(run)["schema_version"], "8.0")
 
     def test_action_semantics_fail_closed_for_every_high_risk_shape(self) -> None:
         cases = []
